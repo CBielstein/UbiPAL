@@ -12,7 +12,8 @@ int RSA_wrappers::generate_rsa_key(RSA*& rsa)
     // we're creating a NEW key at rsa
     rsa = RSA_new();
 
-    // set e = 3, that seems to work fine
+    // set e = 3. This is not proven to be less secure than larger numbers with PKCS padding used by OpenSSL
+    // and this gives speed increases important for low-end devices
     BIGNUM* e = BN_new();
     status = BN_add(e, BN_value_one(), BN_value_one());
     if (status != 1) { fprintf(stderr, "Failed on BN_add in generate_rsa_key\n"); return EXIT_FAILURE; }
