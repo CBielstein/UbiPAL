@@ -13,7 +13,7 @@ int main()
     unsigned int failed_modules = 0;
 
     // Run tests
-    run_test_module(rsa_wrapper_tests, "rsa_wrapper_tests",
+    run_test_module(RSA_wrapper_tests::rsa_wrapper_tests, "rsa_wrapper_tests",
                     overall_test_count, overall_fail_count,
                     module_count, failed_modules);
 
