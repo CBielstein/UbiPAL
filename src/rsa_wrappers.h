@@ -16,6 +16,9 @@
 #include <openssl/x509.h>
 #include <openssl/bn.h>
 
+// with our padding, we must reserve 11 bits, so our message can be no longer than RSA_size(key) - 12 bits long
+#define MAX_MESSAGE_LENGTH(key) RSA_size(key) - 12
+
 class RSA_wrappers
 {
     public:
@@ -25,6 +28,7 @@ class RSA_wrappers
             SUCCESS = 0,
             GENERAL_FAILURE = -1,
             NULL_ARG = -2,
+            INVALID_INPUT = -3,
         };
 
         // generate_rsa_key
@@ -74,18 +78,19 @@ class RSA_wrappers
         //      [IN] msg: Bytes to encrypt
         //      [IN] msg_len: The number of bytes to encrypt
         //      [OUT] result: The result of the encryption
+        //      [OUT] result_len: The number of bytes encrypted, if not NULL
         // returns SUCCESS on success
-        static int encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result);
+        static int encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len);
 
         // decrypt
         // detects whether the given key is private or public and calls the appropriate OpenSSL function, placing the result in the pointer at result
         // args
         //      [IN] key: RSA key to use for decryption (may be public or private)
         //      [IN] msg: Bytes to decrypt
-        //      [IN] msg_len: The number of bytes to decrypt
         //      [OUT] result: The result of the decryption
-        // returns EXIT_SUCCESS on success
-        static int decrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result);
+        //      [OUT] result_len: The number of bytes decrypted, if not NULL
+        // returns SUCCESS on success
+        static int decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len);
 
     private:
         // is_private_key

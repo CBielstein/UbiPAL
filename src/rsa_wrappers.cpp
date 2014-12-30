@@ -108,3 +108,125 @@ int RSA_wrappers::is_private_key(const RSA* key)
     }
     return (key->d == nullptr) ? 0 : 1;
 }
+
+int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
+{
+    int status = RSA_wrappers::SUCCESS;
+    if (result_len != nullptr)
+    {
+        result_len = 0;
+    }
+
+    // msg needs to be no longer than max message length
+    if (msg_len > MAX_MESSAGE_LENGTH(key))
+    {
+        fprintf(stderr, "encrypt: Message was too long. Length: %d, max length: %d\n", msg_len, MAX_MESSAGE_LENGTH(key));
+        return RSA_wrappers::INVALID_INPUT;
+    }
+
+    // allocate the result pointer
+    result = (unsigned char*)malloc(RSA_size(key));
+    if (result == nullptr)
+    {
+        fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
+        return RSA_wrappers::GENERAL_FAILURE;
+    }
+
+    // seed random number generator
+    srand(time(NULL));
+
+    status = RSA_wrappers::is_private_key(key);
+    if (status == 1)
+    {
+        // encrypt private
+        status = RSA_private_encrypt(msg_len, msg, result, key, RSA_PKCS1_PADDING);
+        if (status < 0)
+        {
+            fprintf(stderr, "encrypt: RSA_private_encrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            goto exit_failure;
+        }
+    }
+    else if (status == 0)
+    {
+        // encrypt public
+        status = RSA_public_encrypt(msg_len, msg, result, key, RSA_PKCS1_PADDING);
+        if (status < 0)
+        {
+            fprintf(stderr, "encrypt: RSA_public_encrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            goto exit_failure;
+        }
+    }
+    else
+    {
+        // error in is_private_key, cleanup and get out
+        goto exit_failure;
+    }
+
+    // update result_len from above
+    if (result_len != nullptr)
+    {
+        *result_len = status;
+    }
+
+    return RSA_wrappers::SUCCESS;
+
+    exit_failure:
+        free(result);
+        return status;
+}
+
+int RSA_wrappers::decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len)
+{
+    int status = RSA_wrappers::SUCCESS;
+    if (result_len != nullptr)
+    {
+        *result_len = 0;
+    }
+
+    // allocate the result pointer
+    result = (unsigned char*)malloc(RSA_size(key));
+    if (result == nullptr)
+    {
+        fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
+        return RSA_wrappers::GENERAL_FAILURE;
+    }
+
+    status = RSA_wrappers::is_private_key(key);
+    if (status == 1)
+    {
+        // encrypt private
+        status = RSA_private_decrypt(RSA_size(key), msg, result, key, RSA_PKCS1_PADDING);
+        if (status < 0)
+        {
+            fprintf(stderr, "decrypt: RSA_private_decrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            goto exit_failure;
+        }
+    }
+    else if (status == 0)
+    {
+        // encrypt public
+        status = RSA_public_decrypt(RSA_size(key), msg, result, key, RSA_PKCS1_PADDING);
+        if (status < 0)
+        {
+            fprintf(stderr, "decrypt: RSA_public_decrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            goto exit_failure;
+        }
+    }
+    else
+    {
+        // error in is_private_key, cleanup and get out
+        goto exit_failure;
+    }
+
+    // update result_len from above
+    if (result_len != nullptr)
+    {
+        *result_len = status;
+    }
+
+    return RSA_wrappers::SUCCESS;
+
+    exit_failure:
+        free(result);
+        return status;
+}

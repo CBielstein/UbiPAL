@@ -12,11 +12,11 @@ ifeq ($(DEBUG), 1)
 endif
 
 test: bin/tests
+	bin/tests
+	rm -f bin/tests
 
 bin/tests: $(test_files) $(tested_files)
 	$(CXX) test/tests.cpp $(tested_files) -o bin/tests $(CFLAGS)
-	bin/tests
-	rm -f bin/tests
 
 clean:
 	rm -f bin/*
