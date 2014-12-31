@@ -128,6 +128,8 @@ class RSA_wrapper_tests
             exit:
                 RSA_free(priv);
                 RSA_free(pub);
+                RSA_free(wrong_priv);
+                RSA_free(wrong_pub);
                 free(sig);
 
             return status;
@@ -198,6 +200,8 @@ class RSA_wrapper_tests
             exit:
                 RSA_free(priv);
                 RSA_free(pub);
+                RSA_free(wrong_priv);
+                RSA_free(wrong_pub);
                 free(sig);
 
             return status;
@@ -331,6 +335,8 @@ class RSA_wrapper_tests
             exit:
                 RSA_free(priv);
                 RSA_free(pub);
+                free(result);
+                free(result_msg);
                 return status;
         }
 
@@ -397,6 +403,8 @@ class RSA_wrapper_tests
             exit:
                 RSA_free(priv);
                 RSA_free(pub);
+                free(result);
+                free(result_msg);
                 return status;
         }
 
@@ -460,6 +468,7 @@ class RSA_wrapper_tests
                 RSA_free(priv);
                 RSA_free(pub);
                 RSA_free(priv_wrong);
+                free(result);
                 return status;
         }
 
@@ -523,9 +532,9 @@ class RSA_wrapper_tests
                 RSA_free(priv);
                 RSA_free(priv_wrong);
                 RSA_free(pub_wrong);
+                free(result);
                 return status;
         }
-
 
         // encrypt private, decrypt public
         static int rsa_wrapper_encrypt_decrypt_public_fail()
@@ -577,6 +586,7 @@ class RSA_wrapper_tests
             exit:
                 RSA_free(priv);
                 RSA_free(pub);
+                free(result);
                 return status;
         }
 

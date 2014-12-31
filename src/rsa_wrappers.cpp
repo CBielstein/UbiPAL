@@ -14,31 +14,50 @@ int RSA_wrappers::generate_rsa_key(RSA*& rsa)
     // set e = 3. This is not proven to be less secure than larger numbers with PKCS padding used by OpenSSL
     // and this gives speed increases important for low-end devices
     BIGNUM* e = BN_new();
-    status = BN_add(e, BN_value_one(), BN_value_one());
-    if (status != 1) { fprintf(stderr, "Failed on BN_add in generate_rsa_key\n"); return RSA_wrappers::GENERAL_FAILURE; }
-    status = BN_add(e, e, BN_value_one());
-    if (status != 1) { fprintf(stderr, "Failed on BN_add in generate_rsa_key\n"); return RSA_wrappers::GENERAL_FAILURE; }
+    status = BN_set_bit(e, 0);
+    if (status != 1)
+    {
+        fprintf(stderr, "generate_rsa_key: Failed on BN_set_bit(e,0) in generate_rsa_key: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+        status = RSA_wrappers::GENERAL_FAILURE;
+        goto exit;
+    }
+
+    status = BN_set_bit(e, 1);
+    if (status != 1)
+    {
+        fprintf(stderr, "generate_rsa_key: Failed on BN_set_bit(e,1) in generate_rsa_key: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+        status = RSA_wrappers::GENERAL_FAILURE;
+        goto exit;
+    }
 
     // seed time
     srand(time(NULL));
 
     // generate key
     status = RSA_generate_key_ex(rsa, 1024, e, NULL);
-    if (status < 0 )
+    if (status < 0)
     {
         fprintf(stderr, "RSA_generate_key_ex failed. Returned %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
-        return RSA_wrappers::GENERAL_FAILURE;
+        status = RSA_wrappers::GENERAL_FAILURE;
+        goto exit;
     }
 
-    return RSA_wrappers::SUCCESS;
+    status = RSA_wrappers::SUCCESS;
+
+    exit:
+        BN_free(e);
+        return status;
 }
 
 int RSA_wrappers::create_public_key(const RSA* priv_key, RSA*& pub_key)
 {
+    int status = RSA_wrappers::SUCCESS;
+
     if (priv_key == nullptr)
     {
         fprintf(stderr, "Passed a null argument in create_public_key(%p, %p)\n", priv_key, pub_key);
-        return RSA_wrappers::NULL_ARG;
+        status = RSA_wrappers::NULL_ARG;
+        goto exit;
     }
 
     // we're creating a NEW key at pub_key
@@ -48,7 +67,8 @@ int RSA_wrappers::create_public_key(const RSA* priv_key, RSA*& pub_key)
     pub_key->n = BN_dup(priv_key->n);
     pub_key->e = BN_dup(priv_key->e);
 
-    return RSA_wrappers::SUCCESS;
+    exit:
+        return status;
 }
 
 int RSA_wrappers::create_signed_digest(RSA* priv_key, const unsigned char* msg,
@@ -56,19 +76,22 @@ int RSA_wrappers::create_signed_digest(RSA* priv_key, const unsigned char* msg,
                                        unsigned int& sig_len)
 {
     int status = RSA_wrappers::SUCCESS;
+    unsigned char* digest;
 
     if (priv_key == NULL || msg == NULL)
     {
         fprintf(stderr, "NULL args: create_signed_digest(%p, %p, %u, %p, %d)\n", priv_key, msg, msg_length, sig, sig_len);
-        return RSA_wrappers::NULL_ARG;
+        status = RSA_wrappers::NULL_ARG;
+        goto exit;
     }
 
     // hash the message
-    unsigned char* digest = SHA1((unsigned char*)msg, msg_length, NULL);
+    digest = SHA1((unsigned char*)msg, msg_length, NULL);
     if (digest == NULL)
     {
         fprintf(stderr, "SHA1 failed in create_signed_digest. Returned NULL\n");
-        return RSA_wrappers::GENERAL_FAILURE;
+        status = RSA_wrappers::GENERAL_FAILURE;
+        goto exit;
     }
 
     // sign that digest!
@@ -77,10 +100,14 @@ int RSA_wrappers::create_signed_digest(RSA* priv_key, const unsigned char* msg,
     if (status != 1)
     {
         fprintf(stderr, "RSA_sign failed in create_signed_digest. Returned %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
-        return RSA_wrappers::GENERAL_FAILURE;
+        status = RSA_wrappers::GENERAL_FAILURE;
+        goto exit;
     }
 
-    return RSA_wrappers::SUCCESS;
+    status = RSA_wrappers::SUCCESS;
+
+    exit:
+        return status;
 }
 
 int RSA_wrappers::verify_signed_digest(RSA* pub_key, const unsigned char* msg,
@@ -112,6 +139,7 @@ int RSA_wrappers::is_private_key(const RSA* key)
 int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
 {
     int status = RSA_wrappers::SUCCESS;
+
     if (result_len != nullptr)
     {
         *result_len = 0;
@@ -121,7 +149,8 @@ int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int
     if (msg_len > MAX_MESSAGE_LENGTH(key))
     {
         fprintf(stderr, "encrypt: Message was too long. Length: %d, max length: %d\n", msg_len, MAX_MESSAGE_LENGTH(key));
-        return RSA_wrappers::INVALID_INPUT;
+        status = RSA_wrappers::INVALID_INPUT;
+        goto exit_failure;
     }
 
     // allocate the result pointer
@@ -129,7 +158,8 @@ int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int
     if (result == nullptr)
     {
         fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
-        return RSA_wrappers::GENERAL_FAILURE;
+        status = RSA_wrappers::GENERAL_FAILURE;
+        goto exit_failure;
     }
 
     // seed random number generator
