@@ -1,7 +1,7 @@
 // Test code to get rsa public key encryption working
 
-#ifndef RSA_WRAPPERS_TESTS_H
-#define RSA_WRAPPERS_TESTS_H
+#ifndef RSA_WRAPPERS_TESTS_CPP
+#define RSA_WRAPPERS_TESTS_CPP
 
 #include "../src/rsa_wrappers.h"
 #include <string.h>
@@ -314,10 +314,11 @@ class RSA_wrapper_tests
             }
 
             // compare
-            status = strcmp((char*)msg, (char*)result_msg);
-            if (status != 0)
+            status = memcmp(msg, result_msg, bytes_decrypted);
+            if (status != 0 || strlen(msg) != bytes_decrypted)
             {
-                fprintf(stderr, "rsa_wrapper_encryp_decrypt_basic: Strings don't match: %s, %s\n", msg, result_msg);
+                fprintf(stderr, "rsa_wrapper_encryp_decrypt_basic: Strings don't match: %s, %s or lengths don't match: %lu, %d\n",
+                        msg, result_msg, strlen(msg), bytes_decrypted);
                 status = RSA_wrappers::GENERAL_FAILURE;
                 goto exit;
             }
@@ -379,10 +380,11 @@ class RSA_wrapper_tests
             }
 
             // compare
-            status = strcmp((char*)msg, (char*)result_msg);
-            if (status != 0)
+            status = memcmp(msg, result_msg, bytes_decrypted);
+            if (status != 0 || strlen(msg) != bytes_decrypted)
             {
-                fprintf(stderr, "rsa_wrapper_encryp_decrypt_basic_reverse: Strings don't match: %s, %s\n", msg, result_msg);
+                fprintf(stderr, "rsa_wrapper_encryp_decrypt_basic_reverse: Strings don't match: %s, %s, or lengths don't match: %lu/%d\n",
+                        msg, result_msg, strlen(msg), bytes_decrypted);
                 status = RSA_wrappers::GENERAL_FAILURE;
                 goto exit;
             }

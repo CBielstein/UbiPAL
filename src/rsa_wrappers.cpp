@@ -114,7 +114,7 @@ int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int
     int status = RSA_wrappers::SUCCESS;
     if (result_len != nullptr)
     {
-        result_len = 0;
+        *result_len = 0;
     }
 
     // msg needs to be no longer than max message length
