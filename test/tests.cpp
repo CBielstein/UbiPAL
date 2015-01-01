@@ -2,7 +2,7 @@
 // tests.cpp
 // Tests for UbiPAL
 
-#include "rsa_wrapper_tests.cpp"
+#include "rsa_wrapper_tests.h"
 #include "test_helpers.h"
 
 int main()
