@@ -5,9 +5,12 @@
 #ifndef RSA_WRAPPERS_H
 #define RSA_WRAPPERS_H
 
+// C library includes
 #include <stdlib.h>
 #include <stdlib.h>
 #include <time.h>
+
+// OpenSSL includes
 #include <openssl/sha.h>
 #include <openssl/bio.h>
 #include <openssl/rsa.h>
@@ -16,22 +19,14 @@
 #include <openssl/x509.h>
 #include <openssl/bn.h>
 
-// with our padding, we must reserve 11 bits, so our message can be no longer than RSA_size(key) - 12 bits long
-#define MAX_MESSAGE_LENGTH(key) RSA_size(key) - 12
+// UbiPAL includes
+#include "error.h"
+
 namespace UbiPAL
 {
     class RSA_wrappers
     {
         public:
-            // Return codes
-            enum
-            {
-                SUCCESS = 0,
-                GENERAL_FAILURE = -1,
-                NULL_ARG = -2,
-                INVALID_INPUT = -3,
-            };
-
             // generate_rsa_key
             // generates an rsa private key, given an allocated rsa structure, using e == 3
             // args
@@ -100,6 +95,9 @@ namespace UbiPAL
             //      [IN] key: key to check
             // returns 1 if key is private, 0 otherwise
             static int is_private_key(const RSA* key);
+
+            // with our padding, we must reserve 11 bits, so our message can be no longer than RSA_size(key) - 12 bits long
+            static inline int max_message_length(const RSA* key) { return RSA_size(key) - 12; }
 
         // enable testing
         friend class RSA_wrapper_tests;

@@ -8,7 +8,7 @@ namespace UbiPAL
 {
     int RSA_wrappers::generate_rsa_key(RSA*& rsa)
     {
-        int status = RSA_wrappers::SUCCESS;
+        int status = SUCCESS;
 
         // we're creating a NEW key at rsa
         rsa = RSA_new();
@@ -20,7 +20,7 @@ namespace UbiPAL
         if (status != 1)
         {
             fprintf(stderr, "generate_rsa_key: Failed on BN_set_bit(e,0) in generate_rsa_key: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
-            status = RSA_wrappers::GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
             goto exit;
         }
 
@@ -28,7 +28,7 @@ namespace UbiPAL
         if (status != 1)
         {
             fprintf(stderr, "generate_rsa_key: Failed on BN_set_bit(e,1) in generate_rsa_key: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
-            status = RSA_wrappers::GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
             goto exit;
         }
 
@@ -40,11 +40,11 @@ namespace UbiPAL
         if (status < 0)
         {
             fprintf(stderr, "RSA_generate_key_ex failed. Returned %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
-            status = RSA_wrappers::GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
             goto exit;
         }
 
-        status = RSA_wrappers::SUCCESS;
+        status = SUCCESS;
 
         exit:
             BN_free(e);
@@ -53,12 +53,12 @@ namespace UbiPAL
 
     int RSA_wrappers::create_public_key(const RSA* priv_key, RSA*& pub_key)
     {
-        int status = RSA_wrappers::SUCCESS;
+        int status = SUCCESS;
 
         if (priv_key == nullptr)
         {
             fprintf(stderr, "Passed a null argument in create_public_key(%p, %p)\n", priv_key, pub_key);
-            status = RSA_wrappers::NULL_ARG;
+            status = NULL_ARG;
             goto exit;
         }
 
@@ -77,13 +77,13 @@ namespace UbiPAL
                                            const unsigned int msg_length, unsigned char*& sig,
                                            unsigned int& sig_len)
     {
-        int status = RSA_wrappers::SUCCESS;
+        int status = SUCCESS;
         unsigned char* digest;
 
         if (priv_key == NULL || msg == NULL)
         {
             fprintf(stderr, "NULL args: create_signed_digest(%p, %p, %u, %p, %d)\n", priv_key, msg, msg_length, sig, sig_len);
-            status = RSA_wrappers::NULL_ARG;
+            status = NULL_ARG;
             goto exit;
         }
 
@@ -92,7 +92,7 @@ namespace UbiPAL
         if (digest == NULL)
         {
             fprintf(stderr, "SHA1 failed in create_signed_digest. Returned NULL\n");
-            status = RSA_wrappers::GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
             goto exit;
         }
 
@@ -102,11 +102,11 @@ namespace UbiPAL
         if (status != 1)
         {
             fprintf(stderr, "RSA_sign failed in create_signed_digest. Returned %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
-            status = RSA_wrappers::GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
             goto exit;
         }
 
-        status = RSA_wrappers::SUCCESS;
+        status = SUCCESS;
 
         exit:
             return status;
@@ -120,7 +120,7 @@ namespace UbiPAL
         if (digest == NULL)
         {
             fprintf(stderr, "SHA1 failed in create_signed_digest. Returned NULL\n");
-            return RSA_wrappers::GENERAL_FAILURE;
+            return GENERAL_FAILURE;
         }
 
         int verified = RSA_verify(NID_sha1, digest, SHA_DIGEST_LENGTH, (unsigned char *)sig, sig_len, pub_key);
@@ -133,14 +133,14 @@ namespace UbiPAL
         if (key == nullptr)
         {
             fprintf(stderr, "is_private_key: passed null argument\n");
-            return RSA_wrappers::NULL_ARG;
+            return NULL_ARG;
         }
         return (key->d == nullptr) ? 0 : 1;
     }
 
     int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
     {
-        int status = RSA_wrappers::SUCCESS;
+        int status = SUCCESS;
 
         if (result_len != nullptr)
         {
@@ -148,10 +148,10 @@ namespace UbiPAL
         }
 
         // msg needs to be no longer than max message length
-        if (msg_len > MAX_MESSAGE_LENGTH(key))
+        if (msg_len > RSA_wrappers::max_message_length(key))
         {
-            fprintf(stderr, "encrypt: Message was too long. Length: %d, max length: %d\n", msg_len, MAX_MESSAGE_LENGTH(key));
-            status = RSA_wrappers::INVALID_INPUT;
+            fprintf(stderr, "encrypt: Message was too long. Length: %d, max length: %d\n", msg_len, RSA_wrappers::max_message_length(key));
+            status = INVALID_ARG;
             goto exit_failure;
         }
 
@@ -160,7 +160,7 @@ namespace UbiPAL
         if (result == nullptr)
         {
             fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
-            status = RSA_wrappers::GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
             goto exit_failure;
         }
 
@@ -200,7 +200,7 @@ namespace UbiPAL
             *result_len = status;
         }
 
-        return RSA_wrappers::SUCCESS;
+        return SUCCESS;
 
         exit_failure:
             free(result);
@@ -209,7 +209,7 @@ namespace UbiPAL
 
     int RSA_wrappers::decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len)
     {
-        int status = RSA_wrappers::SUCCESS;
+        int status = SUCCESS;
         if (result_len != nullptr)
         {
             *result_len = 0;
@@ -220,7 +220,7 @@ namespace UbiPAL
         if (result == nullptr)
         {
             fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
-            return RSA_wrappers::GENERAL_FAILURE;
+            return GENERAL_FAILURE;
         }
 
         status = RSA_wrappers::is_private_key(key);
@@ -256,7 +256,7 @@ namespace UbiPAL
             *result_len = status;
         }
 
-        return RSA_wrappers::SUCCESS;
+        return SUCCESS;
 
         exit_failure:
             free(result);

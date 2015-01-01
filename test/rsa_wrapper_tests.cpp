@@ -6,6 +6,7 @@
 #include "../src/rsa_wrappers.h"
 #include <string.h>
 #include "test_helpers.cpp"
+#include "error.h"
 
 namespace UbiPAL
 {
@@ -15,7 +16,7 @@ namespace UbiPAL
             // signed by private, verified by public
             static int rsa_wrapper_basic()
             {
-                int status = EXIT_SUCCESS;
+                int status = SUCCESS;
                 unsigned char* sig;
                 unsigned int sig_len;
 
@@ -26,14 +27,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_basic: Error in generate_rsa_key: %d\n", status);
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_basic: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -41,7 +42,7 @@ namespace UbiPAL
 
                 // create message signature
                 status = RSA_wrappers::create_signed_digest(priv, (unsigned char*)msg, strlen(msg), sig, sig_len);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_basic: Error in create_signed_digest: %d\n", status);
                     goto exit;
@@ -52,10 +53,10 @@ namespace UbiPAL
                 if (status != 1)
                 {
                     fprintf(stderr, "rsa_wrapper_basic: Failed to validate signature with status %d\n", status);
-                    status = EXIT_FAILURE;
+                    status = GENERAL_FAILURE;
                     goto exit;
                 }
-                status = EXIT_SUCCESS;
+                status = SUCCESS;
 
                 exit:
                     RSA_free(priv);
@@ -68,7 +69,7 @@ namespace UbiPAL
             // signed by private, failed verification by wrong public key
             static int rsa_wrapper_wrong_pub_key()
             {
-                int status = EXIT_SUCCESS;
+                int status = SUCCESS;
                 unsigned char* sig;
                 unsigned int sig_len;
 
@@ -79,14 +80,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_pub_key: Error in generate_rsa_key: %d\n", status);
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_pub_key: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -94,7 +95,7 @@ namespace UbiPAL
 
                 // create message signature
                 status = RSA_wrappers::create_signed_digest(priv, (unsigned char*)msg, strlen(msg), sig, sig_len);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_pub_key: Error in create_signed_digest: %d\n", status);
                     goto exit;
@@ -104,14 +105,14 @@ namespace UbiPAL
                 RSA* wrong_priv;
                 RSA* wrong_pub;
                 status = RSA_wrappers::generate_rsa_key(wrong_priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_pub_key: Error in generate_rsa_key: %d\n", status);
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(wrong_priv, wrong_pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_pub_key: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -122,10 +123,10 @@ namespace UbiPAL
                 if (status == 1)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_pub_key: Incorrectly validated signature with different public key\n");
-                    status = EXIT_FAILURE;
+                    status = GENERAL_FAILURE;
                     goto exit;
                 }
-                status = EXIT_SUCCESS;
+                status = SUCCESS;
 
                 exit:
                     RSA_free(priv);
@@ -140,7 +141,7 @@ namespace UbiPAL
             // signed by private, failed verification by wrong private key
             static int rsa_wrapper_wrong_priv_key()
             {
-                int status = EXIT_SUCCESS;
+                int status = SUCCESS;
                 unsigned char* sig;
                 unsigned int sig_len;
 
@@ -151,14 +152,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_priv_key: Error in generate_rsa_key: %d\n", status);
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_priv_key: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -166,7 +167,7 @@ namespace UbiPAL
 
                 // create message signature
                 status = RSA_wrappers::create_signed_digest(priv, (unsigned char*)msg, strlen(msg), sig, sig_len);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_priv_key: Error in create_signed_digest: %d\n", status);
                     goto exit;
@@ -176,14 +177,14 @@ namespace UbiPAL
                 RSA* wrong_priv;
                 RSA* wrong_pub;
                 status = RSA_wrappers::generate_rsa_key(wrong_priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_priv_key: Error in generate_rsa_key: %d\n", status);
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(wrong_priv, wrong_pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_priv_key: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -194,10 +195,10 @@ namespace UbiPAL
                 if (status == 1)
                 {
                     fprintf(stderr, "rsa_wrapper_wrong_priv_key: Incorrectly validated signature with different public key\n");
-                    status = EXIT_FAILURE;
+                    status = GENERAL_FAILURE;
                     goto exit;
                 }
-                status = EXIT_SUCCESS;
+                status = SUCCESS;
 
                 exit:
                     RSA_free(priv);
@@ -211,11 +212,11 @@ namespace UbiPAL
 
             static int rsa_wrapper_is_private_true()
             {
-                int status = EXIT_SUCCESS;
+                int status = SUCCESS;
 
                 RSA* priv;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_is_private_true: Failed to generate a public key.\n");
                     goto exit;
@@ -229,7 +230,7 @@ namespace UbiPAL
                 }
                 else
                 {
-                    status = EXIT_SUCCESS;
+                    status = SUCCESS;
                 }
 
                 exit:
@@ -239,19 +240,19 @@ namespace UbiPAL
 
             static int rsa_wrapper_is_private_false()
             {
-                int status = EXIT_SUCCESS;
+                int status = SUCCESS;
 
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_is_private_true: Failed to generate a public key.\n");
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_basic: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -265,7 +266,7 @@ namespace UbiPAL
                 }
                 else
                 {
-                    status = EXIT_SUCCESS;
+                    status = SUCCESS;
                 }
 
                 exit:
@@ -277,7 +278,7 @@ namespace UbiPAL
             // encrypt public, decrypt private
             static int rsa_wrapper_encrypt_decrypt_basic()
             {
-                int status = RSA_wrappers::SUCCESS;
+                int status = SUCCESS;
 
                 // create message
                 const char* msg = "Buddy the Elf, what's your favorite color?";
@@ -286,14 +287,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic: Failed to generate a public key.\n");
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -303,7 +304,7 @@ namespace UbiPAL
                 unsigned char* result;
                 unsigned int bytes_encrypted;
                 status = RSA_wrappers::encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_encrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic: Error in encrypt: %d, %d bytes encrypted\n", status, bytes_encrypted);
                     goto exit;
@@ -313,7 +314,7 @@ namespace UbiPAL
                 unsigned char* result_msg;
                 unsigned int bytes_decrypted;
                 status = RSA_wrappers::decrypt(priv, result, result_msg, &bytes_decrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic: Error in decrypt: %d, %d bytes decrypted\n", status, bytes_decrypted);
                     goto exit;
@@ -325,12 +326,12 @@ namespace UbiPAL
                 {
                     fprintf(stderr, "rsa_wrapper_encryp_decrypt_basic: Strings don't match: %s, %s or lengths don't match: %lu, %d\n",
                             msg, result_msg, strlen(msg), bytes_decrypted);
-                    status = RSA_wrappers::GENERAL_FAILURE;
+                    status = GENERAL_FAILURE;
                     goto exit;
                 }
                 else
                 {
-                    status = RSA_wrappers::SUCCESS;
+                    status = SUCCESS;
                     goto exit;
                 }
 
@@ -345,7 +346,7 @@ namespace UbiPAL
             // encrypt private, decrypt public
             static int rsa_wrapper_encrypt_decrypt_basic_reverse()
             {
-                int status = RSA_wrappers::SUCCESS;
+                int status = SUCCESS;
 
                 // create message
                 const char* msg = "Peter Piper picked a peck of pickled peppers.";
@@ -354,14 +355,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic_reverse: Failed to generate a public key.\n");
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic_reverse: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -371,7 +372,7 @@ namespace UbiPAL
                 unsigned char* result;
                 unsigned int bytes_encrypted;
                 status = RSA_wrappers::encrypt(priv, (unsigned char*)msg, strlen(msg), result, &bytes_encrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic_reverse: Error in encrypt: %d, %d bytes encrypted\n", status, bytes_encrypted);
                     goto exit;
@@ -381,7 +382,7 @@ namespace UbiPAL
                 unsigned char* result_msg;
                 unsigned int bytes_decrypted;
                 status = RSA_wrappers::decrypt(pub, result, result_msg, &bytes_decrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_basic_reverse: Error in decrypt: %d, %d bytes decrypted\n", status, bytes_decrypted);
                     goto exit;
@@ -393,12 +394,12 @@ namespace UbiPAL
                 {
                     fprintf(stderr, "rsa_wrapper_encryp_decrypt_basic_reverse: Strings don't match: %s, %s, or lengths don't match: %lu/%d\n",
                             msg, result_msg, strlen(msg), bytes_decrypted);
-                    status = RSA_wrappers::GENERAL_FAILURE;
+                    status = GENERAL_FAILURE;
                     goto exit;
                 }
                 else
                 {
-                    status = RSA_wrappers::SUCCESS;
+                    status = SUCCESS;
                     goto exit;
                 }
 
@@ -413,7 +414,7 @@ namespace UbiPAL
             // encrypt public, decrypt wrong private and fail
             static int rsa_wrapper_encrypt_decrypt_wrongkey()
             {
-                int status = RSA_wrappers::SUCCESS;
+                int status = SUCCESS;
 
                 // create message
                 const char* msg = "Peter Piper picked a peck of pickled peppers.";
@@ -422,14 +423,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey: Failed to generate a public key.\n");
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -438,7 +439,7 @@ namespace UbiPAL
                 // create second key
                 RSA* priv_wrong;
                 status = RSA_wrappers::generate_rsa_key(priv_wrong);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey: Failed to generate a public key.\n");
                     goto exit;
@@ -448,7 +449,7 @@ namespace UbiPAL
                 unsigned char* result;
                 unsigned int bytes_encrypted;
                 status = RSA_wrappers::encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_encrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey: Error in encrypt: %d, %d bytes encrypted\n", status, bytes_encrypted);
                     goto exit;
@@ -458,13 +459,13 @@ namespace UbiPAL
                 unsigned char* result_msg;
                 unsigned int bytes_decrypted;
                 status = RSA_wrappers::decrypt(priv_wrong, result, result_msg, &bytes_decrypted);
-                if (status == RSA_wrappers::SUCCESS)
+                if (status == SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey: Decrypt wrongly succeeded: %d, %d bytes decrypted\n", status, bytes_decrypted);
                     goto exit;
                 }
 
-                status = RSA_wrappers::SUCCESS;
+                status = SUCCESS;
 
                 exit:
                     RSA_free(priv);
@@ -477,7 +478,7 @@ namespace UbiPAL
             // encrypt private, decrypt wrong public and fail
             static int rsa_wrapper_encrypt_decrypt_wrongkey_reverse()
             {
-                int status = RSA_wrappers::SUCCESS;
+                int status = SUCCESS;
 
                 // create message
                 const char* msg = "Everything is bigger in Texas!";
@@ -485,7 +486,7 @@ namespace UbiPAL
                 // create key
                 RSA* priv;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse: Failed to generate a public key.\n");
                     goto exit;
@@ -495,14 +496,14 @@ namespace UbiPAL
                 RSA* priv_wrong;
                 RSA* pub_wrong;
                 status = RSA_wrappers::generate_rsa_key(priv_wrong);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse: Failed to generate a public key.\n");
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv_wrong, pub_wrong);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -512,7 +513,7 @@ namespace UbiPAL
                 unsigned char* result;
                 unsigned int bytes_encrypted;
                 status = RSA_wrappers::encrypt(priv, (unsigned char*)msg, strlen(msg), result, &bytes_encrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse: Error in encrypt: %d, %d bytes encrypted\n", status, bytes_encrypted);
                     goto exit;
@@ -522,13 +523,13 @@ namespace UbiPAL
                 unsigned char* result_msg;
                 unsigned int bytes_decrypted;
                 status = RSA_wrappers::decrypt(pub_wrong, result, result_msg, &bytes_decrypted);
-                if (status == RSA_wrappers::SUCCESS)
+                if (status == SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse: Decrypt wrongly succeeded: %d, %d bytes decrypted\n", status, bytes_decrypted);
                     goto exit;
                 }
 
-                status = RSA_wrappers::SUCCESS;
+                status = SUCCESS;
 
                 exit:
                     RSA_free(priv);
@@ -541,7 +542,7 @@ namespace UbiPAL
             // encrypt private, decrypt public
             static int rsa_wrapper_encrypt_decrypt_public_fail()
             {
-                int status = RSA_wrappers::SUCCESS;
+                int status = SUCCESS;
 
                 // create message
                 const char* msg = "Peter Piper picked a peck of pickled peppers.";
@@ -550,14 +551,14 @@ namespace UbiPAL
                 RSA* priv;
                 RSA* pub;
                 status = RSA_wrappers::generate_rsa_key(priv);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_public_fail: Failed to generate a public key.\n");
                     goto exit;
                 }
 
                 status = RSA_wrappers::create_public_key(priv, pub);
-                if (status != EXIT_SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_public_fail: Error in create_public_key: %d\n", status);
                     goto exit;
@@ -567,7 +568,7 @@ namespace UbiPAL
                 unsigned char* result;
                 unsigned int bytes_encrypted;
                 status = RSA_wrappers::encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_encrypted);
-                if (status != RSA_wrappers::SUCCESS)
+                if (status != SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_public_fail: Error in encrypt: %d, %d bytes encrypted\n", status, bytes_encrypted);
                     goto exit;
@@ -577,13 +578,13 @@ namespace UbiPAL
                 unsigned char* result_msg;
                 unsigned int bytes_decrypted;
                 status = RSA_wrappers::decrypt(pub, result, result_msg, &bytes_decrypted);
-                if (status == RSA_wrappers::SUCCESS)
+                if (status == SUCCESS)
                 {
                     fprintf(stderr, "rsa_wrapper_encrypt_decrypt_public_fail: Incorrectly succeeded in decrypt: %d, %d bytes decrypted\n", status, bytes_decrypted);
                     goto exit;
                 }
 
-                status = RSA_wrappers::SUCCESS;
+                status = SUCCESS;
 
                 exit:
                     RSA_free(priv);
@@ -595,16 +596,16 @@ namespace UbiPAL
         public:
             static void rsa_wrapper_tests(unsigned int& module_count, unsigned int& module_fails)
             {
-                run_test_func(rsa_wrapper_basic, RSA_wrappers::SUCCESS, "rsa_wrapper_basic", module_count, module_fails);
-                run_test_func(rsa_wrapper_wrong_pub_key, RSA_wrappers::SUCCESS, "rsa_wrapper_wrong_pub_key", module_count, module_fails);
-                run_test_func(rsa_wrapper_wrong_priv_key, RSA_wrappers::SUCCESS, "rsa_wrapper_wrong_priv_key", module_count, module_fails);
-                run_test_func(rsa_wrapper_is_private_true, RSA_wrappers::SUCCESS, "rsa_wrapper_is_private_true", module_count, module_fails);
-                run_test_func(rsa_wrapper_is_private_false, RSA_wrappers::SUCCESS, "rsa_wrapper_is_private_false", module_count, module_fails);
-                run_test_func(rsa_wrapper_encrypt_decrypt_basic, RSA_wrappers::SUCCESS, "rsa_wrapper_encrypt_decrypt_basic", module_count, module_fails);
-                run_test_func(rsa_wrapper_encrypt_decrypt_basic_reverse, RSA_wrappers::SUCCESS, "rsa_wrapper_encrypt_decrypt_basic_reverse", module_count, module_fails);
-                run_test_func(rsa_wrapper_encrypt_decrypt_wrongkey, RSA_wrappers::SUCCESS, "rsa_wrapper_encrypt_decrypt_wrongkey", module_count, module_fails);
-                run_test_func(rsa_wrapper_encrypt_decrypt_wrongkey_reverse, RSA_wrappers::SUCCESS, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse", module_count, module_fails);
-                run_test_func(rsa_wrapper_encrypt_decrypt_public_fail, RSA_wrappers::SUCCESS, "rsa_wrapper_encrypt_decrypt_public_fail", module_count, module_fails);
+                run_test_func(rsa_wrapper_basic, SUCCESS, "rsa_wrapper_basic", module_count, module_fails);
+                run_test_func(rsa_wrapper_wrong_pub_key, SUCCESS, "rsa_wrapper_wrong_pub_key", module_count, module_fails);
+                run_test_func(rsa_wrapper_wrong_priv_key, SUCCESS, "rsa_wrapper_wrong_priv_key", module_count, module_fails);
+                run_test_func(rsa_wrapper_is_private_true, SUCCESS, "rsa_wrapper_is_private_true", module_count, module_fails);
+                run_test_func(rsa_wrapper_is_private_false, SUCCESS, "rsa_wrapper_is_private_false", module_count, module_fails);
+                run_test_func(rsa_wrapper_encrypt_decrypt_basic, SUCCESS, "rsa_wrapper_encrypt_decrypt_basic", module_count, module_fails);
+                run_test_func(rsa_wrapper_encrypt_decrypt_basic_reverse, SUCCESS, "rsa_wrapper_encrypt_decrypt_basic_reverse", module_count, module_fails);
+                run_test_func(rsa_wrapper_encrypt_decrypt_wrongkey, SUCCESS, "rsa_wrapper_encrypt_decrypt_wrongkey", module_count, module_fails);
+                run_test_func(rsa_wrapper_encrypt_decrypt_wrongkey_reverse, SUCCESS, "rsa_wrapper_encrypt_decrypt_wrongkey_reverse", module_count, module_fails);
+                run_test_func(rsa_wrapper_encrypt_decrypt_public_fail, SUCCESS, "rsa_wrapper_encrypt_decrypt_public_fail", module_count, module_fails);
             }
     };
 }
