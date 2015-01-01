@@ -97,7 +97,7 @@ namespace UbiPAL
             static int is_private_key(const RSA* key);
 
             // with our padding, we must reserve 11 bits, so our message can be no longer than RSA_size(key) - 12 bits long
-            static inline int max_message_length(const RSA* key) { return RSA_size(key) - 12; }
+            static inline unsigned int max_message_length(const RSA* key) { return RSA_size(key) - 12; }
 
         // enable testing
         friend class RSA_wrapper_tests;

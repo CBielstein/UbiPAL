@@ -2,23 +2,34 @@
 # UbiPAL Makefile
 
 CXX = g++
-test_files = test/tests.cpp test/rsa_wrapper_tests.cpp
-tested_files = src/rsa_wrappers.cpp
-
-CFLAGS = -std=c++11 -lcrypto
+CFLAGS = -c -Wall -std=c++11
+LIBS = -lcrypto
+LDFLAGS =
+SOURCES = src/rsa_wrappers.cpp src/error.cpp test/tests.cpp test/rsa_wrapper_tests.cpp test/test_helpers.cpp
+HEADERS = src/rsa_wrappers.h src/error.h test/rsa_wrapper_tests.h test/test_helpers.h
+OBJECTS = $(SOURCES:.cpp=.o)
 
 ifeq ($(DEBUG), 1)
     CFLAGS += -g
 endif
 
-all: bin/tests
+all: depend $(OBJECTS)
 
-test: bin/tests
-	bin/tests
-	rm -f bin/tests
+depend: .depend
 
-bin/tests: $(test_files) $(tested_files)
-	$(CXX) test/tests.cpp $(tested_files) -o bin/tests -g $(CFLAGS)
+.depend: $(SOURCES) $(HEADERS)
+	rm -f ./.depend
+	$(CXX) $(CFLAGS) -MM $^ >  ./.depend;
+
+include ./.depend
+
+%.o: %.cpp
+	$(CXX) $(CFLAGS) $< -o $@
+
+test: $(OBJECTS)
+	rm -f bin/test
+	$(CXX) $(LDFLAGS) $(OBJECTS) -o bin/test $(LIBS)
+	bin/test
 
 clean:
-	rm -f bin/*
+	rm -f bin/* ./.depend src/*.o test/*.o

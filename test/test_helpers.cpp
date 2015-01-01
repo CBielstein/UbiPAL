@@ -2,14 +2,12 @@
 // test_helpers.cpp
 // Helper functions for UbiPAL test framework
 
-#ifndef TEST_HELPERS_CPP
-#define TEST_HELPERS_CPP
+#include "test_helpers.h"
 
-typedef int(*test_function)(void);
-int run_test_func(const test_function func, const int nominal, const char* name,
-             unsigned int& total_count, unsigned int& fail_count)
+int Test_Helpers::run_test_func(const test_function func, const int nominal, const char* name,
+                                unsigned int& total_count, unsigned int& fail_count)
 {
-    int status = EXIT_SUCCESS;
+    int status = UbiPAL::SUCCESS;
 
     status = func();
     if (status != nominal)
@@ -26,10 +24,9 @@ int run_test_func(const test_function func, const int nominal, const char* name,
     return status;
 }
 
-typedef void(*test_module)(unsigned int&, unsigned int&);
-void run_test_module(const test_module module, const char* name,
-                    unsigned int& overall_test_count, unsigned int& overall_fail_count,
-                    unsigned int& module_count, unsigned int& failed_modules)
+void Test_Helpers::run_test_module(const test_module module, const char* name,
+                                   unsigned int& overall_test_count, unsigned int& overall_fail_count,
+                                   unsigned int& module_count, unsigned int& failed_modules)
 {
     unsigned int module_test_count = 0;
     unsigned int module_fail_count = 0;
@@ -51,5 +48,3 @@ void run_test_module(const test_module module, const char* name,
     overall_test_count += module_test_count;
     ++module_count;
 }
-
-#endif

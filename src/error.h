@@ -2,6 +2,9 @@
 // error.h
 // Includes error return codes and descriptions for UbiPAL
 
+#ifndef ERROR_H
+#define ERROR_H
+
 #include <string>
 
 namespace UbiPAL
@@ -25,3 +28,5 @@ namespace UbiPAL
     //          Static string description of error code
     const std::string get_error_description(const int& error_code);
 }
+
+#endif

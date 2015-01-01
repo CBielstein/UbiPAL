@@ -3,7 +3,7 @@
 // Tests for UbiPAL
 
 #include "rsa_wrapper_tests.cpp"
-#include "test_helpers.cpp"
+#include "test_helpers.h"
 
 int main()
 {
@@ -13,9 +13,9 @@ int main()
     unsigned int failed_modules = 0;
 
     // Run tests
-    run_test_module(UbiPAL::RSA_wrapper_tests::rsa_wrapper_tests, "rsa_wrapper_tests",
-                    overall_test_count, overall_fail_count,
-                    module_count, failed_modules);
+    Test_Helpers::run_test_module(UbiPAL::RSA_wrapper_tests::rsa_wrapper_tests, "rsa_wrapper_tests",
+                                  overall_test_count, overall_fail_count,
+                                  module_count, failed_modules);
 
     // Results
     fprintf(stderr, "%d modules run, %d modules had failures\n%d tests run, %d failures.\n",
