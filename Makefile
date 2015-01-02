@@ -5,31 +5,57 @@ CXX = g++
 CFLAGS = -c -Wall -std=c++11
 LIBS = -lcrypto
 LDFLAGS =
-SOURCES = src/rsa_wrappers.cpp src/error.cpp test/tests.cpp test/rsa_wrapper_tests.cpp test/test_helpers.cpp
-HEADERS = src/rsa_wrappers.h src/error.h test/rsa_wrapper_tests.h test/test_helpers.h
-OBJECTS = $(SOURCES:.cpp=.o)
 
+# folders used in build
+BINDIR = bin
+SRCDIR = src
+TESTDIR = test
+
+# gather source files
+SOURCES = $(wildcard $(SRCDIR)/*.cpp)
+HEADERS = $(wildcard $(SRCDIR)/*.h)
+OBJECTS = $(addprefix $(BINDIR)/, $(SOURCES:.cpp=.o))
+SRCDEPS = $(OBJECTS:.o=.d)
+
+# gather test source files
+TEST_SOURCES = $(wildcard $(TESTDIR)/*.cpp)
+TEST_HEADERS = $(wildcard $(TESTDIR)/*.h)
+TEST_OBJECTS = $(addprefix $(BINDIR)/, $(TEST_SOURCES:.cpp=.o))
+TESTDEPS = $(TEST_OBJECTS:.o=.d)
+
+# If DEBUG=1 in build command, allow debugging
+# else, optimize
 ifeq ($(DEBUG), 1)
-    CFLAGS += -g
+    CFLAGS += -g -O0
+else
+    CFLAGS += -O2
 endif
 
-all: depend $(OBJECTS)
+# include dependency info
+-include $(SRCDEPS)
+-include $(TESTDEPS)
 
-depend: .depend
+# creates any needed directories
+dir_guard = @mkdir -p $(@D)
 
-.depend: $(SOURCES) $(HEADERS)
-	rm -f ./.depend
-	$(CXX) $(CFLAGS) -MM $^ >  ./.depend;
+all: $(OBJECTS)
 
-include ./.depend
+# build dependency files and places them in bin
+$(BINDIR)/%.d: %.cpp
+	$(dir_guard)
+	$(CXX) $(CFLAGS) -MM -MT$(BINDIR)/$(<:.cpp=.o) $< > $@
 
-%.o: %.cpp
+# builds object files and places them in bin
+%.o: $(%.cpp:$(BINDIR)/=./)
+	$(dir_guard)
 	$(CXX) $(CFLAGS) $< -o $@
 
-test: $(OBJECTS)
-	rm -f bin/test
-	$(CXX) $(LDFLAGS) $(OBJECTS) -o bin/test $(LIBS)
-	bin/test
+# builds and runs the unit tests
+test: $(OBJECTS) $(TEST_OBJECTS)
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(TEST_OBJECTS) -o $(BINDIR)/run_tests $(LIBS)
+	$(BINDIR)/run_tests
 
+.PHONY: clean
 clean:
-	rm -f bin/* ./.depend src/*.o test/*.o
+	rm -f $(BINDIR)/$(SRCDIR)/* $(BINDIR)/$(TESTDIR)/* $(BINDIR)/run_tests

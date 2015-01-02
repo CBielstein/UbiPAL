@@ -29,6 +29,3 @@
 
 # Build folder
 bin/
-
-# dependencies file
-.depend
