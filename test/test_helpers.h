@@ -5,6 +5,7 @@
 #ifndef TEST_HELPERS_H
 #define TEST_HELPERS_H
 
+#include <cstdio>
 #include "../src/error.h"
 
 typedef int(*test_function)(void);

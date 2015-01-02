@@ -100,7 +100,7 @@ namespace UbiPAL
             static inline unsigned int max_message_length(const RSA* key) { return RSA_size(key) - 12; }
 
         // enable testing
-        friend class RSA_wrapper_tests;
+        friend class RSA_wrappers_tests;
     };
 }
 #endif

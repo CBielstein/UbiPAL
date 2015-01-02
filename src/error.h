@@ -5,8 +5,6 @@
 #ifndef ERROR_H
 #define ERROR_H
 
-#include <string>
-
 namespace UbiPAL
 {
     // Return codes
@@ -26,7 +24,7 @@ namespace UbiPAL
     //          [IN] error_code: integer error code to be described
     // return
     //          Static string description of error code
-    const std::string get_error_description(const int& error_code);
+    const char* get_error_description(const int& error_code);
 }
 
 #endif

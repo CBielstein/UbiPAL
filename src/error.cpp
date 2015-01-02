@@ -6,7 +6,7 @@
 
 namespace UbiPAL
 {
-    const std::string get_error_description(const int& error_code)
+    const char* get_error_description(const int& error_code)
     {
         switch (error_code)
         {

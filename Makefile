@@ -50,6 +50,7 @@ $(BINDIR)/%.d: %.cpp
 	$(dir_guard)
 	$(CXX) $(CFLAGS) $< -o $@
 
+.PHONY: test
 # builds and runs the unit tests
 test: $(OBJECTS) $(TEST_OBJECTS)
 	$(dir_guard)
