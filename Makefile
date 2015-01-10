@@ -38,7 +38,8 @@ endif
 # creates any needed directories
 dir_guard = @mkdir -p $(@D)
 
-all: $(OBJECTS)
+.PHONY: all
+all: $(OBJECTS) $(TEST_OBJECTS)
 
 # build dependency files and places them in bin
 $(BINDIR)/%.d: %.cpp
@@ -59,4 +60,4 @@ test: $(OBJECTS) $(TEST_OBJECTS)
 
 .PHONY: clean
 clean:
-	rm -f $(BINDIR)/$(SRCDIR)/* $(BINDIR)/$(TESTDIR)/* $(BINDIR)/run_tests
+	rm -rf $(BINDIR)/*
