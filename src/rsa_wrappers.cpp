@@ -6,7 +6,7 @@
 
 namespace UbiPAL
 {
-    int RSA_wrappers::generate_rsa_key(RSA*& rsa)
+    int RsaWrappers::GenerateRsaKey(RSA*& rsa)
     {
         int status = SUCCESS;
 
@@ -19,7 +19,7 @@ namespace UbiPAL
         status = BN_set_bit(e, 0);
         if (status != 1)
         {
-            fprintf(stderr, "generate_rsa_key: Failed on BN_set_bit(e,0) in generate_rsa_key: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            fprintf(stderr, "GenerateRsaKey: Failed on BN_set_bit(e,0) in GenerateRsaKey: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -27,7 +27,7 @@ namespace UbiPAL
         status = BN_set_bit(e, 1);
         if (status != 1)
         {
-            fprintf(stderr, "generate_rsa_key: Failed on BN_set_bit(e,1) in generate_rsa_key: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            fprintf(stderr, "GenerateRsaKey: Failed on BN_set_bit(e,1) in GenerateRsaKey: %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -51,13 +51,13 @@ namespace UbiPAL
             return status;
     }
 
-    int RSA_wrappers::create_public_key(const RSA* priv_key, RSA*& pub_key)
+    int RsaWrappers::CreatePublicKey(const RSA* priv_key, RSA*& pub_key)
     {
         int status = SUCCESS;
 
         if (priv_key == nullptr)
         {
-            fprintf(stderr, "Passed a null argument in create_public_key(%p, %p)\n", priv_key, pub_key);
+            fprintf(stderr, "Passed a null argument in CreatePublicKey(%p, %p)\n", priv_key, pub_key);
             status = NULL_ARG;
             goto exit;
         }
@@ -73,16 +73,16 @@ namespace UbiPAL
             return status;
     }
 
-    int RSA_wrappers::create_signed_digest(RSA* priv_key, const unsigned char* msg,
-                                           const unsigned int msg_length, unsigned char*& sig,
-                                           unsigned int& sig_len)
+    int RsaWrappers::CreateSignedDigest(RSA* priv_key, const unsigned char* msg,
+                                        const unsigned int msg_length, unsigned char*& sig,
+                                        unsigned int& sig_len)
     {
         int status = SUCCESS;
         unsigned char* digest;
 
         if (priv_key == NULL || msg == NULL)
         {
-            fprintf(stderr, "NULL args: create_signed_digest(%p, %p, %u, %p, %d)\n", priv_key, msg, msg_length, sig, sig_len);
+            fprintf(stderr, "NULL args: CreateSignedDigest(%p, %p, %u, %p, %d)\n", priv_key, msg, msg_length, sig, sig_len);
             status = NULL_ARG;
             goto exit;
         }
@@ -91,7 +91,7 @@ namespace UbiPAL
         digest = SHA1((unsigned char*)msg, msg_length, NULL);
         if (digest == NULL)
         {
-            fprintf(stderr, "SHA1 failed in create_signed_digest. Returned NULL\n");
+            fprintf(stderr, "SHA1 failed in CreateSignedDigest. Returned NULL\n");
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -101,7 +101,7 @@ namespace UbiPAL
         status = RSA_sign(NID_sha1, digest, SHA_DIGEST_LENGTH, sig, &sig_len, priv_key);
         if (status != 1)
         {
-            fprintf(stderr, "RSA_sign failed in create_signed_digest. Returned %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+            fprintf(stderr, "RSA_sign failed in CreateSignedDigest. Returned %d, %s\n", status, ERR_error_string(ERR_get_error(), NULL));
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -112,14 +112,14 @@ namespace UbiPAL
             return status;
     }
 
-    int RSA_wrappers::verify_signed_digest(RSA* pub_key, const unsigned char* msg,
-                                           const unsigned int msg_length, const unsigned char* sig,
-                                           const unsigned int sig_len)
+    int RsaWrappers::VerifySignedDigest(RSA* pub_key, const unsigned char* msg,
+                                        const unsigned int msg_length, const unsigned char* sig,
+                                        const unsigned int sig_len)
     {
         unsigned char* digest = SHA1((unsigned char*)msg, msg_length, NULL);
         if (digest == NULL)
         {
-            fprintf(stderr, "SHA1 failed in create_signed_digest. Returned NULL\n");
+            fprintf(stderr, "SHA1 failed in CreateSignedDigest. Returned NULL\n");
             return GENERAL_FAILURE;
         }
 
@@ -128,17 +128,17 @@ namespace UbiPAL
         return (verified == 1) ? 1 : 0;
     }
 
-    int RSA_wrappers::is_private_key(const RSA* key)
+    int RsaWrappers::IsPrivateKey(const RSA* key)
     {
         if (key == nullptr)
         {
-            fprintf(stderr, "is_private_key: passed null argument\n");
+            fprintf(stderr, "IsPrivateKey: passed null argument\n");
             return NULL_ARG;
         }
         return (key->d == nullptr) ? 0 : 1;
     }
 
-    int RSA_wrappers::encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
+    int RsaWrappers::Encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
     {
         int status = SUCCESS;
 
@@ -148,9 +148,9 @@ namespace UbiPAL
         }
 
         // msg needs to be no longer than max message length
-        if (msg_len > RSA_wrappers::max_message_length(key))
+        if (msg_len > RsaWrappers::MaxMessageLength(key))
         {
-            fprintf(stderr, "encrypt: Message was too long. Length: %d, max length: %d\n", msg_len, RSA_wrappers::max_message_length(key));
+            fprintf(stderr, "Encrypt: Message was too long. Length: %d, max length: %d\n", msg_len, RsaWrappers::MaxMessageLength(key));
             status = INVALID_ARG;
             goto exit_failure;
         }
@@ -159,7 +159,7 @@ namespace UbiPAL
         result = (unsigned char*)malloc(RSA_size(key));
         if (result == nullptr)
         {
-            fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
+            fprintf(stderr, "Encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
             status = GENERAL_FAILURE;
             goto exit_failure;
         }
@@ -167,14 +167,14 @@ namespace UbiPAL
         // seed random number generator
         srand(time(NULL));
 
-        status = RSA_wrappers::is_private_key(key);
+        status = RsaWrappers::IsPrivateKey(key);
         if (status == 1)
         {
             // encrypt private
             status = RSA_private_encrypt(msg_len, msg, result, key, RSA_PKCS1_PADDING);
             if (status < 0)
             {
-                fprintf(stderr, "encrypt: RSA_private_encrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+                fprintf(stderr, "Encrypt: RSA_private_encrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
                 goto exit_failure;
             }
         }
@@ -184,13 +184,13 @@ namespace UbiPAL
             status = RSA_public_encrypt(msg_len, msg, result, key, RSA_PKCS1_PADDING);
             if (status < 0)
             {
-                fprintf(stderr, "encrypt: RSA_public_encrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+                fprintf(stderr, "Encrypt: RSA_public_encrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
                 goto exit_failure;
             }
         }
         else
         {
-            // error in is_private_key, cleanup and get out
+            // error in IsPrivateKey, cleanup and get out
             goto exit_failure;
         }
 
@@ -207,7 +207,7 @@ namespace UbiPAL
             return status;
     }
 
-    int RSA_wrappers::decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len)
+    int RsaWrappers::Decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len)
     {
         int status = SUCCESS;
         if (result_len != nullptr)
@@ -219,18 +219,18 @@ namespace UbiPAL
         result = (unsigned char*)malloc(RSA_size(key));
         if (result == nullptr)
         {
-            fprintf(stderr, "encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
+            fprintf(stderr, "Encrypt: malloc failed to allocate result pointer of size %d\n", RSA_size(key));
             return GENERAL_FAILURE;
         }
 
-        status = RSA_wrappers::is_private_key(key);
+        status = RsaWrappers::IsPrivateKey(key);
         if (status == 1)
         {
             // encrypt private
             status = RSA_private_decrypt(RSA_size(key), msg, result, key, RSA_PKCS1_PADDING);
             if (status < 0)
             {
-                fprintf(stderr, "decrypt: RSA_private_decrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+                fprintf(stderr, "Decrypt: RSA_private_decrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
                 goto exit_failure;
             }
         }
@@ -240,13 +240,13 @@ namespace UbiPAL
             status = RSA_public_decrypt(RSA_size(key), msg, result, key, RSA_PKCS1_PADDING);
             if (status < 0)
             {
-                fprintf(stderr, "decrypt: RSA_public_decrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
+                fprintf(stderr, "Decrypt: RSA_public_decrypt failed, returned status %d with error %s\n", status, ERR_error_string(ERR_get_error(), NULL));
                 goto exit_failure;
             }
         }
         else
         {
-            // error in is_private_key, cleanup and get out
+            // error in IsPrivateKey, cleanup and get out
             goto exit_failure;
         }
 

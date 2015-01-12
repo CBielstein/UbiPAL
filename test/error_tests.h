@@ -2,8 +2,8 @@
 // error_tests.h
 // Unit tests for error.h & error.cpp for UbiPAL
 
-#ifndef ERROR_TESTS_H
-#define ERROR_TESTS_H
+#ifndef UBIPAL_TEST_ERROR_TESTS_H
+#define UBIPAL_TEST_ERROR_TESTS_H
 
 #include "test_helpers.h"
 #include "../src/error.h"
@@ -11,19 +11,21 @@
 
 namespace UbiPAL
 {
-    class error_tests
+    // ErrorTests
+    // Unit tests for the code in UbiPAL/src/error.h and UbiPAL/src/error.cpp
+    class ErrorTests
     {
         private:
             // Unit tests
-            static int error_test_return_success();
-            static int error_test_string_success();
-            static int error_test_string_invalid();
+            static int ErrorTestReturnSuccess();
+            static int ErrorTestStringSuccess();
+            static int ErrorTestStringInvalid();
 
             // End Unit tests
 
         public:
             // Envoke all unit tests in this class
-            static void run_error_tests(unsigned int& module_count, unsigned int& module_fails);
+            static void RunErrorTests(unsigned int& module_count, unsigned int& module_fails);
     };
 }
 #endif

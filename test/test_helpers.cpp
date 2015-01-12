@@ -4,8 +4,8 @@
 
 #include "test_helpers.h"
 
-int Test_Helpers::run_test_func(const test_function func, const int nominal, const char* name,
-                                unsigned int& total_count, unsigned int& fail_count)
+int TestHelpers::RunTestFunc(const TestFunction func, const int nominal, const char* name,
+                             unsigned int& total_count, unsigned int& fail_count)
 {
     int status = UbiPAL::SUCCESS;
 
@@ -24,9 +24,9 @@ int Test_Helpers::run_test_func(const test_function func, const int nominal, con
     return status;
 }
 
-void Test_Helpers::run_test_module(const test_module module, const char* name,
-                                   unsigned int& overall_test_count, unsigned int& overall_fail_count,
-                                   unsigned int& module_count, unsigned int& failed_modules)
+void TestHelpers::RunTestModule(const TestModule module, const char* name,
+                                unsigned int& overall_test_count, unsigned int& overall_fail_count,
+                                unsigned int& module_count, unsigned int& failed_modules)
 {
     unsigned int module_test_count = 0;
     unsigned int module_fail_count = 0;

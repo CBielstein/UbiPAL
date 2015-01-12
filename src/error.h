@@ -2,8 +2,8 @@
 // error.h
 // Includes error return codes and descriptions for UbiPAL
 
-#ifndef ERROR_H
-#define ERROR_H
+#ifndef UBIPAL_SRC_ERROR_H
+#define UBIPAL_SRC_ERROR_H
 
 namespace UbiPAL
 {
@@ -23,8 +23,8 @@ namespace UbiPAL
     // args
     //          [IN] error_code: integer error code to be described
     // return
-    //          Static string description of error code
-    const char* get_error_description(const int& error_code);
+    //          const char*: static string description of error code
+    const char* GetErrorDescription(const int& error_code);
 }
 
 #endif
