@@ -7,6 +7,7 @@
 // Test classes
 #include "rsa_wrappers_tests.h"
 #include "error_tests.h"
+#include "log_tests.h"
 
 int main()
 {
@@ -20,6 +21,9 @@ int main()
                                overall_test_count, overall_fail_count,
                                module_count, failed_modules);
     TestHelpers::RunTestModule(UbiPAL::ErrorTests::RunErrorTests, "ErrorTests",
+                               overall_test_count, overall_fail_count,
+                               module_count, failed_modules);
+    TestHelpers::RunTestModule(UbiPAL::LogTests::RunLogTests, "LogTests",
                                overall_test_count, overall_fail_count,
                                module_count, failed_modules);
 

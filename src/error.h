@@ -16,6 +16,9 @@ namespace UbiPAL
         GENERAL_FAILURE = -1,
         NULL_ARG = -2,
         INVALID_ARG = -3,
+        OPEN_FILE_FAILED = -4,
+        FAILED_FILE_WRITE = -5,
+        FAILED_FILE_READ = -6,
     };
 
     // get_error_description
