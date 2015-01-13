@@ -25,7 +25,7 @@ namespace UbiPAL
     // the level of the log, used for filtering
     // any value greater than this, should not be logged
     // default value is INFO
-    static Log::Level log_level;
+    static Log::Level log_level = Log::INFO;
 
     // the file path of the log
     static std::string file_name;
@@ -35,7 +35,7 @@ namespace UbiPAL
 
     // if true, print all logged messages to stderr as well as log
     // helpful for debugging, demoing, etc.
-    static bool print_stderr;
+    static bool print_stderr = false;
 
     int Log::Line(const Level& level, const char* format, ...)
     {
