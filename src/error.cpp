@@ -2,6 +2,7 @@
 // error.cpp
 // Includes error return codes and descriptions for UbiPAL
 
+// Header
 #include "error.h"
 
 namespace UbiPAL
@@ -17,6 +18,9 @@ namespace UbiPAL
             case OPEN_FILE_FAILED: return "OPEN_FILE_FAILED: A file failed to open.";
             case FAILED_FILE_WRITE: return "FAILED_FILE_WRITE: An attempted write to a file failed.";
             case FAILED_FILE_READ: return "FAILED_FILE_READ: An attempted read of a file failed.";
+            case OPENSSL_ERROR: return "OPENSSL_ERROR: An error occurred inside the OpenSSL library.";
+            case MALLOC_FAILURE: return "MALLOC_FAILURE: An operation (likely malloc) failed to allocate memory.";
+            case MESSAGE_TOO_LONG: return "MESSAGE_TOO_LONG: The message is too long for the given RSA key to encrypt.";
             default: return "Error code does not have description.";
         }
     }

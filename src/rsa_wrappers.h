@@ -5,22 +5,11 @@
 #ifndef UBIPAL_SRC_RSA_WRAPPERS_H
 #define UBIPAL_SRC_RSA_WRAPPERS_H
 
-// C library includes
-#include <stdlib.h>
-#include <stdlib.h>
-#include <time.h>
-
-// OpenSSL includes
-#include <openssl/sha.h>
-#include <openssl/bio.h>
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/err.h>
-#include <openssl/x509.h>
-#include <openssl/bn.h>
-
 // UbiPAL includes
 #include "error.h"
+
+// OpenSSL includes
+#include <openssl/rsa.h>
 
 namespace UbiPAL
 {

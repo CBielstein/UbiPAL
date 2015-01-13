@@ -3,6 +3,9 @@
 // Unit tests for error.h & error.cpp for UbiPAL
 
 #include "error_tests.h"
+#include "test_helpers.h"
+#include "../src/error.h"
+#include <cstring>
 
 namespace UbiPAL
 {

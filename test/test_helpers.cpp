@@ -3,6 +3,7 @@
 // Helper functions for UbiPAL test framework
 
 #include "test_helpers.h"
+#include <cstdio>
 
 int TestHelpers::RunTestFunc(const TestFunction func, const int nominal, const char* name,
                              unsigned int& total_count, unsigned int& fail_count)

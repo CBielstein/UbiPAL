@@ -2,11 +2,14 @@
 // log.cpp
 // Logging for UbiPAL
 
+// Header
 #include "log.h"
 
+// UbiPAL includes
 #include "error.h"
 #include "macros.h"
 
+// Standard includes
 #include <stdio.h>
 #include <ctime>
 #include <stdarg.h>
@@ -59,7 +62,7 @@ namespace UbiPAL
 
         if (format == nullptr)
         {
-            Log::Line(WARN, "Log::Line passed NULL format string");
+            Log::Line(Log::WARN, "Log::Line passed NULL format string");
             RETURN_STATUS(NULL_ARG);
         }
 
@@ -99,58 +102,58 @@ namespace UbiPAL
 
         // get size required for line
         va_start(args, format);
-        ret_val = vsnprintf(NULL, 0, format, args);
+        returned_value = vsnprintf(NULL, 0, format, args);
         va_end(args);
-        if (ret_val < 0)
+        if (returned_value < 0)
         {
-            fprintf(stderr, "Log::Line, vsnprintf() failed and returned %d\n", ret_val);
+            fprintf(stderr, "Log::Line, vsnprintf() failed and returned %d\n", returned_value);
             RETURN_STATUS(GENERAL_FAILURE);
         }
 
         // allocate enough space for the message and a null character
-        message = (char*)malloc(ret_val+1);
+        message = (char*)malloc(returned_value+1);
         if (message == nullptr)
         {
             fprintf(stderr, "Log::Line: malloc failed to allocate space for a message.\n");
-            RETURN_STATUS(GENERAL_FAILURE);
+            RETURN_STATUS(MALLOC_FAILURE);
         }
 
         va_start(args, format);
-        ret_val = vsnprintf(message, ret_val + 1, format, args);
+        returned_value = vsnprintf(message, returned_value + 1, format, args);
         va_end(args);
-        if (ret_val < 0)
+        if (returned_value < 0)
         {
-            fprintf(stderr, "Log::Line: vsnprintf() failed to create the message from the format string and arguments, returned %d\n", ret_val);
+            fprintf(stderr, "Log::Line: vsnprintf() failed to create the message from the format string and arguments, returned %d\n", returned_value);
             RETURN_STATUS(GENERAL_FAILURE);
         }
 
         // output to log file
-        ret_val = fprintf(log_file, "%s: %s\n", timestamp, message);
-        if (ret_val < 0)
+        returned_value = fprintf(log_file, "%s: %s\n", timestamp, message);
+        if (returned_value < 0)
         {
-            fprintf(stderr, "Log::Line: fprintf failed to print to log_file, returned %d\n", ret_val);
+            fprintf(stderr, "Log::Line: fprintf failed to print to log_file, returned %d\n", returned_value);
             RETURN_STATUS(FAILED_FILE_WRITE);
         }
 
         // print to stderr if appropriate
         if (print_stderr)
         {
-            ret_val = fprintf(stderr, "%s: %s\n", timestamp, message);
-            if (ret_val < 0)
+            returned_value = fprintf(stderr, "%s: %s\n", timestamp, message);
+            if (returned_value < 0)
             {
-                fprintf(stderr, "Log::Line: fprintf failed to print to stderr, returned %d\n", ret_val);
+                fprintf(stderr, "Log::Line: fprintf failed to print to stderr, returned %d\n", returned_value);
                 RETURN_STATUS(FAILED_FILE_WRITE);
             }
         }
 
         // return with the number of bytes printed
-        if (ret_val > 0)
+        if (returned_value > 0)
         {
-            RETURN_STATUS(ret_val);
+            RETURN_STATUS(returned_value);
         }
         else
         {
-            fprintf(stderr, "Log::Line: something went wrong and reported %d bytes printed\n", ret_val);
+            fprintf(stderr, "Log::Line: something went wrong and reported %d bytes printed\n", returned_value);
             RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -195,9 +198,9 @@ namespace UbiPAL
         if (log_file != nullptr)
         {
             // close the old file, swap in the new one
-            ret_val = fclose(log_file);
+            returned_value = fclose(log_file);
 
-            if (ret_val < 0)
+            if (returned_value < 0)
             {
                 // if we failed, this is a problem, but further access
                 // is UB, so we need to swap it anyway, but can't write
@@ -234,7 +237,7 @@ namespace UbiPAL
     int Log::Configure()
     {
         int status = SUCCESS;
-        int ret_val = 0;
+        int returned_value = 0;
 
         // lock
         configuration_mutex.lock();
@@ -242,14 +245,14 @@ namespace UbiPAL
         // if the file pointer is active, close it
         if (log_file != nullptr)
         {
-            ret_val = fclose(log_file);
+            returned_value = fclose(log_file);
         }
 
         // if it fails to close, we cannot log, so print an error
         // but we need not fail, since we can open a new file and continue
-        if (ret_val != 0)
+        if (returned_value != 0)
         {
-            fprintf(stderr, "Log::Configure: fclose failed to close log_file, returned: %d\n", ret_val);
+            fprintf(stderr, "Log::Configure: fclose failed to close log_file, returned: %d\n", returned_value);
         }
 
         // if we don't have a file name, set it to default
@@ -271,6 +274,28 @@ namespace UbiPAL
 
         // return
         return status;
+    }
+
+    int Log::FlushLog()
+    {
+        FUNCTION_START;
+
+        // if we don't have an opened log file, there's nothing to flush.
+        // so return successfully
+        if (log_file == nullptr)
+        {
+            RETURN_STATUS(status);
+        }
+
+        returned_value = fflush(log_file);
+        if (returned_value != 0)
+        {
+            Log::Line(Log::WARN, "Log::FlushLog: Failed to flush. fflush returned %d", returned_value);
+            RETURN_STATUS(FAILED_FILE_WRITE);
+        }
+
+        exit:
+            FUNCTION_END;
     }
 
     const std::string Log::GetDefaultLogName()

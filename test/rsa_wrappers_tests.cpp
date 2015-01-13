@@ -3,6 +3,10 @@
 // Holds unit tests for RsaWrappers class for UbiPAL
 
 #include "rsa_wrappers_tests.h"
+#include "../src/rsa_wrappers.h"
+#include <string.h>
+#include "../src/error.h"
+#include "test_helpers.h"
 
 namespace UbiPAL
 {

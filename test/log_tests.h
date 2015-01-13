@@ -5,8 +5,6 @@
 #ifndef UBIPAL_TEST_LOG_TESTS_H
 #define UBIPAL_TEST_LOG_TESTS_H
 
-#include "../src/log.h"
-
 namespace UbiPAL
 {
     // LogTests
@@ -26,10 +24,12 @@ namespace UbiPAL
             static int LogTestConfigureAllEmpty();
             static int LogTestConfigureFilePointerEmpty();
             static int LogTestConfigureFileNameEmpty();
-
             static int LogTestLine();
             static int LogTestLineConfigure();
             static int LogTestLineNull();
+
+            static int LogTestFlush();
+            static int LogTestFlushNull();
 
             // End Unit tests
 

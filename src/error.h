@@ -19,6 +19,9 @@ namespace UbiPAL
         OPEN_FILE_FAILED = -4,
         FAILED_FILE_WRITE = -5,
         FAILED_FILE_READ = -6,
+        OPENSSL_ERROR = -7,
+        MALLOC_FAILURE = -8,
+        MESSAGE_TOO_LONG = -9,
     };
 
     // get_error_description

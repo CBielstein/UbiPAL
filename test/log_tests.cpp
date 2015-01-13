@@ -1,13 +1,15 @@
 // Cameron Bielstein, 1/2/15
-// error_tests.cpp
-// Unit tests for error.h & error.cpp for UbiPAL
+// log_tests.cpp
+// Unit tests for log.h & log.cpp for UbiPAL
 
 #include "log_tests.h"
 #include "test_helpers.h"
+#include "../src/log.h"
 #include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <cstring>
 
 namespace UbiPAL
 {
@@ -286,7 +288,7 @@ namespace UbiPAL
     int LogTests::LogTestLine()
     {
         int status = 0;
-        int ret_val = 0;
+        int returned_value = 0;
         FILE* read_file = nullptr;
         struct stat stats;
         char* read_line = nullptr;
@@ -308,8 +310,8 @@ namespace UbiPAL
         }
 
         // flush the write
-        ret_val = fflush(Log::GetLogFile());
-        if (ret_val != 0)
+        returned_value = fflush(Log::GetLogFile());
+        if (returned_value != 0)
         {
             status = FAILED_FILE_WRITE;
             goto exit;
@@ -322,8 +324,8 @@ namespace UbiPAL
             goto exit;
         }
 
-        ret_val = stat(sports_center.c_str(), &stats);
-        if (ret_val < 0)
+        returned_value = stat(sports_center.c_str(), &stats);
+        if (returned_value < 0)
         {
             status = FAILED_FILE_READ;
             goto exit;
@@ -336,8 +338,8 @@ namespace UbiPAL
             goto exit;
         }
 
-        ret_val = fread(read_line, 1, stats.st_size, read_file);
-        if (ret_val != stats.st_size)
+        returned_value = fread(read_line, 1, stats.st_size, read_file);
+        if (returned_value != stats.st_size)
         {
             status = FAILED_FILE_READ;
             goto exit;
@@ -370,7 +372,7 @@ namespace UbiPAL
     int LogTests::LogTestLineConfigure()
     {
         int status = 0;
-        int ret_val = 0;
+        int returned_value = 0;
         FILE* read_file = nullptr;
         struct stat stats;
         char* read_line = nullptr;
@@ -389,8 +391,8 @@ namespace UbiPAL
         }
 
         // flush the write
-        ret_val = fflush(Log::GetLogFile());
-        if (ret_val != 0)
+        returned_value = fflush(Log::GetLogFile());
+        if (returned_value != 0)
         {
             status = FAILED_FILE_WRITE;
             goto exit;
@@ -403,8 +405,8 @@ namespace UbiPAL
             goto exit;
         }
 
-        ret_val = stat(Log::GetDefaultLogName().c_str(), &stats);
-        if (ret_val < 0)
+        returned_value = stat(Log::GetDefaultLogName().c_str(), &stats);
+        if (returned_value < 0)
         {
             status = FAILED_FILE_READ;
             goto exit;
@@ -417,8 +419,8 @@ namespace UbiPAL
             goto exit;
         }
 
-        ret_val = fread(read_line, 1, stats.st_size, read_file);
-        if (ret_val != stats.st_size)
+        returned_value = fread(read_line, 1, stats.st_size, read_file);
+        if (returned_value != stats.st_size)
         {
             status = FAILED_FILE_READ;
             goto exit;
@@ -442,6 +444,7 @@ namespace UbiPAL
         }
 
         exit:
+            fclose(read_file);
             remove(Log::GetDefaultLogName().c_str());
             free(read_line);
             return status;
@@ -461,6 +464,96 @@ namespace UbiPAL
         {
             return GENERAL_FAILURE;
         }
+    }
+
+    int LogTests::LogTestFlush()
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+        FILE* read_file = nullptr;
+        char* read_line = nullptr;
+        struct stat stats;
+        std::string read_str;
+        size_t ret_size = 0;
+        std::string test_string("This is a test of the emergency broadcast system.");
+
+        status = Log::SetFile(Log::GetDefaultLogName());
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        returned_value = fwrite(test_string.c_str(), 1, strlen(test_string.c_str()), Log::GetLogFile());
+        if ((unsigned int)returned_value < strlen(test_string.c_str()))
+        {
+            status = FAILED_FILE_WRITE;
+            goto exit;
+        }
+
+        status = Log::FlushLog();
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        read_file = fopen(Log::GetDefaultLogName().c_str(), "r");
+        if (read_file == nullptr)
+        {
+            status = OPEN_FILE_FAILED;
+            goto exit;
+        }
+
+        returned_value = stat(Log::GetDefaultLogName().c_str(), &stats);
+        if (returned_value < 0)
+        {
+            status = FAILED_FILE_READ;
+            goto exit;
+        }
+
+        read_line = (char*)malloc(stats.st_size + 1);
+        if (read_line == nullptr)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        returned_value = fread(read_line, 1, stats.st_size, read_file);
+        if (returned_value != stats.st_size)
+        {
+            status = FAILED_FILE_READ;
+            goto exit;
+        }
+
+        // ensure null-terminated
+        read_line[stats.st_size] = '\0';
+
+        read_str = std::string(read_line);
+        ret_size = read_str.find(test_string.c_str());
+
+        if (ret_size == std::string::npos)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+            goto exit;
+        }
+
+        exit:
+            fclose(read_file);
+            remove(Log::GetDefaultLogName().c_str());
+            free(read_line);
+            return status;
+    }
+
+    int LogTests::LogTestFlushNull()
+    {
+        int status = SUCCESS;
+        Log::SetLogFile(NULL);
+        status = Log::FlushLog();
+        return status;
     }
 
     void LogTests::RunLogTests(unsigned int& module_count, unsigned int& module_fails)
@@ -493,5 +586,9 @@ namespace UbiPAL
                                  "LogTestLineConfigure", module_count, module_fails);
         TestHelpers::RunTestFunc(LogTestLineNull, SUCCESS,
                                  "LogTestLineNull", module_count, module_fails);
+        TestHelpers::RunTestFunc(LogTestFlush, SUCCESS,
+                                 "LogTestFlush", module_count, module_fails);
+        TestHelpers::RunTestFunc(LogTestFlushNull, SUCCESS,
+                                 "LogTestFlushNull", module_count, module_fails);
     }
 }

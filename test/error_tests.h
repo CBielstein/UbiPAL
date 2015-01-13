@@ -5,10 +5,6 @@
 #ifndef UBIPAL_TEST_ERROR_TESTS_H
 #define UBIPAL_TEST_ERROR_TESTS_H
 
-#include "test_helpers.h"
-#include "../src/error.h"
-#include <cstring>
-
 namespace UbiPAL
 {
     // ErrorTests

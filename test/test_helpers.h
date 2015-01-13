@@ -5,7 +5,6 @@
 #ifndef UBIPAL_TEST_TEST_HELPERS_H
 #define UBIPAL_TEST_TEST_HELPERS_H
 
-#include <cstdio>
 #include "../src/error.h"
 
 typedef int(*TestFunction)(void);

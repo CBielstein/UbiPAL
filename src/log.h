@@ -5,6 +5,7 @@
 #ifndef UBIPAL_SRC_LOG_H
 #define UBIPAL_SRC_LOG_H
 
+// Standard includes
 #include <string>
 
 namespace UbiPAL
@@ -68,6 +69,12 @@ namespace UbiPAL
             // return
             //          int: SUCCESS on success
             static int SetPrint(const bool& print);
+
+            // FlushLog
+            // To be called before closing the program to ensure all writes are flushed to disk.
+            // return
+            //          int: SUCCESS on success
+            static int FlushLog();
 
         private:
             // IsValidLevel
