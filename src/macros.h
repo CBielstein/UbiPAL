@@ -5,11 +5,13 @@
 #ifndef UBIPAL_SRC_MACROS_H
 #define UBIPAL_SRC_MACROS_H
 
+#include "error.h"
+
 // FUNCTION_START
 // place at the beginning of each function to declare status and check_return
 // status: used to keep return code, should be kept clean to only UbiPAL error codes
 // check_return: Return values from functions outside of UbiPAL
-#define FUNCTION_START int status = SUCCESS; int returned_value = 0;
+#define FUNCTION_START int status = UbiPAL::SUCCESS; int returned_value = 0;
 
 // FUNCTION_END
 // Very last part of a function, returns the status
