@@ -19,7 +19,7 @@ namespace UbiPAL
     {
         public:
             // GenerateRsaKey
-            // generates an rsa private key, given an allocated rsa structure, using e == 3
+            // generates an rsa private key using e == 3
             // args
             //      [OUT] rsa: RSA* by reference. This will be allocated and fields set to generated key
             // return
@@ -27,7 +27,7 @@ namespace UbiPAL
             static int GenerateRsaKey(RSA*& rsa);
 
             // CreatePublicKey
-            // given two allocated rsa structures, stores a public key version of priv_key in pub_key.
+            // Stores a public key version of priv_key in pub_key.
             // This means all values not explicitly marked public in the RSA OpenSSL docs are set to NULL
             // args
             //      [IN] priv_key: Previously generated RSA struct
