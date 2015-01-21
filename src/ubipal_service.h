@@ -28,19 +28,40 @@ namespace UbiPAL
     class UbipalService
     {
         public:
-            // Constructor, everything null
-            // creates a new name and private key
+            // UbipalService
+            // Default constructor: generates a new private key and opens on a random port
             UbipalService();
 
-            // Constructor taking name and private key, the minimum to start the name
-            UbipalService(const RSA* const _private_key);
+            // UbipalService
+            // Constructor: Uses whichever argument is not null and generates/picks whichever is null
+            // args
+            //          [IN] _private_key: Uses the private key for this service. If NULL, generates a new key
+            //          [IN] port: Binds to this port. If NULL, picks a random port
+            UbipalService(const RSA* const _private_key, const char* const _port);
 
+            // TODO ???
+            // UbipalService
+            // Constructor: pointed to a file, recovers the settings in the file
+            // args
+            //          [IN] file_path: The path to the file which holds the settings for this server
+            // UbipalService(const std::string& file_path);
+
+            // ~UbipalService
             // Destructor
             ~UbipalService();
 
             // No copy constructor
             // Only one of each service should exist to avoid double receiving
             UbipalService(const UbipalService& other) = delete;
+
+            // TODO ???
+            // SaveService
+            // Given a file pointer, saves the relevant information to a file for restarting the service later
+            // args
+            //          [IN] file_path: a path at which to save the file, overwrites the file at that destination
+            // return
+            //          int: status. SUCCESS on successful write, failure otherwise
+            // int SaveService(const std::string& file_path);
 
             // sends message with args to to
             // flags:
@@ -86,6 +107,9 @@ namespace UbiPAL
 
             // some data structure to hold our rules array of strings or something
             std::vector<UbipalAcl> local_acls;
+
+            // the port on which we operate. String held in case we save to a file later
+            std::string port;
 
             // socket descriptor used to send and receive
             int sockfd;

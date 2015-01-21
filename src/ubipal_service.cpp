@@ -12,43 +12,54 @@
 
 // Standard
 #include <string.h>
+#include <unistd.h>
 
 // OpenSSL
 #include <openssl/err.h>
 
 namespace UbiPAL
 {
-    UbipalService::UbipalService()
-    {
-        int status = RsaWrappers::GenerateRsaKey(private_key);
-        if (status != SUCCESS)
-        {
-            Log::Line(Log::EMERG, "UbipalService::UbipalService: Default constructor failed to generate rsa key: %d, %s",
-                      status, GetErrorDescription(status));
-        }
+    UbipalService::UbipalService() : UbipalService(NULL, NULL) {}
 
-        // open socket
-    }
-
-    UbipalService::UbipalService(const RSA* const _private_key)
+    UbipalService::UbipalService(const RSA* const _private_key, const char* const port)
     {
         private_key = RSA_new();
         if (private_key == nullptr)
         {
             Log::Line(Log::EMERG,
-                      "UbipalService::UbipalService: Copy constructor failed to allocate new RSA key for private_key. RSA_new error: %s",
+                      "UbipalService::UbipalService: Constructor failed to allocate private_key. RSA_new error: %s",
                       ERR_error_string(ERR_get_error(), NULL));
+            goto exit;
         }
 
-        memcpy(private_key, _private_key, sizeof(RSA));
+        // either generate or copy the private key
+        if (_private_key == nullptr)
+        {
+            int status = RsaWrappers::GenerateRsaKey(private_key);
+            if (status != SUCCESS)
+            {
+                Log::Line(Log::EMERG, "UbipalService::UbipalService: Default constructor failed to generate rsa key: %d, %s",
+                          status, GetErrorDescription(status));
+                goto exit;
+            }
+        }
+        else
+        {
+            memcpy(private_key, _private_key, sizeof(RSA));
+        }
 
         // open socket
+
+        exit:
+            return;
     }
 
     UbipalService::~UbipalService()
     {
+        // free the private key
         RSA_free(private_key);
 
         // close socket
+        close(sockfd);
     }
 }
