@@ -21,6 +21,7 @@ namespace UbiPAL
             case OPENSSL_ERROR: return "OPENSSL_ERROR: An error occurred inside the OpenSSL library.";
             case MALLOC_FAILURE: return "MALLOC_FAILURE: An operation (likely malloc) failed to allocate memory.";
             case MESSAGE_TOO_LONG: return "MESSAGE_TOO_LONG: The message is too long for the given RSA key to encrypt.";
+            case NETWORKING_FAILURE: return "NETWORKING_FAILURE: An error occurred during networking code.";
             default: return "Error code does not have description.";
         }
     }

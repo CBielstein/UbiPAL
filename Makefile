@@ -3,7 +3,7 @@
 
 CXX = g++
 CFLAGS = -c -Wall -std=c++11
-LIBS = -lcrypto
+LIBS = -lcrypto -luuid
 LDFLAGS =
 
 # folders used in build
