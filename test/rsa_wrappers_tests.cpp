@@ -590,8 +590,334 @@ namespace UbiPAL
             return status;
     }
 
+    int RsaWrappersTests::RsaWrappersCopyKeyPrivate()
+    {
+        int status = SUCCESS;
+        RSA* from = nullptr;
+        RSA* to = nullptr;
+
+        status = RsaWrappers::GenerateRsaKey(from);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPrivate: GenerateRsaKey failed: %s\n", GetErrorDescription(status));
+            goto exit;
+        }
+
+        status = RsaWrappers::CopyKey(from, to);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPrivate: CopyKey failed: %s\n", GetErrorDescription(status));
+            goto exit;
+        }
+
+        if (BN_cmp(from->n, to->n) != 0 ||
+            BN_cmp(from->e, to->e) != 0 ||
+            BN_cmp(from->d, to->d) != 0 ||
+            BN_cmp(from->p, to->p) != 0 ||
+            BN_cmp(from->q, to->q) != 0 ||
+            BN_cmp(from->dmp1, to->dmp1) != 0 ||
+            BN_cmp(from->dmq1, to->dmq1) != 0 ||
+            BN_cmp(from->iqmp, to->iqmp) != 0)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPrivate: Key mismatch\n");
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(from);
+            RSA_free(to);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersCopyKeyPublic()
+    {
+        int status = SUCCESS;
+        RSA* priv = nullptr;
+        RSA* from = nullptr;
+        RSA* to = nullptr;
+
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPublic: GenerateRsaKey failed: %s\n", GetErrorDescription(status));
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv, from);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPublic: CreatePublicKey failed: %s\n", GetErrorDescription(status));
+            goto exit;
+        }
+
+        status = RsaWrappers::CopyKey(from, to);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPublic: CopyKey failed: %s\n", GetErrorDescription(status));
+            goto exit;
+        }
+
+        if (BN_cmp(from->n, to->n) != 0 ||
+            BN_cmp(from->e, to->e) != 0 ||
+            BN_cmp(from->d, to->d) != 0 ||
+            BN_cmp(from->p, to->p) != 0 ||
+            BN_cmp(from->q, to->q) != 0 ||
+            BN_cmp(from->dmp1, to->dmp1) != 0 ||
+            BN_cmp(from->dmq1, to->dmq1) != 0 ||
+            BN_cmp(from->iqmp, to->iqmp) != 0)
+        {
+            fprintf(stderr, "RsaWrappersTests::RsaWrappersCopyKeyPublic: Key mismatch\n");
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(priv);
+            RSA_free(from);
+            RSA_free(to);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeysEqualTrueSameKey()
+    {
+        int status = SUCCESS;
+        RSA* a = nullptr;
+        RSA* b = nullptr;
+        int ret_val = 0;
+
+        status = RsaWrappers::GenerateRsaKey(a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        b = a;
+
+        ret_val = RsaWrappers::KeysEqual(a, b);
+        if (ret_val != 1)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(a);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeysEqualTruePrivate()
+    {
+        int status = SUCCESS;
+        RSA* a = nullptr;
+        RSA* b = nullptr;
+        int ret_val = 0;
+
+        status = RsaWrappers::GenerateRsaKey(a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CopyKey(a, b);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        ret_val = RsaWrappers::KeysEqual(a, b);
+        if (ret_val != 1)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(a);
+            RSA_free(b);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeysEqualFalsePrivate()
+    {
+        int status = SUCCESS;
+        RSA* a = nullptr;
+        RSA* b = nullptr;
+        int ret_val = 0;
+
+        status = RsaWrappers::GenerateRsaKey(a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::GenerateRsaKey(b);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        ret_val = RsaWrappers::KeysEqual(a, b);
+        if (ret_val != 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(a);
+            RSA_free(b);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeysEqualTruePublic()
+    {
+        int status = SUCCESS;
+        RSA* priv = nullptr;
+        RSA* a = nullptr;
+        RSA* b = nullptr;
+        int ret_val = 0;
+
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv, a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv, b);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        ret_val = RsaWrappers::KeysEqual(a, b);
+        if (ret_val != 1)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(a);
+            RSA_free(b);
+            RSA_free(priv);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeysEqualFalsePublic()
+    {
+        int status = SUCCESS;
+        RSA* priv_a = nullptr;
+        RSA* priv_b = nullptr;
+        RSA* a = nullptr;
+        RSA* b = nullptr;
+        int ret_val = 0;
+
+        status = RsaWrappers::GenerateRsaKey(priv_a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv_a, a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::GenerateRsaKey(priv_b);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv_b, b);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        ret_val = RsaWrappers::KeysEqual(a, b);
+        if (ret_val != 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(priv_a);
+            RSA_free(priv_b);
+            RSA_free(a);
+            RSA_free(b);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeysEqualFalsePublicPrivate()
+    {
+        int status = SUCCESS;
+        RSA* a = nullptr;
+        RSA* b = nullptr;
+        int ret_val = 0;
+
+        status = RsaWrappers::GenerateRsaKey(a);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(a, b);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        ret_val = RsaWrappers::KeysEqual(a, b);
+        if (ret_val != 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(a);
+            RSA_free(b);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersGenerateKey()
+    {
+        int status = SUCCESS;
+        int ret_val = 0;
+        RSA* key = nullptr;
+
+        status = RsaWrappers::GenerateRsaKey(key);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        ret_val = RSA_check_key(key);
+        if (ret_val != 1)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(key);
+            return status;
+    }
+
     void RsaWrappersTests::RunRsaWrappersTests(unsigned int& module_count, unsigned int& module_fails)
     {
+        TestHelpers::RunTestFunc(RsaWrappersGenerateKey, SUCCESS,
+                                 "RsaWrappersGenerateKey", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersBasic, SUCCESS,
                                  "RsaWrappersBasic", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersWrongPubKey, SUCCESS,
@@ -612,5 +938,21 @@ namespace UbiPAL
                                  "RsaWrappersEncryptDecryptWrongKeyReverse", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersEncryptDecryptPublicFail, SUCCESS,
                                  "RsaWrappersEncryptDecryptPublicFail", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersCopyKeyPrivate, SUCCESS,
+                                 "RsaWrappersCopyKeyPrivate", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersCopyKeyPublic, SUCCESS,
+                                 "RsaWrappersCopyKeyPublic", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeysEqualTrueSameKey, SUCCESS,
+                                 "RsaWrappersKeysEqualTrueSameKey", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeysEqualTruePrivate, SUCCESS,
+                                 "RsaWrappersKeysEqualTruePrivate", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeysEqualFalsePrivate, SUCCESS,
+                                 "RsaWrappersKeysEqualFalsePrivate", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeysEqualTruePublic, SUCCESS,
+                                 "RsaWrappersKeysEqualTruePublic", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeysEqualFalsePublic, SUCCESS,
+                                 "RsaWrappersKeysEqualFalsePublic", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeysEqualFalsePublicPrivate, SUCCESS,
+                                 "RsaWrappersKeysEqualFalsePublicPrivate", module_count, module_fails);
     }
 }

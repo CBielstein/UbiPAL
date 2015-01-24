@@ -85,6 +85,25 @@ namespace UbiPAL
             //      int: SUCCESS on success, error code otherwise
             static int Decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len);
 
+            // CopyKey
+            // Allocates a to key and duplicates the big number fields in from to to.
+            // The result is the same key in a completely disjoint memory location
+            // args
+            //          [IN] from: The RSA key to duplicate. This may be public or private
+            //          [OUT] to: A pointer to the newly allocated and constructed RSA key
+            // return
+            //          int: SUCCESS on success, negative error code otherwise
+            static int CopyKey(const RSA* const from, RSA*& to);
+
+            // KeysEqual
+            // Compares keys and checks if they are the same key, even if the pointers are different
+            // args
+            //          [IN] a: The first RSA key to compare
+            //          [IN] b: The second RSA key to compare
+            // return
+            //          int: 1 if the keys match, 0 if they don't, < 0 error on failure
+            static int KeysEqual(const RSA* const a, const RSA* const b);
+
         private:
             // IsPrivateKey
             // determines if a key is private and returns true

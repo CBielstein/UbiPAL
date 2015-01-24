@@ -9,6 +9,7 @@
 #include "rsa_wrappers_tests.h"
 #include "error_tests.h"
 #include "log_tests.h"
+#include "ubipal_service_tests.h"
 
 // Capture log output, but print to stderr for most messages in case the log is failing
 // this test log may be helpful however, so we'll keep it around
@@ -41,6 +42,9 @@ int main()
                                module_count, failed_modules);
     // Reset log after log unit tests
     SetLogDetails();
+    TestHelpers::RunTestModule(UbiPAL::UbipalServiceTests::RunUbipalServiceTests, "UbipalServiceTests",
+                               overall_test_count, overall_fail_count,
+                               module_count, failed_modules);
 
     // End tests
     UbiPAL::Log::Line(UbiPAL::Log::INFO, "END UNIT TESTS.");

@@ -14,6 +14,7 @@ namespace UbiPAL
         private:
             // Unit tests
 
+            static int RsaWrappersGenerateKey();
             // signed by private, verified by public
             static int RsaWrappersBasic();
             // signed by private, failed verification by wrong public key
@@ -32,6 +33,14 @@ namespace UbiPAL
             static int RsaWrappersEncryptDecryptWrongKeyReverse();
             // encrypt private, decrypt public
             static int RsaWrappersEncryptDecryptPublicFail();
+            static int RsaWrappersCopyKeyPrivate();
+            static int RsaWrappersCopyKeyPublic();
+            static int RsaWrappersKeysEqualTrueSameKey();
+            static int RsaWrappersKeysEqualTruePrivate();
+            static int RsaWrappersKeysEqualFalsePrivate();
+            static int RsaWrappersKeysEqualTruePublic();
+            static int RsaWrappersKeysEqualFalsePublic();
+            static int RsaWrappersKeysEqualFalsePublicPrivate();
 
             // End unit tests
         public:

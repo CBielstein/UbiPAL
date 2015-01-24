@@ -27,13 +27,19 @@ namespace UbiPAL
     int RsaWrappers::GenerateRsaKey(RSA*& rsa)
     {
         FUNCTION_START;
+        BIGNUM* e = nullptr;
 
         // we're creating a NEW key at rsa
         rsa = RSA_new();
+        if (rsa == nullptr)
+        {
+            Log::Line(Log::EMERG, "RsaWrappers::GenerateRsaKey: RSA_new failed: %s", ERR_error_string(ERR_get_error(), NULL));
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
 
         // set e = 3. This is not proven to be less secure than larger numbers with PKCS padding used by OpenSSL
         // and this gives speed increases important for low-end devices
-        BIGNUM* e = BN_new();
+        e = BN_new();
         if (e == nullptr)
         {
             Log::Line(Log::EMERG, "RsaWrappers::GenerateRsaKey: Failed on BN_new(), returned NULL");
@@ -86,6 +92,11 @@ namespace UbiPAL
 
         // we're creating a NEW key at pub_key
         pub_key = RSA_new();
+        if (pub_key == nullptr)
+        {
+            Log::Line(Log::EMERG, "RsaWrappers::CreatePublicKey: RSA_new failed: %s", ERR_error_string(ERR_get_error(), NULL));
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
 
         // copy over public elements
         pub_key->n = BN_dup(priv_key->n);
@@ -303,5 +314,60 @@ namespace UbiPAL
                 free(result);
             }
             FUNCTION_END;
+    }
+
+    int RsaWrappers::CopyKey(const RSA* const from, RSA*& to)
+    {
+        FUNCTION_START;
+
+        if (from == nullptr)
+        {
+            Log::Line(Log::WARN, "RsaWrappers::CopyKey: from is null");
+            RETURN_STATUS(NULL_ARG);
+        }
+
+        to = RSA_new();
+        if (to == nullptr)
+        {
+            Log::Line(Log::EMERG, "RsaWrappers::CopyKey: RSA_new failed: %s", ERR_error_string(ERR_get_error(), NULL));
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        to->n = BN_dup(from->n);
+        to->e = BN_dup(from->e);
+        to->d = BN_dup(from->d);
+        to->p = BN_dup(from->p);
+        to->q = BN_dup(from->q);
+        to->dmp1 = BN_dup(from->dmp1);
+        to->dmq1 = BN_dup(from->dmq1);
+        to->iqmp = BN_dup(from->iqmp);
+
+        exit:
+            if (status != SUCCESS)
+            {
+                RSA_free(to);
+            }
+            FUNCTION_END;
+    }
+
+
+    int RsaWrappers::KeysEqual(const RSA* const a, const RSA* const b)
+    {
+        if (a == b ||
+            (BN_cmp(a->n, b->n) == 0 &&
+            BN_cmp(a->e, b->e) == 0 &&
+            BN_cmp(a->d, b->d) == 0 &&
+            BN_cmp(a->p, b->p) == 0 &&
+            BN_cmp(a->q, b->q) == 0 &&
+            BN_cmp(a->dmp1, b->dmp1) == 0 &&
+            BN_cmp(a->dmq1, b->dmq1) == 0 &&
+            BN_cmp(a->iqmp, b->iqmp) == 0))
+        {
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
     }
 }

@@ -113,6 +113,9 @@ namespace UbiPAL
 
             // socket descriptor used to send and receive
             int sockfd;
+
+            // Enable tests
+            friend class UbipalServiceTests;
     };
 }
 
