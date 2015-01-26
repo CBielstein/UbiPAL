@@ -177,29 +177,28 @@ namespace UbiPAL
     int Log::SetFile(const std::string& new_file_name)
     {
         FUNCTION_START;
+        FILE* test_file = nullptr;
 
         // lock
         configuration_mutex.lock();
 
         if (new_file_name.empty())
         {
-            return INVALID_ARG;
+            RETURN_STATUS(INVALID_ARG);
         }
 
         // try to open the file first
-        FILE* test_file = fopen(new_file_name.c_str(), "a");
-
-        // if the file cannot be opened, this is an invalid argument
+        test_file = fopen(new_file_name.c_str(), "a");
         if (test_file == NULL)
         {
-            return INVALID_ARG;
+            // if the file cannot be opened, this is an invalid argument
+            RETURN_STATUS(INVALID_ARG);
         }
 
         if (log_file != nullptr)
         {
             // close the old file, swap in the new one
             returned_value = fclose(log_file);
-
             if (returned_value < 0)
             {
                 // if we failed, this is a problem, but further access
@@ -214,10 +213,10 @@ namespace UbiPAL
 
         test_file = nullptr;
 
-        // unlock
-        configuration_mutex.unlock();
-
-        FUNCTION_END;
+        exit:
+            // unlock
+            configuration_mutex.unlock();
+            FUNCTION_END;
     }
 
     int Log::SetPrint(const bool& print)
@@ -236,8 +235,7 @@ namespace UbiPAL
 
     int Log::Configure()
     {
-        int status = SUCCESS;
-        int returned_value = 0;
+        FUNCTION_START;
 
         // lock
         configuration_mutex.lock();
@@ -246,13 +244,13 @@ namespace UbiPAL
         if (log_file != nullptr)
         {
             returned_value = fclose(log_file);
-        }
 
-        // if it fails to close, we cannot log, so print an error
-        // but we need not fail, since we can open a new file and continue
-        if (returned_value != 0)
-        {
-            fprintf(stderr, "Log::Configure: fclose failed to close log_file, returned: %d\n", returned_value);
+            // if it fails to close, we cannot log, so print an error
+            // but we need not fail, since we can open a new file and continue
+            if (returned_value != 0)
+            {
+                fprintf(stderr, "Log::Configure: fclose failed to close log_file, returned: %d\n", returned_value);
+            }
         }
 
         // if we don't have a file name, set it to default
@@ -266,14 +264,12 @@ namespace UbiPAL
         if (log_file == nullptr)
         {
             fprintf(stderr, "Log::Configure: fopen failed to open %s\n", file_name.c_str());
-            status = OPEN_FILE_FAILED;
+            RETURN_STATUS(OPEN_FILE_FAILED);
         }
 
-        // unlock
-        configuration_mutex.unlock();
-
-        // return
-        return status;
+        exit:
+            configuration_mutex.unlock();
+            FUNCTION_END;
     }
 
     int Log::FlushLog()
