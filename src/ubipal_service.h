@@ -13,9 +13,13 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <mutex>
+#include <pthread.h>
 
 // OpenSSL
 #include <openssl/rsa.h>
+
+// Note: Any function marked XXX is yet to be implemented
 
 namespace UbiPAL
 {
@@ -39,7 +43,7 @@ namespace UbiPAL
             //          [IN] port: Binds to this port. If NULL, picks a random port
             UbipalService(const RSA* const _private_key, const char* const _port);
 
-            // TODO ???
+            // TODO XXX ???
             // UbipalService
             // Constructor: pointed to a file, recovers the settings in the file
             // args
@@ -54,7 +58,7 @@ namespace UbiPAL
             // Only one of each service should exist to avoid double receiving
             UbipalService(const UbipalService& other) = delete;
 
-            // TODO ???
+            // TODO XXX ???
             // SaveService
             // Given a file pointer, saves the relevant information to a file for restarting the service later
             // args
@@ -63,39 +67,114 @@ namespace UbiPAL
             //          int: status. SUCCESS on successful write, failure otherwise
             // int SaveService(const std::string& file_path);
 
+            // XXX
             // sends message with args to to
             // flags:
             //          NONBLOCKING
             int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const std::string& args) const;
+            int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message,
+                            const std::string& args, const UbipalCallback& reply_callback);
+
+            // Flags for BeginRecv
+            enum BeginRecvFlags
+            {
+                // prevents BeginRecv from publishing the namespace certificate
+                DONT_PUBLISH_NAME,
+                NON_BLOCKING,
+            };
 
             // BeginRecv
-            // Binds to a port and begins receiving
-            // flags:
-            //          DONT_PUBLISH_NAME
+            // Begins accepting messages from the network. Nonblocking and spins up threads in the background for IO
+            // args
+            //          [IN] flags: options including:
+            //                            DONT_PUBLISH_NAME: stops the default namespace cetificate publication
+            //                            NON_BLOCKING: does not block to do receiving
+            //          [IN] received_callback: A function to call for any message not handled by UbiPAL
+            //                                  messages handled by UbiPAL include: namespace cerftificates, ACLs, etc.
             int BeginRecv(const uint32_t flags, const UbipalCallback& received_callback);
 
+            // EndRecv
+            // Stops accepting messages from the network
+            // Does not wait for all threads to stop, sets a state variable and returns.
+            // Receiving threads will spin down on next message recev
+            // return
+            //          int: SUCCESS
+            int EndRecv();
+
+            // SetAddress
+            // Sets the advertised address. This is necessary to allow for DNS and internal/external IPs
+            // args
+            //          [IN] addr: The new address to advertise
+            // return
+            //          int: SUCCESS on success
+            int SetAddress(const std::string& addr);
+
+            // SetPort
+            // Sets the advertised port. This is necessary to allow for firewall rules and NAT
+            // args
+            //          [IN] prt: The new port to advertise
+            // return
+            //          int: SUCCESS on success
+            int SetPort(const std::string& prt);
+
+            // SendData
+            // Actually does the act of sending data to an address. No formatting or anything is done.
+            // args
+            //          [IN] address: the address to which to send
+            //          [IN] port: the port to send to
+            //          [IN] data: the bytes to send
+            //          [IN] data_len: The number of bytes to send
+            int SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len);
+
+            // the key for this service, also works as a unique identifier
+            // XXX
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
             int SendName(const UbipalName* const send_to) const;
+            int SendName(const std::string& address, const std::string& port) const;
 
+            // XXX
             // adds a new Acl to the list of local acls
             int CreateAcl(const std::string& name, const std::vector<std::string>& rules);
 
+            // XXX
             // Returns a mutable pointer to the acl for modification (rule addition or removal)
             int GetAcl(const std::string& name, UbipalAcl*& acl);
 
+            // XXX
             // if send_to is null, broadcast, if it's non-null, send it to a specific location
             int SendAcl(const UbipalAcl* const acl, const UbipalName* const send_to) const;
             int SendAcl(const UbipalAcl* const acl, const std::vector<UbipalName*>& send_to) const;
 
+            // XXX
             // deletes Acl and sends revokation certificate to the given names
             int RevokeAcl(const UbipalAcl* const acl, const UbipalName* const send_to);
             int RevokeAcl(const UbipalAcl* const acl, const std::vector<UbipalName*>& send_to);
 
+            // XXX
             // looks up a name advertising the desired message
             int FindNameForMessage(const std::string& message, UbipalName*& name);
 
         private:
-            // the key for this service, also works as a unique identifier
+            // Recv
+            // Does all the actual work of receiving and filtering messages to their appropriate functions
+            // args
+            //          [IN] arg: The UbipalService* on which to receive
+            // return
+            //          int: SUCCESS on successful stop, negative error code otherwise. Does not return until EndRecv is called
+            static void* Recv(void* arg);
+
+            // allows passing two arguments to HandleConnection
+            struct HandleConnectionArguments
+            {
+                UbipalService* us;
+                int conn_fd;
+                HandleConnectionArguments(UbipalService* _us, int _conn_fd) : us(_us), conn_fd(_conn_fd) {}
+            };
+
+            // HandleConnection
+            // Handle an incoming connection
+            static void* HandleConnection(void* hc_args);
+
             RSA* private_key;
 
             // stores information parsed from received certificates
@@ -111,8 +190,27 @@ namespace UbiPAL
             // the port on which we operate. String held in case we save to a file later
             std::string port;
 
+            // the address on which we advertise our namespace
+            std::string address;
+
             // socket descriptor used to send and receive
             int sockfd;
+
+            // ensure only one thread is receiving at a time
+            bool receiving;
+
+            // mutual exclusion for the above variable
+            std::mutex receiving_mutex;
+
+            // threads for replying to messages
+            // The 0th thread is used for Recv
+            std::vector<pthread_t> recv_threads;
+
+            // mutex for thread creation and message passing
+            std::mutex threads_mutex;
+
+            // status for recv
+            int recv_status;
 
             // Enable tests
             friend class UbipalServiceTests;

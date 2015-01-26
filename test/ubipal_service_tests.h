@@ -17,6 +17,9 @@ namespace UbiPAL
             static int UbipalServiceTestConstructor();
             static int UbipalServiceTestConstructorNullNonnull();
             static int UbipalServiceTestConstructorNonnullNull();
+            static int UbipalServiceTestEndRecv();
+            static int UbipalServiceTestSetAddress();
+            static int UbipalServiceTestSetPort();
 
             // End Unit tests
 

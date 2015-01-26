@@ -3,13 +3,14 @@
 
 CXX = g++
 CFLAGS = -c -Wall -std=c++11
-LIBS = -lcrypto -luuid
+LIBS = -lcrypto -luuid -lpthread
 LDFLAGS =
 
 # folders used in build
 BINDIR = bin
 SRCDIR = src
 TESTDIR = test
+EXDIR = examples
 
 # gather source files
 SOURCES = $(wildcard $(SRCDIR)/*.cpp)
@@ -22,6 +23,11 @@ TEST_SOURCES = $(wildcard $(TESTDIR)/*.cpp)
 TEST_HEADERS = $(wildcard $(TESTDIR)/*.h)
 TEST_OBJECTS = $(addprefix $(BINDIR)/, $(TEST_SOURCES:.cpp=.o))
 TESTDEPS = $(TEST_OBJECTS:.o=.d)
+
+# gather example source files
+EXAMPLE_SOURCES = $(wildcard $(EXDIR)/*.cpp)
+EXAMPLE_OBJECTS = $(addprefix $(BINDIR)/, $(EXAMPLE_SOURCES:.cpp=.o))
+EXDEPS = $(EXAMPLE_OBJECTS:.o=.d)
 
 TESTFLAGS =
 
@@ -45,7 +51,7 @@ endif
 dir_guard = @mkdir -p $(@D)
 
 .PHONY: all
-all: $(OBJECTS) $(TEST_OBJECTS)
+all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS)
 
 .PHONY: help
 help:
@@ -60,11 +66,12 @@ help:
 # include dependency info
 -include $(SRCDEPS)
 -include $(TESTDEPS)
+-include $(EXDEPS)
 
 # build dependency files and places them in bin
 $(BINDIR)/%.d: %.cpp
 	$(dir_guard)
-	$(CXX) $(CFLAGS) -MM -MT$(BINDIR)/$(<:.cpp=.o) $< > $@
+	$(CXX) $(CFLAGS) -MM -MT $(BINDIR)/$(<:.cpp=.o) $< > $@
 
 # builds object files and places them in bin
 %.o: $(%.cpp:$(BINDIR)/=./)
@@ -79,6 +86,20 @@ $(BINDIR)/run_tests: $(OBJECTS) $(TEST_OBJECTS)
 # builds and runs the unit tests
 test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
+
+$(BINDIR)/$(EXDIR)/sender: $(OBJECTS) $(BINDIR)/$(EXDIR)/sender.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/sender.o -o $(BINDIR)/$(EXDIR)/sender $(LIBS)
+
+.PHONY: sender
+sender: $(BINDIR)/$(EXDIR)/sender
+
+$(BINDIR)/$(EXDIR)/receiver: $(OBJECTS) $(BINDIR)/$(EXDIR)/receiver.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/receiver.o -o $(BINDIR)/$(EXDIR)/receiver $(LIBS)
+
+.PHONY: receiver
+receiver: $(BINDIR)/$(EXDIR)/receiver
 
 .PHONY: clean
 clean:

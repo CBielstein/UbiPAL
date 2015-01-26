@@ -22,7 +22,9 @@ namespace UbiPAL
         OPENSSL_ERROR = -7,
         MALLOC_FAILURE = -8,
         MESSAGE_TOO_LONG = -9,
-        NETWORKING_FAILURE  = -10
+        NETWORKING_FAILURE  = -10,
+        MULTIPLE_RECV = -11,
+        THREAD_FAILURE = -12,
     };
 
     // get_error_description

@@ -22,6 +22,8 @@ namespace UbiPAL
             case MALLOC_FAILURE: return "MALLOC_FAILURE: An operation (likely malloc) failed to allocate memory.";
             case MESSAGE_TOO_LONG: return "MESSAGE_TOO_LONG: The message is too long for the given RSA key to encrypt.";
             case NETWORKING_FAILURE: return "NETWORKING_FAILURE: An error occurred during networking code.";
+            case MULTIPLE_RECV: return "MULTIPLE_RECV: Multiple calls to recv cannot happen at once on the same object. Recv had already been called.";
+            case THREAD_FAILURE: return "THREAD_FAILURE: An error occurred with threading code.";
             default: return "Error code does not have description.";
         }
     }

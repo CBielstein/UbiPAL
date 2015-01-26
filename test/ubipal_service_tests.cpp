@@ -22,10 +22,10 @@ namespace UbiPAL
     {
         UbipalService us;
 
-        if (us.private_key == nullptr || us.sockfd <= 0 || us.port.empty())
+        if (us.private_key == nullptr || us.sockfd <= 0 || us.port.empty() || us.address.empty() ||  us.receiving)
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDefaultConstructor: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s\n",
-                    us.private_key, us.sockfd, us.port.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDefaultConstructor: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d\n",
+                    us.private_key, us.sockfd, us.port.c_str(), us.address.c_str(), us.receiving);
             return GENERAL_FAILURE;
         }
 
@@ -54,10 +54,10 @@ namespace UbiPAL
             goto exit;
         }
 
-        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty())
+        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty() || us->address.empty() || us->receiving)
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructor: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s\n",
-                    us->private_key, us->sockfd, us->port.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructor: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d\n",
+                    us->private_key, us->sockfd, us->port.c_str(), us->address.c_str(), us->receiving);
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -103,10 +103,10 @@ namespace UbiPAL
             goto exit;
         }
 
-        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty())
+        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty() || us->address.empty() || us->receiving)
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNullNonnull: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s\n",
-                    us->private_key, us->sockfd, us->port.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNullNonnull: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d\n",
+                    us->private_key, us->sockfd, us->port.c_str(), us->address.c_str(), us->receiving);
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -151,10 +151,10 @@ namespace UbiPAL
             goto exit;
         }
 
-        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty())
+        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty() || us->address.empty() || us->receiving)
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNonnullNull: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s\n",
-                    us->private_key, us->sockfd, us->port.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNonnullNull: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d\n",
+                    us->private_key, us->sockfd, us->port.c_str(), us->address.c_str(), us->receiving);
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -179,6 +179,60 @@ namespace UbiPAL
             return status;
     }
 
+    int UbipalServiceTests::UbipalServiceTestEndRecv()
+    {
+        int status = SUCCESS;
+
+        UbipalService us;
+        us.receiving = true;
+
+        status = us.EndRecv();
+
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+        else if (us.receiving == true)
+        {
+            return GENERAL_FAILURE;
+        }
+        else
+        {
+            return SUCCESS;
+        }
+    }
+
+    int UbipalServiceTests::UbipalServiceTestSetAddress()
+    {
+        int status = SUCCESS;
+
+        UbipalService us;
+
+        std::string test_string("cheese.com");
+        status = us.SetAddress(test_string);
+        if (status != SUCCESS || test_string.compare(us.address) != 0)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return status;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestSetPort()
+    {
+        int status = SUCCESS;
+
+        UbipalService us;
+
+        std::string test_string("1234");
+        status = us.SetPort(test_string);
+        if (status != SUCCESS || test_string.compare(us.port) != 0)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return status;
+    }
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -189,5 +243,11 @@ namespace UbiPAL
                                  "UbipalServiceTestConstructorNullNonnull", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestConstructorNonnullNull, SUCCESS,
                                  "UbipalServiceTestConstructorNonnullNull", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestEndRecv, SUCCESS,
+                                 "UbipalServiceTestEndRecv", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestSetAddress, SUCCESS,
+                                 "UbipalServiceTestSetAddress", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestSetPort, SUCCESS,
+                                 "UbipalServiceTestSetPort", module_count, module_fails);
     }
 }
