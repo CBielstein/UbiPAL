@@ -320,7 +320,6 @@ namespace UbiPAL
         conn_fd = ((HandleConnectionArguments*)hc_args)->conn_fd;
 
         returned_value = recv(conn_fd, msg, MAX_MESSAGE_SIZE, 0);
-
         if (returned_value < 0)
         {
             Log::Line(Log::INFO, "UbipalService::HandleConnection: receive failed: %s", strerror(errno));
@@ -330,7 +329,7 @@ namespace UbiPAL
         // this is for debugging
         Log::Line(Log::DEBUG, "UbipalService::HandleConnection");
         fprintf(stderr, "I'm here.\n");
-        fprintf(stderr, "%s", msg);
+        fprintf(stderr, "%s\n", msg);
 
         exit:
             if (status != SUCCESS)
@@ -383,6 +382,8 @@ namespace UbiPAL
                 close(conn_fd);
                 continue;
             }
+
+            break;
         }
 
         if (itr == nullptr)
