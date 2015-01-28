@@ -233,6 +233,74 @@ namespace UbiPAL
 
         return status;
     }
+
+    int test_callback(std::string message, char* arg, uint32_t arg_len)
+    {
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestRegisterCallback()
+    {
+        int status = SUCCESS;
+        UbipalService us;
+
+        std::string test_message("test_message");
+
+        status = us.RegisterCallback(test_message, test_callback);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        std::unordered_map<std::string, UbipalCallback>::const_iterator returned_itr = us.callback_map.find(test_message);
+
+        if (returned_itr->second != test_callback)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return status;
+    }
+
+    int test_callback2(std::string message, char* arg, uint32_t arg_len)
+    {
+        return SUCCESS + 1;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestRegisterCallbackUpdate()
+    {
+        int status = SUCCESS;
+        UbipalService us;
+
+        std::string test_message("test_message");
+
+        status = us.RegisterCallback(test_message, test_callback);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        std::unordered_map<std::string, UbipalCallback>::const_iterator returned_itr = us.callback_map.find(test_message);
+
+        if (returned_itr->second != test_callback)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        status = us.RegisterCallback(test_message, test_callback2);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        if (returned_itr->second == test_callback || returned_itr->second != test_callback2)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return status;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -249,5 +317,9 @@ namespace UbiPAL
                                  "UbipalServiceTestSetAddress", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestSetPort, SUCCESS,
                                  "UbipalServiceTestSetPort", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestRegisterCallback, SUCCESS,
+                                 "UbipalServiceTestRegisterCallback", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestRegisterCallbackUpdate, SUCCESS,
+                                 "UbipalServiceTestRegisterCallbackUpdate", module_count, module_fails);
     }
 }

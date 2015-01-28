@@ -20,6 +20,8 @@ namespace UbiPAL
             static int UbipalServiceTestEndRecv();
             static int UbipalServiceTestSetAddress();
             static int UbipalServiceTestSetPort();
+            static int UbipalServiceTestRegisterCallback();
+            static int UbipalServiceTestRegisterCallbackUpdate();
 
             // End Unit tests
 

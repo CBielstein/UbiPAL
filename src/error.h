@@ -25,6 +25,7 @@ namespace UbiPAL
         NETWORKING_FAILURE  = -10,
         MULTIPLE_RECV = -11,
         THREAD_FAILURE = -12,
+        BUFFER_TOO_SMALL = -13,
     };
 
     // get_error_description

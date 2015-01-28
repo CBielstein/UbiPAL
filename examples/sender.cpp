@@ -13,27 +13,37 @@
 int main(int argc, char** argv)
 {
     int status = UbiPAL::SUCCESS;
-    std::string line;
+    std::string argument;
 
+    // Usage IO
     if (argc != 3)
     {
         std::cout << "Incorrect usage: ./sender ADDRESS PORT" << std::endl;
         return 0;
     }
+    std::cout << "Enter message to send." << std::endl;
 
-    std::cout << "Enter messages to send separate by return." << std::endl;
-
+    // Configure log
     UbiPAL::Log::SetFile("bin/examples/senderlog.txt");
+    UbiPAL::Log::SetPrint(true);
+
+    // Create service
     UbiPAL::UbipalService us;
 
-    std::getline(std::cin, line);
-    std::cout << "Sending: " << line << std::endl;
+    // Create name to send to
+    UbiPAL::UbipalName un;
+    un.address = std::string(argv[1]);
+    un.port = std::string(argv[2]);
 
-    status = us.SendData(std::string(argv[1]), std::string(argv[2]), line.c_str(), line.size());
-    if (status != UbiPAL::SUCCESS)
+    while(std::getline(std::cin, argument))
     {
-        std::cout << "Failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        //std::cout << "Sending: " << argument << std::endl;
+        status = us.SendMessage(0, un, std::string("PrintToScreen"), argument.c_str(), argument.size());
+        if (status != UbiPAL::SUCCESS)
+        {
+            std::cout << "Failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        }
     }
 
-    return 0;
+    return status;
 }

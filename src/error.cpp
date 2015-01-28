@@ -24,6 +24,7 @@ namespace UbiPAL
             case NETWORKING_FAILURE: return "NETWORKING_FAILURE: An error occurred during networking code.";
             case MULTIPLE_RECV: return "MULTIPLE_RECV: Multiple calls to recv cannot happen at once on the same object. Recv had already been called.";
             case THREAD_FAILURE: return "THREAD_FAILURE: An error occurred with threading code.";
+            case BUFFER_TOO_SMALL: return "BUFFER_TOO_SMALL: A buffer of memory is too small for the attempted operation.";
             default: return "Error code does not have description.";
         }
     }

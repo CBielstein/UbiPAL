@@ -10,7 +10,6 @@
 #include "error.h"
 #include "rsa_wrappers.h"
 #include "macros.h"
-#include "messages.h"
 
 // Standard
 #include <string.h>
@@ -157,7 +156,7 @@ namespace UbiPAL
         close(sockfd);
     }
 
-    int UbipalService::BeginRecv(const uint32_t flags, const UbipalCallback& received_callback)
+    int UbipalService::BeginRecv(const uint32_t flags)
     {
         FUNCTION_START;
         void* returned_ptr = nullptr;
@@ -183,24 +182,20 @@ namespace UbiPAL
             }
         receiving_mutex.unlock();
 
-        if (received_callback == nullptr)
-        {
-            Log::Line(Log::DEBUG, "UbipalService::BeginRecv: No callback specified.");
-        }
-
         // if flag isn't specified, go ahead and broadcast the name
         if ((flags & BeginRecvFlags::DONT_PUBLISH_NAME) != 0)
         {
-            status = SendName(NULL);
+            // TODO
+            /*status = SendName(NULL);
             if (status != SUCCESS)
             {
                 Log::Line(Log::EMERG, "UbipalService::BeginRecv: SendName(NULL) failed: %s", GetErrorDescription(status));
                 RETURN_STATUS(status);
-            }
+            }*/
         }
 
         // spin a new thread to begin receiving, probably in a different function?
-        if ((flags & BeginRecvFlags::NON_BLOCKING) != 0)
+        if ((flags & BeginRecvFlags::NON_BLOCKING)!= 0)
         {
             threads_mutex.lock();
             recv_threads.emplace(recv_threads.end());
@@ -306,9 +301,13 @@ namespace UbiPAL
     void* UbipalService::HandleConnection(void* hc_args)
     {
         FUNCTION_START;
-        char msg[MAX_MESSAGE_SIZE];
-        //UbipalService* us = nullptr;
+        char buf[MAX_MESSAGE_SIZE];
+        UbipalService* us = nullptr;
+        std::unordered_map<std::string, UbipalCallback>::iterator found;
         int conn_fd = 0;
+        BaseMessage base_message;
+        Message message;
+        uint32_t size = 0;
 
         if (hc_args == nullptr)
         {
@@ -316,20 +315,57 @@ namespace UbiPAL
             RETURN_STATUS(NULL_ARG);
         }
 
-        //us = ((HandleConnectionArguments*)hc_args)->us;
+        us = ((HandleConnectionArguments*)hc_args)->us;
         conn_fd = ((HandleConnectionArguments*)hc_args)->conn_fd;
 
-        returned_value = recv(conn_fd, msg, MAX_MESSAGE_SIZE, 0);
+        returned_value = recv(conn_fd, buf, MAX_MESSAGE_SIZE, 0);
         if (returned_value < 0)
         {
             Log::Line(Log::INFO, "UbipalService::HandleConnection: receive failed: %s", strerror(errno));
             RETURN_STATUS(NETWORKING_FAILURE);
         }
+        size = returned_value;
 
-        // this is for debugging
-        Log::Line(Log::DEBUG, "UbipalService::HandleConnection");
-        fprintf(stderr, "I'm here.\n");
-        fprintf(stderr, "%s\n", msg);
+        // interpret message
+        status = base_message.Decode(buf, returned_value);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::HandleConnection: BaseMessage::Decode failed: %s", GetErrorDescription(status));
+            RETURN_STATUS(status)
+        }
+
+        switch(base_message.type)
+        {
+            case MessageType::MESSAGE:
+                // decode as Message
+                status = message.Decode(buf, size);
+                if (status < 0)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Message::Decode failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                // find function to call
+
+                found = us->callback_map.find(message.message);
+                if (found == us->callback_map.end())
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Does not have the appropriate callback.");
+                    RETURN_STATUS(GENERAL_FAILURE);
+                }
+
+                status = found->second(message.message, message.argument, message.arg_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Callback returned %d, %s", status, GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                break;
+            case MessageType::NAMESPACE_CERTIFICATE: RETURN_STATUS(GENERAL_FAILURE);
+            case MessageType::ACCESS_CONTROL_LIST: RETURN_STATUS(GENERAL_FAILURE);
+            default: RETURN_STATUS(GENERAL_FAILURE);
+        }
 
         exit:
             if (status != SUCCESS)
@@ -339,7 +375,7 @@ namespace UbiPAL
             return NULL;
     }
 
-    int UbipalService::SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len)
+    int UbipalService::SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len) const
     {
         FUNCTION_START;
         int conn_fd = 0;
@@ -416,5 +452,146 @@ namespace UbiPAL
     {
         port = prt;
         return SUCCESS;
+    }
+
+    int UbipalService::RegisterCallback(const std::string& message, const UbipalCallback callback)
+    {
+        int status = SUCCESS;
+        std::pair<std::unordered_map<std::string, UbipalCallback>::iterator, bool> returned_pair;
+
+        callbacks_mutex.lock();
+
+            // try to insert
+            returned_pair = callback_map.emplace(message, callback);
+            if (returned_pair.second == true)
+            {
+                callbacks_mutex.unlock();
+                return status;
+            }
+
+            // if there's a collision on message, update the entry
+            returned_pair.first->second = callback;
+
+        callbacks_mutex.unlock();
+
+        return status;
+    }
+
+    int UbipalService::SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const char* const arg, const uint32_t arg_len)
+    {
+        FUNCTION_START;
+        Message* msg = nullptr;
+        HandleSendMessageArguments* sm_args = nullptr;
+
+        // check args
+        if (to.address.empty() || to.port.empty())
+        {
+            Log::Line(Log::WARN, "UbipalService::SendMessage: to doesn't have sufficient information");
+            RETURN_STATUS(INVALID_ARG);
+        }
+        else if (message.empty())
+        {
+            Log::Line(Log::WARN, "UbipalService::SendMessage: message is empty");
+            RETURN_STATUS(INVALID_ARG);
+        }
+        else if ((flags & ~(SendMessageFlags::NONBLOCKING)) != 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::SendMessage: called with invalid flags");
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        msg = new Message(arg, arg_len);
+        msg->to = to.id;
+        msg->from = id;
+        msg->message = message;
+
+        sm_args = new HandleSendMessageArguments(this);
+        sm_args->address = to.address;
+        sm_args->port = to.port;
+        sm_args->msg = msg;
+
+        if ((flags & SendMessageFlags::NONBLOCKING) != 0)
+        {
+            // if nonblocking, spin off a thread
+            threads_mutex.lock();
+            send_threads.emplace(send_threads.end());
+            returned_value = pthread_create(&send_threads[send_threads.size() - 1], NULL, HandleSendMessage, sm_args);
+            threads_mutex.unlock();
+            if (returned_value != 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::SendMessage: pthread_create failed: %d", returned_value);
+                RETURN_STATUS(THREAD_FAILURE);
+            }
+        }
+        else
+        {
+            // call from here!
+            HandleSendMessage(sm_args);
+        }
+
+        exit:
+            FUNCTION_END;
+    }
+
+    UbipalService::HandleSendMessageArguments::HandleSendMessageArguments() : us(nullptr) {}
+    UbipalService::HandleSendMessageArguments::HandleSendMessageArguments(const UbipalService* const _us) : us(_us) {}
+
+    void* UbipalService::HandleSendMessage(void* args)
+    {
+        FUNCTION_START;
+        HandleSendMessageArguments* sm_args = nullptr;
+        char* bytes = nullptr;
+        int bytes_length = 0;
+
+        if (args == nullptr)
+        {
+            Log::Line(Log::WARN, "UbipalService::HandleSendMessage: null argument");
+            RETURN_STATUS(NULL_ARG);
+        }
+
+        sm_args = static_cast<HandleSendMessageArguments*>(args);
+
+        returned_value = sm_args->msg->EncodedLength();
+        if (returned_value < 0)
+        {
+            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: EncodedLength had error: %s", GetErrorDescription(returned_value));
+            RETURN_STATUS(returned_value);
+        }
+        bytes_length = returned_value;
+
+        bytes = (char*)malloc(bytes_length);
+        if (bytes == nullptr)
+        {
+            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
+            RETURN_STATUS(MALLOC_FAILURE);
+        }
+
+        status = sm_args->msg->Encode(bytes, bytes_length);
+        if (status < 0)
+        {
+            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Encode failed: %s", GetErrorDescription(status));
+            RETURN_STATUS(status);
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, bytes_length);
+        if (status < 0)
+        {
+            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Encode failed: %s", GetErrorDescription(status));
+            RETURN_STATUS(status);
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        exit:
+            free(sm_args->msg);
+            free(sm_args);
+            free(bytes);
+            return nullptr;
     }
 }

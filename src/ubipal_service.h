@@ -8,10 +8,12 @@
 // Ubipal
 #include "ubipal_name.h"
 #include "ubipal_acl.h"
+#include "messages.h"
 
 // Standard
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <mutex>
 #include <pthread.h>
@@ -24,7 +26,7 @@
 namespace UbiPAL
 {
     // A callback type for received messages
-    typedef void(*UbipalCallback)(const std::string&, const std::string&);
+    typedef int(*UbipalCallback)(std::string message, char* arg, uint32_t arg_len);
 
     // UbipalService
     // Representation of a service in the UbiPAL namespace
@@ -67,20 +69,12 @@ namespace UbiPAL
             //          int: status. SUCCESS on successful write, failure otherwise
             // int SaveService(const std::string& file_path);
 
-            // XXX
-            // sends message with args to to
-            // flags:
-            //          NONBLOCKING
-            int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const std::string& args) const;
-            int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message,
-                            const std::string& args, const UbipalCallback& reply_callback);
-
             // Flags for BeginRecv
             enum BeginRecvFlags
             {
                 // prevents BeginRecv from publishing the namespace certificate
-                DONT_PUBLISH_NAME,
-                NON_BLOCKING,
+                DONT_PUBLISH_NAME = 1 << 0,
+                NON_BLOCKING = 1 << 1,
             };
 
             // BeginRecv
@@ -89,9 +83,19 @@ namespace UbiPAL
             //          [IN] flags: options including:
             //                            DONT_PUBLISH_NAME: stops the default namespace cetificate publication
             //                            NON_BLOCKING: does not block to do receiving
-            //          [IN] received_callback: A function to call for any message not handled by UbiPAL
-            //                                  messages handled by UbiPAL include: namespace cerftificates, ACLs, etc.
-            int BeginRecv(const uint32_t flags, const UbipalCallback& received_callback);
+            // return
+            //          int: SUCCESS on success
+            int BeginRecv(const uint32_t flags);
+
+            // RegisterCallback
+            // Adds a function to be called upon receiving a given message
+            // If the message has previously registered a callback, it is replaced with the new callback
+            // args
+            //          [IN] message: The message type to pass to the callback
+            //          [IN] callback: Function pointer to the function to use
+            // return
+            //          int: SUCCESS on success
+            int RegisterCallback(const std::string& message, const UbipalCallback callback);
 
             // EndRecv
             // Stops accepting messages from the network
@@ -124,9 +128,24 @@ namespace UbiPAL
             //          [IN] port: the port to send to
             //          [IN] data: the bytes to send
             //          [IN] data_len: The number of bytes to send
-            int SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len);
+            int SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len) const;
 
-            // the key for this service, also works as a unique identifier
+            enum SendMessageFlags
+            {
+                NONBLOCKING = 1 << 0,
+            };
+
+            // XXX
+            // sends message with args to to
+            // flags:
+            //          NONBLOCKING
+            int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const char* const arg, const uint32_t arg_len);
+
+            // TODO XXX ???
+            // int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message,
+                            // const std::string& args, const UbipalCallback& reply_callback);
+
+
             // XXX
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
             int SendName(const UbipalName* const send_to) const;
@@ -175,7 +194,26 @@ namespace UbiPAL
             // Handle an incoming connection
             static void* HandleConnection(void* hc_args);
 
+            struct HandleSendMessageArguments
+            {
+                const UbipalService* us;
+                std::string address;
+                std::string port;
+                BaseMessage* msg;
+
+                HandleSendMessageArguments();
+                HandleSendMessageArguments(const UbipalService* const _us);
+            };
+
+            // HandleSendMessage
+            // Handles an outgoing message to allow threaded execution
+            static void* HandleSendMessage(void* args);
+
+            // the key for this service, public version also works as a unique identifier
             RSA* private_key;
+
+            // A string representation of the public key for ID use
+            std::string id;
 
             // stores information parsed from received certificates
             std::vector<UbipalName> neighbors;
@@ -206,11 +244,21 @@ namespace UbiPAL
             // The 0th thread is used for Recv
             std::vector<pthread_t> recv_threads;
 
+            // threads for async sends
+            std::vector<pthread_t> send_threads;
+
             // mutex for thread creation and message passing
             std::mutex threads_mutex;
 
             // status for recv
+            // this allows a returned value without pointer exceptions
             int recv_status;
+
+            // maps message types to callbacks
+            std::unordered_map<std::string, UbipalCallback> callback_map;
+
+            // mutex to avoid time-of-check-to-time-of-use race conditions in RegisterCallback
+            std::mutex callbacks_mutex;
 
             // Enable tests
             friend class UbipalServiceTests;

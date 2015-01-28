@@ -21,6 +21,7 @@ namespace UbiPAL
         public:
             // key works as a unique identifier
             RSA* public_key;
+            std::string id;
             std::string address;
             std::string port;
 

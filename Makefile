@@ -51,7 +51,7 @@ endif
 dir_guard = @mkdir -p $(@D)
 
 .PHONY: all
-all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS)
+all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS) $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver
 
 .PHONY: help
 help:
