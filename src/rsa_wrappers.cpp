@@ -370,4 +370,119 @@ namespace UbiPAL
             return 0;
         }
     }
+
+    int RsaWrappers::PublicKeyToString(const RSA* const key, std::string& str)
+    {
+        FUNCTION_START;
+        char* n = nullptr;
+        char* e = nullptr;
+
+        // check args
+        if (key == nullptr)
+        {
+            RETURN_STATUS(NULL_ARG);
+        }
+
+        // both public elements must be present
+        if (key->n == nullptr || key->e == nullptr)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        // empty the string
+        if (str.empty() == false)
+        {
+            str.erase();
+        }
+
+        // append n
+        n = BN_bn2hex(key->n);
+        if (n == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+        str.append(n);
+
+        // append '-'
+        str.append("-");
+
+        // append e
+        e = BN_bn2hex(key->e);
+        if (e == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+        str.append(e);
+
+        exit:
+            OPENSSL_free(n);
+            OPENSSL_free(e);
+            FUNCTION_END;
+    }
+
+    int RsaWrappers::StringToPublicKey(const std::string& str, RSA*& key)
+    {
+        FUNCTION_START;
+        BIGNUM* n_bn = nullptr;
+        BIGNUM* e_bn = nullptr;
+        std::string n_string;
+        std::string e_string;
+        size_t split = 0;
+        size_t split2 = 0;
+
+        if (str.empty())
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        // split strings
+        split = str.find('-');
+        if (split == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        n_string = str.substr(0, split);
+
+        // ensure only one - is in the string
+        split2 = str.find('-', split + 1);
+        if (split2 != std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        e_string = str.substr(split + 1);
+
+        // create BN for n
+        returned_value = BN_hex2bn(&n_bn, n_string.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // create BN for e
+        returned_value = BN_hex2bn(&e_bn, e_string.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // allocate key
+        key = RSA_new();
+        if (key == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // set n and e
+        key->n = n_bn;
+        key->e = e_bn;
+
+        exit:
+            if (status != SUCCESS)
+            {
+                BN_free(n_bn);
+                BN_free(e_bn);
+                RSA_free(key);
+            }
+            FUNCTION_END;
+    }
 }

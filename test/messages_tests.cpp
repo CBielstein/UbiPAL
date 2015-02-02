@@ -18,6 +18,57 @@
 
 namespace UbiPAL
 {
+    int MessagesTests::MessagesTestBaseMessageEncodeStringDecodeString()
+    {
+        int status = SUCCESS;
+        std::string test_in("Super Bowl XLIX");
+        std::string test_result;
+        char* buf = nullptr;
+        uint32_t buf_len = 0;
+
+        buf_len = sizeof(char) * test_in.size() + 4;
+        buf = (char*) malloc(buf_len);
+        if (buf == nullptr)
+        {
+            status = MALLOC_FAILURE;
+            goto exit;
+        }
+
+        status = BaseMessage::EncodeString(buf, buf_len, test_in);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        status = BaseMessage::DecodeString(buf, buf_len, test_result);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        if (test_in.compare(test_result) != 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        exit:
+            free(buf);
+            return status;
+    }
+
     int MessagesTests::MessagesTestBaseMessageEncodeDecode()
     {
         int status = SUCCESS;
@@ -113,12 +164,86 @@ namespace UbiPAL
         return status;
     }
 
+    int MessagesTests::MessagesTestNamespaceCertificateEncodeDecode()
+    {
+        int status = SUCCESS;
+
+        NamespaceCertificate nc;
+        char* buf = nullptr;
+        uint32_t buf_len = 0;
+        NamespaceCertificate nc_result;
+
+        nc.id = std::string("elynn");
+        nc.description = std::string("jessica");
+        nc.address = std::string("cameron");
+        nc.port = std::string("#sadgrads");
+
+        buf_len = nc.EncodedLength();
+        if (buf_len < 0)
+        {
+            status = buf_len;
+            goto exit;
+        }
+
+        buf = (char*) malloc(buf_len);
+        if (buf == nullptr)
+        {
+            status = MALLOC_FAILURE;
+            goto exit;
+        }
+
+        status = nc.Encode(buf, buf_len);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        status = nc_result.Decode(buf, buf_len);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        if (nc.id.compare(nc_result.id) != 0 ||
+            nc.description.compare(nc_result.description) != 0 ||
+            nc.address.compare(nc_result.address) != 0 ||
+            nc.port.compare(nc_result.port) != 0 ||
+            nc.type != nc_result.type ||
+            nc.to.compare(nc_result.to) != 0 ||
+            nc.from.compare(nc_result.from) != 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+            goto exit;
+        }
+
+        exit:
+            free(buf);
+            return status;
+    }
+
     void MessagesTests::RunMessagesTests(unsigned int& module_count, unsigned int& module_fails)
     {
+        TestHelpers::RunTestFunc(MessagesTestBaseMessageEncodeStringDecodeString, SUCCESS,
+                                 "MessagesTestBaseMessageEncodeStringDecodeString", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestBaseMessageEncodeDecode, SUCCESS,
                                  "MessagesTestBaseMessageEncodeDecode", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestMessageEncodeDecode, SUCCESS,
                                  "MessagesTestMessageEncodeDecode", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestNamespaceCertificateEncodeDecode, SUCCESS,
+                                 "MessagesTestNamespaceCertificateEncodeDecode", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestMessageDefaultConstructor, SUCCESS,
                                  "MessagesTestMessageDefaultConstructor", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestMessageConstructor, SUCCESS,

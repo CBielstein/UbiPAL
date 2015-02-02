@@ -18,24 +18,8 @@
 namespace UbiPAL
 {
     UbipalName::UbipalName() :
-        public_key(nullptr), address(), port() {}
+        id(), description(), address(), port() {}
 
     UbipalName::UbipalName(const UbipalName& other) :
-        address(other.address), port(other.port)
-    {
-        public_key = RSA_new();
-        if (public_key == nullptr)
-        {
-            Log::Line(Log::EMERG,
-                      "UbipalName::UbipalName: Copy constructor failed to allocate new RSA key for public_key. RSA_new error: %s",
-                      ERR_error_string(ERR_get_error(), NULL));
-        }
-
-        memcpy(public_key, other.public_key, sizeof(RSA));
-    }
-
-    UbipalName::~UbipalName()
-    {
-        RSA_free(public_key);
-    }
+        id(other.id), description(other.description), address(other.address), port(other.port) {}
 }

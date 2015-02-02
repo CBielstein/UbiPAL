@@ -16,20 +16,69 @@
 
 namespace UbiPAL
 {
-    int BaseMessage::Decode(const char* const buf, const uint32_t buf_len)
+    int BaseMessage::EncodeString(char* const buf, const uint32_t buf_len, const std::string& str)
     {
-        FUNCTION_START;
-        uint8_t* type_ptr = nullptr;
-        uint32_t* len_ptr = nullptr;
+        return BaseMessage::EncodeBytes(buf, buf_len, str.c_str(), str.size());
+    }
+
+    int BaseMessage::EncodeBytes(char* const buf, const uint32_t buf_len, const char* const bytes, const uint32_t bytes_len)
+    {
         uint32_t length = 0;
+        uint32_t offset = 0;
+        uint32_t* len_ptr = nullptr;
+        uint32_t size = 0;
+        char* str_bits = nullptr;
+
+        // check args
+        if (buf == nullptr || bytes == nullptr)
+        {
+            Log::Line(Log::WARN, "BaseMessage::EncodeBytes: null args EncodeBytes(%p, %u, %p, %u)", buf, buf_len, bytes, bytes_len);
+            return NULL_ARG;
+        }
+
+        // encode length
+        length = 4;
+        if (buf_len < offset + length)
+        {
+            Log::Line(Log::WARN, "BaseMessage::EncodeBytes: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
+            return BUFFER_TOO_SMALL;
+        }
+        len_ptr = reinterpret_cast<uint32_t*>(buf + offset);
+        if (len_ptr == nullptr)
+        {
+            Log::Line(Log::EMERG, "BaseMessage::EncodeBytes: reinterpet_cast failed.");
+            return GENERAL_FAILURE;
+        }
+        size = bytes_len;
+        *len_ptr = htonl(size);
+        offset += length;
+
+        // encode bytes
+        if (buf_len < offset + size)
+        {
+            Log::Line(Log::WARN, "BaseMessage::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
+            return BUFFER_TOO_SMALL;
+        }
+        str_bits = buf + offset;
+        strncpy(str_bits, bytes, size);
+        offset += size;
+
+        return offset;
+    }
+
+    int BaseMessage::DecodeString(const char* const buf, const uint32_t buf_len, std::string& str)
+    {
+        uint32_t length = 0;
+        uint32_t offset = 0;
+        uint32_t* len_ptr = nullptr;
         char* str_bits = nullptr;
         char* buff = nullptr;
-        uint32_t offset = 0;
 
-        if (buf == nullptr || buf_len == 0)
+        // check args
+        if (buf == nullptr)
         {
-            Log::Line(Log::WARN, "BaseMessage::Decode: Decode(%p, %u)", buf, buf_len);
-            RETURN_STATUS(INVALID_ARG);
+            Log::Line(Log::WARN, "BaseMessage::DecodeString: null args DecodeString(%p, %u, str)", buf, buf_len);
+            return NULL_ARG;
         }
 
         // cast of the constness of buff. It's const in the header to show it won't be changed,
@@ -37,8 +86,60 @@ namespace UbiPAL
         buff = const_cast<char*>(buf);
         if (buff == nullptr)
         {
-            Log::Line(Log::EMERG, "BaseMessage::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            Log::Line(Log::EMERG, "BaseMessage::DecodeString: const_cast failed.");
+            return GENERAL_FAILURE;
+        }
+
+        // decode length
+        length = 4;
+        if (buf_len < offset + length)
+        {
+            Log::Line(Log::WARN, "BaseMessage::DecodeString: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
+            return BUFFER_TOO_SMALL;
+        }
+        len_ptr = reinterpret_cast<uint32_t*>(buff + offset);
+        if (len_ptr == nullptr)
+        {
+            Log::Line(Log::EMERG, "BaseMessage::DecodeString: reinterpet_cast failed.");
+            return GENERAL_FAILURE;
+        }
+        offset += length;
+        length = ntohl(*len_ptr);
+
+        // decode string
+        if (buf_len < offset + length)
+        {
+            Log::Line(Log::WARN, "BaseMessage::DecodeString: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
+            return BUFFER_TOO_SMALL;
+        }
+        str_bits = buff + offset;
+        str = std::string(str_bits, length);
+        offset += length;
+
+        return offset;
+    }
+
+    int BaseMessage::Decode(const char* const buf, const uint32_t buf_len)
+    {
+        int status = SUCCESS;
+        uint8_t* type_ptr = nullptr;
+        uint32_t length = 0;
+        char* buff = nullptr;
+        uint32_t offset = 0;
+
+        if (buf == nullptr || buf_len == 0)
+        {
+            Log::Line(Log::WARN, "BaseMessage::Decode: Decode(%p, %u)", buf, buf_len);
+            return INVALID_ARG;
+        }
+
+        // cast of the constness of buff. It's const in the header to show it won't be changed,
+        // but it needs to be non-const for later casts
+        buff = const_cast<char*>(buf);
+        if (buff == nullptr)
+        {
+            Log::Line(Log::EMERG, "BaseMessage::Decode: const_cast failed.");
+            return GENERAL_FAILURE;
         }
 
         // decode message type
@@ -46,89 +147,55 @@ namespace UbiPAL
         if (buf_len < offset + length)
         {
             Log::Line(Log::WARN, "BaseMessage::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            return BUFFER_TOO_SMALL;
         }
         type_ptr = reinterpret_cast<uint8_t*>(buff);
         if (type_ptr == nullptr)
         {
             Log::Line(Log::EMERG, "BaseMessage::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            return GENERAL_FAILURE;
         }
         type = *type_ptr;
         offset += length;
 
-        // decode to length
-        length = 4;
-        if (buf_len < offset + length)
-        {
-            Log::Line(Log::WARN, "BaseMessage::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
-        }
-        len_ptr = reinterpret_cast<uint32_t*>(buff + offset);
-        if (len_ptr == nullptr)
-        {
-            Log::Line(Log::EMERG, "BaseMessage::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
-        }
-        offset += length;
-        length = ntohl(*len_ptr);
-
         // decode to
-        if (buf_len < offset + length)
+        status = DecodeString(buf + offset, buf_len - offset, to);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "BaseMessage::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        str_bits = buff + offset;
-        to = std::string(str_bits, length);
-        offset += length;
-
-        // decode from length
-        length = 4;
-        if (buf_len < offset + length)
+        else
         {
-            Log::Line(Log::WARN, "BaseMessage::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            offset += status;
         }
-        len_ptr = reinterpret_cast<uint32_t*>(buff + offset);
-        if (len_ptr == nullptr)
-        {
-            Log::Line(Log::EMERG, "BaseMessage::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
-        }
-        offset += length;
-        length = ntohl(*len_ptr);
 
         // decode from
-        if (buf_len < offset + length)
+        status = DecodeString(buf + offset, buf_len - offset, from);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "BaseMessage::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        str_bits = buff + offset;
-        from = std::string(str_bits, length);
-        offset += length;
+        else
+        {
+            offset += status;
+        }
 
-        status = offset;
-
-        exit:
-            FUNCTION_END;
+        return offset;
     }
 
-    int BaseMessage::Encode(char* const buf, const uint32_t buf_len)
+    int BaseMessage::Encode(char* const buf, const uint32_t buf_len) const
     {
-        FUNCTION_START;
+        int status = SUCCESS;
         uint8_t* type_ptr = nullptr;
-        uint32_t* len_ptr = nullptr;
         uint32_t length = 0;
-        char* str_bits = nullptr;
         uint32_t offset = 0;
-        uint32_t size = 0;
 
         if (buf == nullptr || buf_len == 0)
         {
             Log::Line(Log::WARN, "BaseMessage::Encode: Encode(%p, %u)", buf, buf_len);
-            RETURN_STATUS(INVALID_ARG);
+            return INVALID_ARG;
         }
 
         // encode message type
@@ -136,95 +203,58 @@ namespace UbiPAL
         if (buf_len < offset + length)
         {
             Log::Line(Log::WARN, "BaseMessage::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(INVALID_ARG);
+            return INVALID_ARG;
         }
         type_ptr = reinterpret_cast<uint8_t*>(buf);
         if (type_ptr == nullptr)
         {
             Log::Line(Log::EMERG, "BaseMessage::Encode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            return GENERAL_FAILURE;
         }
         *type_ptr = type;
         offset += length;
 
-        // encode to length
-        length = 4;
-        if (buf_len < offset + length)
-        {
-            Log::Line(Log::WARN, "BaseMessage::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
-        }
-        len_ptr = reinterpret_cast<uint32_t*>(buf + offset);
-        if (len_ptr == nullptr)
-        {
-            Log::Line(Log::EMERG, "BaseMessage::Encode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
-        }
-        size = to.size();
-        *len_ptr = htonl(size);
-        offset += length;
-
         // encode to
-        if (buf_len < offset + size)
+        status = EncodeString(buf + offset, buf_len - offset, to);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "BaseMessage::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "BaseMessage::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        str_bits = buf + offset;
-        strncpy(str_bits, to.c_str(), size);
-        offset += size;
-
-        // encode from length
-        length = 4;
-        if (buf_len < offset + length)
+        else
         {
-            Log::Line(Log::WARN, "BaseMessage::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            offset += status;
         }
-        len_ptr = reinterpret_cast<uint32_t*>(buf + offset);
-        if (len_ptr == nullptr)
-        {
-            Log::Line(Log::EMERG, "BaseMessage::Encode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
-        }
-        size = from.size();
-        *len_ptr = htonl(size);
-        offset += length;
 
         // encode from
-        if (buf_len < offset + size)
+        status = EncodeString(buf + offset, buf_len - offset, from);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "BaseMessage::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "BaseMessage::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        str_bits = buf + offset;
-        strncpy(str_bits, from.c_str(), size);
-        offset += size;
+        else
+        {
+            offset += status;
+        }
 
-        status = offset;
-
-        exit:
-            FUNCTION_END;
+        return offset;
     }
 
-    int BaseMessage::EncodedLength()
+    int BaseMessage::EncodedLength() const
     {
         return 1 + 4 + to.size() + 4 + from.size();
     }
 
-    int Message::Encode(char* const buf, const uint32_t buf_len)
+    int Message::Encode(char* const buf, const uint32_t buf_len) const
     {
-        FUNCTION_START;
-        uint32_t* len_ptr = nullptr;
-        uint32_t length = 0;
-        char* str_bits = nullptr;
+        int status = SUCCESS;
         uint32_t offset = 0;
-        uint32_t size = 0;
 
         if (buf == nullptr || buf_len == 0)
         {
-            Log::Line(Log::WARN, "Message::Encode: Decode(%p, %u)", buf, buf_len);
-            RETURN_STATUS(INVALID_ARG);
+            Log::Line(Log::WARN, "Message::Encode: Encode(%p, %u)", buf, buf_len);
+            return INVALID_ARG;
         }
 
         // encode basemessage part of the struct
@@ -232,76 +262,41 @@ namespace UbiPAL
         if (status < 0)
         {
             Log::Line(Log::WARN, "Message::Encode: BaseMessage::Encode failed: %s", GetErrorDescription(status));
-            RETURN_STATUS(status);
+            return status;
         }
         else
         {
             offset = status;
         }
 
-        // encode message length
-        length = 4;
-        if (buf_len < offset + length)
+        status = EncodeString(buf + offset, buf_len - offset, message);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "Message::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "Message::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        len_ptr = reinterpret_cast<uint32_t*>(buf + offset);
-        if (len_ptr == nullptr)
+        else
         {
-            Log::Line(Log::EMERG, "Message::Encode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            offset += status;
         }
-        size = message.size();
-        *len_ptr = htonl(size);
-        offset += length;
 
-        // encode message
-        if (buf_len < offset + size)
+        status = EncodeBytes(buf + offset, buf_len - offset, argument, arg_len);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "Message::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "Message::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        str_bits = buf + offset;
-        strncpy(str_bits, message.c_str(), size);
-        offset += size;
-
-        // encode arg length
-        length = 4;
-        if (buf_len < offset + length)
+        else
         {
-            Log::Line(Log::WARN, "Message::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            offset += status;
         }
-        len_ptr = reinterpret_cast<uint32_t*>(buf + offset);
-        if (len_ptr == nullptr)
-        {
-            Log::Line(Log::EMERG, "Message::Encode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
-        }
-        size = arg_len;
-        *len_ptr = htonl(size);
-        offset += length;
 
-        // encode arg
-        if (buf_len < offset + size)
-        {
-            Log::Line(Log::WARN, "Message::Encode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
-        }
-        str_bits = buf + offset;
-        strncpy(str_bits, argument, size);
-        offset += size;
-
-        status = offset;
-
-        exit:
-            FUNCTION_END;
+        return offset;
     }
 
     int Message::Decode(const char* const buf, const uint32_t buf_len)
     {
-        FUNCTION_START;
+        int status = SUCCESS;
         uint32_t* len_ptr = nullptr;
         uint32_t length = 0;
         char* str_bits = nullptr;
@@ -311,7 +306,7 @@ namespace UbiPAL
         if (buf == nullptr || buf_len == 0)
         {
             Log::Line(Log::WARN, "BaseMessage::Decode: Decode(%p, %u)", buf, buf_len);
-            RETURN_STATUS(INVALID_ARG);
+            return INVALID_ARG;
         }
 
         // decode the basemessage part of the struct
@@ -319,7 +314,7 @@ namespace UbiPAL
         if (status < 0)
         {
             Log::Line(Log::WARN, "Message::Decode: BaseMessage::Decode failed: %s", GetErrorDescription(status));
-            RETURN_STATUS(status);
+            return status;
         }
         else
         {
@@ -332,47 +327,33 @@ namespace UbiPAL
         if (buff == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            return GENERAL_FAILURE;
         }
 
-        // decode message length
-        length = 4;
-        if (buf_len < offset + length)
+        // decode message
+        status = DecodeString(buf + offset, buf_len - offset, message);
+        if (status < 0)
         {
-            Log::Line(Log::WARN, "Message::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
         }
-        len_ptr = reinterpret_cast<uint32_t*>(buff + offset);
-        if (len_ptr == nullptr)
+        else
         {
-            Log::Line(Log::EMERG, "Message::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            offset += status;
         }
-        offset += length;
-        length = ntohl(*len_ptr);
-
-        // decode to
-        if (buf_len < offset + length)
-        {
-            Log::Line(Log::WARN, "Message::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
-        }
-        str_bits = buff + offset;
-        message = std::string(str_bits, length);
-        offset += length;
 
         // decode args length
         length = 4;
         if (buf_len < offset + length)
         {
             Log::Line(Log::WARN, "Message::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            return BUFFER_TOO_SMALL;
         }
         len_ptr = reinterpret_cast<uint32_t*>(buff + offset);
         if (len_ptr == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Decode: reinterpet_cast failed.");
-            RETURN_STATUS(GENERAL_FAILURE);
+            return GENERAL_FAILURE;
         }
         offset += length;
         length = ntohl(*len_ptr);
@@ -382,25 +363,22 @@ namespace UbiPAL
         if (buf_len < offset + length)
         {
             Log::Line(Log::WARN, "Message::Decode: Given a buf too short: buf_len %u < offset %u + length %u", buf_len, offset, length);
-            RETURN_STATUS(BUFFER_TOO_SMALL);
+            return BUFFER_TOO_SMALL;
         }
         str_bits = buff + offset;
         argument = (char*)malloc(length);
         if (argument == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Decode: malloc failed");
-            RETURN_STATUS(MALLOC_FAILURE);
+            return MALLOC_FAILURE;
         }
         memcpy(argument, str_bits, length);
         offset += length;
 
-        status = offset;
-
-        exit:
-            FUNCTION_END;
+        return offset;
     }
 
-    int Message::EncodedLength()
+    int Message::EncodedLength() const
     {
         return BaseMessage::EncodedLength() + 4 + message.size() + 4 + arg_len;
     }
@@ -444,7 +422,159 @@ namespace UbiPAL
 
     AccessControlList::AccessControlList()
     {
-        type = NAMESPACE_CERTIFICATE;
+        type = ACCESS_CONTROL_LIST;
     }
 
+    int NamespaceCertificate::Encode(char* const buf, const uint32_t buf_len) const
+    {
+        int status = SUCCESS;
+        uint32_t offset = 0;
+
+        if (buf == nullptr || buf_len == 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: Encode(%p, %u)", buf, buf_len);
+            return INVALID_ARG;
+        }
+
+        // encode basemessage part of the struct
+        status = BaseMessage::Encode(buf, buf_len);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::Encode failed: %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // encode id
+        status = EncodeString(buf + offset, buf_len - offset, id);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // encode description
+        status = EncodeString(buf + offset, buf_len - offset, description);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // encode address
+        status = EncodeString(buf + offset, buf_len - offset, address);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // encode port
+        status = EncodeString(buf + offset, buf_len - offset, port);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset = status;
+        }
+
+        return status;
+    }
+
+    int NamespaceCertificate::Decode(const char* const buf, const uint32_t buf_len)
+    {
+        int status = SUCCESS;
+        uint32_t offset = 0;
+
+        if (buf == nullptr || buf_len == 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: Decode(%p, %u)", buf, buf_len);
+            return INVALID_ARG;
+        }
+
+        // decode basemessage part of the struct
+        status = BaseMessage::Decode(buf, buf_len);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::Decode failed: %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // decode id
+        status = DecodeString(buf + offset, buf_len - offset, id);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // decode description
+        status = DecodeString(buf + offset, buf_len - offset, description);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // decode address
+        status = DecodeString(buf + offset, buf_len - offset, address);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // decode port
+        status = DecodeString(buf + offset, buf_len - offset, port);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset = status;
+        }
+
+        return status;
+    }
+
+    int NamespaceCertificate::EncodedLength() const
+    {
+        return BaseMessage::EncodedLength() + 4 + id.size() + 4 + description.size() + 4 + address.size() + 4 + port.size();
+    }
 }

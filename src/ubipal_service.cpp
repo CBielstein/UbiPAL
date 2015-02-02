@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sstream>
 
 // Networking
 #include <sys/types.h>
@@ -41,6 +42,7 @@ namespace UbiPAL
         struct sockaddr_in bound_sock;
         socklen_t addr_len = 0;
         char current_addr[INET6_ADDRSTRLEN];
+        std::stringstream pub_key_string;
 
         // initially not receiving
         receiving = false;
@@ -66,9 +68,15 @@ namespace UbiPAL
             }
         }
 
-        // open socket
-        // Code relied on examples from http://beej.us/guide/bgnet/output/html/multipage/clientserver.html#simpleserver
+        status = RsaWrappers::PublicKeyToString(private_key, id);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::EMERG, "UbipalService::UbipalSErvice: Constructor failed to set ID from private key: %s", GetErrorDescription(status));
+            goto exit;
+        }
 
+        // open socket
+        // Code relies on examples from http://beej.us/guide/bgnet/output/html/multipage/clientserver.html#simpleserver
         //set hints
         memset(&hints, 0, sizeof(struct addrinfo));
         hints.ai_family = AF_UNSPEC;
@@ -161,7 +169,7 @@ namespace UbiPAL
         FUNCTION_START;
         void* returned_ptr = nullptr;
 
-        if ((flags & ~(BeginRecvFlags::DONT_PUBLISH_NAME)) != 0)
+        if ((flags & ~(BeginRecvFlags::DONT_PUBLISH_NAME | BeginRecvFlags::NON_BLOCKING)) != 0)
         {
             Log::Line(Log::WARN, "UbipalService::BeginRecv: Invalid flags.");
             RETURN_STATUS(INVALID_ARG);
@@ -307,7 +315,11 @@ namespace UbiPAL
         int conn_fd = 0;
         BaseMessage base_message;
         Message message;
+        NamespaceCertificate name_cert;
         uint32_t size = 0;
+        std::unordered_map<std::string, UbipalName>::iterator trusted_itr;
+        std::unordered_map<std::string, UbipalName>::iterator untrusted_itr;
+        UbipalName temp_un;
 
         if (hc_args == nullptr)
         {
@@ -346,7 +358,6 @@ namespace UbiPAL
                 }
 
                 // find function to call
-
                 found = us->callback_map.find(message.message);
                 if (found == us->callback_map.end())
                 {
@@ -362,7 +373,63 @@ namespace UbiPAL
                 }
 
                 break;
-            case MessageType::NAMESPACE_CERTIFICATE: RETURN_STATUS(GENERAL_FAILURE);
+            case MessageType::NAMESPACE_CERTIFICATE:
+                // decode as namespace certificate
+                status = name_cert.Decode(buf, size);
+                if (status < 0)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: NamespaceCertificate::Decode failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                // check if it was sent by a trusted source
+                trusted_itr = us->trusted_services.find(name_cert.from);
+                if (trusted_itr != us->trusted_services.end())
+                {
+                    // we trust the sender, see if the actual name is in our trusted list.
+                    trusted_itr = us->trusted_services.find(name_cert.id);
+                    if (trusted_itr != us->trusted_services.end())
+                    {
+                        // it is, so update it
+                        trusted_itr->second.id = name_cert.id;
+                        trusted_itr->second.description = name_cert.description;
+                        trusted_itr->second.address = name_cert.address;
+                        trusted_itr->second.port = name_cert.port;
+                    }
+                    else
+                    {
+                        // it isn't, so add it
+                        temp_un.id = name_cert.id;
+                        temp_un.description = name_cert.description;
+                        temp_un.address = name_cert.address;
+                        temp_un.port = name_cert.port;
+                        us->trusted_services.emplace(name_cert.id, temp_un);
+                    }
+                }
+                else
+                {
+                    // check if the actual name is in the untrusted
+                    untrusted_itr = us->untrusted_services.find(name_cert.id);
+                    if (untrusted_itr != us->trusted_services.end())
+                    {
+                        // it is, so update it
+                        untrusted_itr->second.id = name_cert.id;
+                        untrusted_itr->second.description = name_cert.description;
+                        untrusted_itr->second.address = name_cert.address;
+                        untrusted_itr->second.port = name_cert.port;
+                    }
+                    else
+                    {
+                        // it isn't, so add it
+                        temp_un.id = name_cert.id;
+                        temp_un.description = name_cert.description;
+                        temp_un.address = name_cert.address;
+                        temp_un.port = name_cert.port;
+                        us->untrusted_services.emplace(name_cert.id, temp_un);
+                    }
+                }
+
+                break;
             case MessageType::ACCESS_CONTROL_LIST: RETURN_STATUS(GENERAL_FAILURE);
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
@@ -593,5 +660,105 @@ namespace UbiPAL
             free(sm_args);
             free(bytes);
             return nullptr;
+    }
+
+    int UbipalService::SetDescription(const std::string& desc)
+    {
+        description = desc;
+        return SUCCESS;
+    }
+
+    int UbipalService::SendName(const uint32_t flags, const UbipalName* const send_to)
+    {
+        FUNCTION_START;
+        NamespaceCertificate* msg = nullptr;
+        HandleSendMessageArguments* sm_args = nullptr;
+
+        if ((flags & ~(SendMessageFlags::NONBLOCKING)) != 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::SendMessage: called with invalid flags");
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        msg = new NamespaceCertificate();
+        msg->to = send_to->id;
+        msg->from = id;
+        msg->id = id;
+        msg->description = description;
+        msg->address = address;
+        msg->port = port;
+
+        sm_args = new HandleSendMessageArguments(this);
+        sm_args->address = send_to->address;
+        sm_args->port = send_to->port;
+        sm_args->msg = msg;
+
+        if ((flags & SendMessageFlags::NONBLOCKING) != 0)
+        {
+            // if nonblocking, spin off a thread
+            threads_mutex.lock();
+            send_threads.emplace(send_threads.end());
+            returned_value = pthread_create(&send_threads[send_threads.size() - 1], NULL, HandleSendMessage, sm_args);
+            threads_mutex.unlock();
+            if (returned_value != 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::SendMessage: pthread_create failed: %d", returned_value);
+                RETURN_STATUS(THREAD_FAILURE);
+            }
+        }
+        else
+        {
+            // call from here!
+            HandleSendMessage(sm_args);
+        }
+
+        exit:
+            FUNCTION_END;
+    }
+
+    int UbipalService::SendName(const uint32_t flags, const std::string& address, const std::string& port)
+    {
+        UbipalName un;
+        un.address = address;
+        un.port = port;
+
+        return SendName(flags, &un);
+    }
+
+    int UbipalService::GetNames(const uint32_t flags, std::vector<UbipalName>& names)
+    {
+        int status = SUCCESS;
+
+        // check flags
+        if ((flags & ~(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED)) != 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::GetNames: passed invalid flag");
+            return INVALID_ARG;
+        }
+
+        // empty vector
+        names.clear();
+
+        // add untrusted, if flagged
+        if ((flags & GetNamesFlags::INCLUDE_UNTRUSTED) != 0)
+        {
+            std::unordered_map<std::string, UbipalName>::iterator untrusted_itr;
+            for (untrusted_itr = untrusted_services.begin(); untrusted_itr != untrusted_services.end(); ++untrusted_itr)
+            {
+                names.push_back(untrusted_itr->second);
+            }
+        }
+
+        // add trusted, if flagged
+        if ((flags & GetNamesFlags::INCLUDE_TRUSTED) != 0)
+        {
+            std::unordered_map<std::string, UbipalName>::iterator trusted_itr;
+            for (trusted_itr = trusted_services.begin(); trusted_itr != trusted_services.end(); ++trusted_itr)
+            {
+                names.push_back(trusted_itr->second);
+            }
+        }
+
+        return status;
     }
 }

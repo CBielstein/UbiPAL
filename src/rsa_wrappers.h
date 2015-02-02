@@ -11,6 +11,9 @@
 // OpenSSL includes
 #include <openssl/rsa.h>
 
+// standard
+#include <string>
+
 namespace UbiPAL
 {
     // RsaWrappers
@@ -103,6 +106,26 @@ namespace UbiPAL
             // return
             //          int: 1 if the keys match, 0 if they don't, < 0 error on failure
             static int KeysEqual(const RSA* const a, const RSA* const b);
+
+            // PublicKeyToString
+            // Creates a string representation of the public key of the given key
+            // Format is "n-e"
+            // args
+            //          [IN] key: The key
+            //          [IN/OUT] str: The string which will hold the representation
+            // return
+            //          int: SUCCESS on success, negative error otherwise
+            static int PublicKeyToString(const RSA* const key, std::string& str);
+
+            // StringToPublicKey
+            // Allocates and creates a public key from the given string
+            // Format is "n-e"
+            // args
+            //          [IN] str: the string representing the public key
+            //          [IN/OUT] key: a pointer to allocate and set the public key
+            // return
+            //          int: SUCCESS on success, negative error otherwise
+            static int StringToPublicKey(const std::string& str, RSA*& key);
 
         private:
             // IsPrivateKey

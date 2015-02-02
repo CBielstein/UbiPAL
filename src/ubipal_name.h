@@ -20,8 +20,8 @@ namespace UbiPAL
     {
         public:
             // key works as a unique identifier
-            RSA* public_key;
             std::string id;
+            std::string description;
             std::string address;
             std::string port;
 
@@ -30,9 +30,6 @@ namespace UbiPAL
 
             // copy constructor
             UbipalName(const UbipalName& other);
-
-            // destructor
-            ~UbipalName();
     };
 }
 

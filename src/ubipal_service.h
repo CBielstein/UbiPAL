@@ -73,8 +73,8 @@ namespace UbiPAL
             enum BeginRecvFlags
             {
                 // prevents BeginRecv from publishing the namespace certificate
-                DONT_PUBLISH_NAME = 1 << 0,
-                NON_BLOCKING = 1 << 1,
+                DONT_PUBLISH_NAME = 2 << 0,
+                NON_BLOCKING = 2 << 1,
             };
 
             // BeginRecv
@@ -121,6 +121,14 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int SetPort(const std::string& prt);
 
+            // SetDescription
+            // Sets the advertised service description. This allows simple discovery of the service.
+            // args
+            //          [IN] desc: The new description to advertise
+            // return
+            //          int:: SUCCESS on success
+            int SetDescription(const std::string& desc);
+
             // SendData
             // Actually does the act of sending data to an address. No formatting or anything is done.
             // args
@@ -135,21 +143,43 @@ namespace UbiPAL
                 NONBLOCKING = 1 << 0,
             };
 
-            // XXX
+            // SendMessage
             // sends message with args to to
-            // flags:
-            //          NONBLOCKING
+            // args
+            //          [IN] flags: flags, including:
+            //                  NONBLOCKING, returns immediately, uses a different thread to send
+            //          [IN] to: The name to which to send
+            //          [IN] message: the message to send
+            //          [IN] arg: Any arguments to the message
+            //          [IN] arg_len: The length of arg
+            // return
+            //          int: SUCCESS on success
             int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const char* const arg, const uint32_t arg_len);
 
             // TODO XXX ???
             // int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message,
                             // const std::string& args, const UbipalCallback& reply_callback);
 
-
-            // XXX
+            // SendName
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
-            int SendName(const UbipalName* const send_to) const;
-            int SendName(const std::string& address, const std::string& port) const;
+            // args
+            //          [IN] flags: Flags, including:
+            //                  NONBLOCKING, returns immediately, uses a different thread to send
+            //          [IN] send_to: The address to which to send, if null, this broadcasts the name
+            // return
+            //          int: SUCCESS on success
+            int SendName(const uint32_t flags, const UbipalName* const send_to);
+
+            // SendName
+            // Sends an updated namespace certificate to the given address and port. This is unencrypted.
+            // args
+            //          [IN] flags: Flags, including:
+            //                  NONBLOCKING, returns immediately, uses a different thread to send
+            //          [IN] address: The address to which to send
+            //          [IN] port: The port to which to send
+            // return
+            //          int: SUCCESS on success
+            int SendName(const uint32_t flags, const std::string& address, const std::string& port);
 
             // XXX
             // adds a new Acl to the list of local acls
@@ -173,6 +203,24 @@ namespace UbiPAL
             // looks up a name advertising the desired message
             int FindNameForMessage(const std::string& message, UbipalName*& name);
 
+            enum GetNamesFlags
+            {
+                INCLUDE_UNTRUSTED = 2 << 0,
+                INCLUDE_TRUSTED = 2 << 1
+            };
+
+            // GetNames
+            // Constructs a vector of UbipalNames (either trusted, untrusted, or both) to iterate through
+            // This vector is not by reference, so changes here will not be reflected in the private data structures below
+            // args
+            //          [IN] flags: flags, including
+            //                  INCLUDE_UNTRUSTED: includes untrusted names
+            //                  INCLUDE_TRUSTED: includes trusted names
+            //          [IN/OUT] names: A vector of resultant names
+            // return
+            //          int: SUCCESS on success, negative error otherwise
+            int GetNames(const uint32_t flags, std::vector<UbipalName>& names);
+
         private:
             // Recv
             // Does all the actual work of receiving and filtering messages to their appropriate functions
@@ -192,6 +240,12 @@ namespace UbiPAL
 
             // HandleConnection
             // Handle an incoming connection
+            // args
+            //          [IN] hc_args: a pointer to a HancleConnectionArguments struct which includes
+            //                  us: A pointer to this UbipalService
+            //                  conn_fd: the file descriptor of the connection to use
+            // return
+            //          void*: NULL
             static void* HandleConnection(void* hc_args);
 
             struct HandleSendMessageArguments
@@ -207,6 +261,14 @@ namespace UbiPAL
 
             // HandleSendMessage
             // Handles an outgoing message to allow threaded execution
+            // args
+            //          [IN] args: A pointer to a HandleSendMessageArguments struct which includes
+            //                  us: A pointero to this UbipalService
+            //                  address: The address to send to
+            //                  port: The port to receive from
+            //                  msg: The message to send
+            // returns
+            //          void*: NULL
             static void* HandleSendMessage(void* args);
 
             // the key for this service, public version also works as a unique identifier
@@ -215,8 +277,14 @@ namespace UbiPAL
             // A string representation of the public key for ID use
             std::string id;
 
-            // stores information parsed from received certificates
-            std::vector<UbipalName> neighbors;
+            // A string description useful for finding a specific service
+            std::string description;
+
+            // stores information parsed from received certificates from services we trust
+            std::unordered_map<std::string, UbipalName> trusted_services;
+
+            // stores information parsed from received certificates from other services
+            std::unordered_map<std::string, UbipalName> untrusted_services;
 
             // some data structure to hold ACLs
             // maps the public key string representation to any acls it has sent
@@ -225,10 +293,10 @@ namespace UbiPAL
             // some data structure to hold our rules array of strings or something
             std::vector<UbipalAcl> local_acls;
 
-            // the port on which we operate. String held in case we save to a file later
+            // the port on which we operate
             std::string port;
 
-            // the address on which we advertise our namespace
+            // the address on which we advertise our service
             std::string address;
 
             // socket descriptor used to send and receive

@@ -16,9 +16,9 @@ int main(int argc, char** argv)
     std::string argument;
 
     // Usage IO
-    if (argc != 3)
+    if (argc != 2)
     {
-        std::cout << "Incorrect usage: ./sender ADDRESS PORT" << std::endl;
+        std::cout << "Incorrect usage: ./sender PORT" << std::endl;
         return 0;
     }
     std::cout << "Enter message to send." << std::endl;
@@ -28,20 +28,37 @@ int main(int argc, char** argv)
     UbiPAL::Log::SetPrint(true);
 
     // Create service
-    UbiPAL::UbipalService us;
+    UbiPAL::UbipalService us(nullptr, argv[1]);
 
-    // Create name to send to
-    UbiPAL::UbipalName un;
-    un.address = std::string(argv[1]);
-    un.port = std::string(argv[2]);
+    // listen for advertised names
+    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::DONT_PUBLISH_NAME | UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
+    if (status != UbiPAL::SUCCESS)
+    {
+        us.EndRecv();
+        std::cout << "Failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        return status;
+    }
 
+    // for each line, send to any service we have heard about
+    std::vector<UbiPAL::UbipalName> services;
     while(std::getline(std::cin, argument))
     {
         //std::cout << "Sending: " << argument << std::endl;
-        status = us.SendMessage(0, un, std::string("PrintToScreen"), argument.c_str(), argument.size());
+        status = us.GetNames(UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED, services);
         if (status != UbiPAL::SUCCESS)
         {
-            std::cout << "Failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            std::cout << "Failed to get service names: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            return status;
+        }
+
+        for (size_t i = 0; i < services.size(); ++i)
+        {
+            status = us.SendName(0, &services[i]);
+            status = us.SendMessage(0, services[i], std::string("PrintToScreen"), argument.c_str(), argument.size());
+            if (status != UbiPAL::SUCCESS)
+            {
+                std::cout << "Failed to send message: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            }
         }
     }
 

@@ -24,12 +24,21 @@ BaseMessage:
     4 bytes: length_from, length of name of sender address in bytes
     length_from bytes: name of source
 
-Message: above, plus the following
+Message: BaseMessage, plus the following
     4 bytes: msg_len uint32_t
     msg_len bytes: message char*
     4 bytes: arg_len uint32_t
     arg_len bytes: arg char*
 
+NamespaceCerfiticate: BaseMessage, plus the follow
+    4 bytes: id_len uint32_t
+    id_len bytes: id char*
+    4 bytes: desc_len uint32_t
+    desc_len bytes: description char*
+    4 bytes: addr_len uint32_t
+    addr_len bytes: address char*
+    4 bytes: port_len uint32_t
+    port_len bytes: port char*
 **/
 
 
@@ -56,7 +65,7 @@ namespace UbiPAL
         //      [IN] buf_len: The length of the buffer. This ensures it's of appropriate length
         // return
         //      int: the length of the resulting bytes, or a negative error code
-        virtual int Encode(char* const buf, const uint32_t buf_len);
+        virtual int Encode(char* const buf, const uint32_t buf_len) const;
 
         // Decode
         // Takes a buffer buf of length buf_len and decodes the data to the fields in this message type.
@@ -71,7 +80,38 @@ namespace UbiPAL
         // Returns the number of bytes required to encode this message
         // return
         //      int: the number of bytes required to encode this message, or a negative error code
-        virtual int EncodedLength();
+        virtual int EncodedLength() const;
+
+        // EncodeString
+        // Given a string, encodes and saves it in to buf (of length buf_len) as 4 bytes length then the string itself
+        // args
+        //      [IN/OUT] buf: The buffer to which to save
+        //      [IN] buf_len: the length of the buffer (to avoid overflow)
+        //      [IN] str: The string we want to encode
+        // return
+        //      int: the number of bytes encoded and saved to buf, else a negative error code
+        static int EncodeString(char* const buf, const uint32_t buf_len, const std::string& str);
+
+        // EncodeBytes
+        // Give a buffer, raw bytes, and a length for both, this encodes as 4 bytes unsigned length then the bytes themselves
+        // args
+        //      [IN/OUT] buf: The buffer to which to save
+        //      [IN] buf_len: The length of the buffer
+        //      [IN] bytes: The bytes to encode
+        //      [IN] bytes_len: The number of bytes to encode
+        // return
+        //      int: the number of bytes encoded and saved to buf, else a negative error code
+        static int EncodeBytes(char* const buf, const uint32_t buf_len, const char* const bytes, const uint32_t bytes_len);
+
+        // DecodeString
+        // Given a buffer of raw bytes, a length for that buffer, and a string object, decodes from the above functions
+        // args
+        //      [IN] buf: The raw bytes
+        //      [IN] buf_len: The number of raw bytes
+        //      [IN/OUT] str: The string object to which to save
+        // return
+        //      int: the number of bytes decoded
+        static int DecodeString(const char* const buf, const uint32_t buf_len, std::string& str);
     };
 
     // Message
@@ -86,35 +126,33 @@ namespace UbiPAL
         Message(const char* const arg, const uint32_t arg_size);
         ~Message();
 
-        virtual int Encode(char* const buf, const uint32_t buf_len);
-        virtual int Decode(const char* const buf, const uint32_t buf_len);
-        virtual int EncodedLength();
+        virtual int Encode(char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const char* const buf, const uint32_t buf_len) override;
+        virtual int EncodedLength() const override;
     };
 
     struct NamespaceCertificate : BaseMessage
     {
-        std::string name;
+        std::string id;
+        std::string description;
         std::string address;
         std::string port;
-        RSA* public_key;
-        std::string signer;
-        char* signature;
 
         NamespaceCertificate();
 
-        //virtual int Encode(char* const buf, const uint32_t buf_len);
-        //virtual int Decode(const char* const buf, const uint32_t buf_len);
+        virtual int Encode(char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const char* const buf, const uint32_t buf_len) override;
+        virtual int EncodedLength() const override;
     };
 
     struct AccessControlList : BaseMessage
     {
-        uint32_t rules_length;
-        char* rules;
+        //std::vector<std::string> rules;
 
         AccessControlList();
 
-        //virtual int Encode(char* const buf, const uint32_t buf_len);
-        //virtual int Decode(const char* const buf, const uint32_t buf_len);
+        //virtual int Encode override (char* const buf, const uint32_t buf_len);
+        //virtual int Decode override (const char* const buf, const uint32_t buf_len);
     };
 }
 

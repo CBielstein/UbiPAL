@@ -13,8 +13,10 @@ namespace UbiPAL
     {
         private:
             // Unit tests
+            static int MessagesTestBaseMessageEncodeStringDecodeString();
             static int MessagesTestBaseMessageEncodeDecode();
             static int MessagesTestMessageEncodeDecode();
+            static int MessagesTestNamespaceCertificateEncodeDecode();
             static int MessagesTestMessageDefaultConstructor();
             static int MessagesTestMessageConstructor();
 

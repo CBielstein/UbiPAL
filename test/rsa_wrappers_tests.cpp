@@ -914,6 +914,244 @@ namespace UbiPAL
             return status;
     }
 
+    int RsaWrappersTests::RsaWrappersPublicKeyString()
+    {
+        int status = SUCCESS;
+        RSA* priv = nullptr;
+        RSA* pub = nullptr;
+        RSA* new_pub = nullptr;
+        std::string pub_str;
+
+        // generate a public key
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv, pub);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // put it out to string
+        status = RsaWrappers::PublicKeyToString(pub, pub_str);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // generate a public key from the string
+        status = RsaWrappers::StringToPublicKey(pub_str, new_pub);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // test if they're equal
+        status = RsaWrappers::KeysEqual(pub, new_pub);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else if (status == 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        exit:
+            RSA_free(priv);
+            RSA_free(pub);
+            RSA_free(new_pub);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersPrivateToPublicKeyString()
+    {
+        int status = SUCCESS;
+        RSA* priv = nullptr;
+        RSA* pub = nullptr;
+        RSA* new_pub = nullptr;
+        std::string pub_str;
+
+        // generate a key pair
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv, pub);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // put private out to public string
+        status = RsaWrappers::PublicKeyToString(priv, pub_str);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // generate a public key from the string
+        status = RsaWrappers::StringToPublicKey(pub_str, new_pub);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // test if both methods create equal keys
+        status = RsaWrappers::KeysEqual(pub, new_pub);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else if (status == 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+        }
+
+        exit:
+            RSA_free(priv);
+            RSA_free(pub);
+            RSA_free(new_pub);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeyStringVerify()
+    {
+        int status = SUCCESS;
+        unsigned char* sig = nullptr;
+        unsigned int sig_len = 0;
+        RSA* priv = nullptr;
+        RSA* pub = nullptr;
+        const char* msg = "Squawk! Hallelujah! Whoa-oa-oa-oa-oa!";
+        std::string pub_str;
+
+        // get key pair
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // put private out to public string
+        status = RsaWrappers::PublicKeyToString(priv, pub_str);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // generate a public key from the string
+        status = RsaWrappers::StringToPublicKey(pub_str, pub);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // create message signature
+        status = RsaWrappers::CreateSignedDigest(priv, (unsigned char*)msg, strlen(msg), sig, sig_len);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // Test verification
+        status = RsaWrappers::VerifySignedDigest(pub, (unsigned char*)msg, strlen(msg), sig, sig_len);
+        if (status != 1)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        status = SUCCESS;
+
+        exit:
+            RSA_free(priv);
+            RSA_free(pub);
+            free(sig);
+            return status;
+    }
+
+    int RsaWrappersTests::RsaWrappersKeyStringEncrypt()
+    {
+        int status = SUCCESS;
+        RSA* priv = nullptr;
+        RSA* pub = nullptr;
+        const char* msg = "Saturday night and we in the spot. Don't believe me? Just watch! Come on!";
+        unsigned char* result_msg = nullptr;
+        unsigned int bytes_Decrypted = 0;
+        unsigned char* result = nullptr;
+        unsigned int bytes_Encrypted = 0;
+        std::string pub_str;
+
+        // create keypair
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // put private out to public string
+        status = RsaWrappers::PublicKeyToString(priv, pub_str);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // generate a public key from the string
+        status = RsaWrappers::StringToPublicKey(pub_str, pub);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // Encrypt
+        status = RsaWrappers::Encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // Decrypt
+        status = RsaWrappers::Decrypt(priv, result, result_msg, &bytes_Decrypted);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        // compare
+        status = memcmp(msg, result_msg, bytes_Decrypted);
+        if (status != 0 || strlen(msg) != bytes_Decrypted)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+            goto exit;
+        }
+
+        exit:
+            RSA_free(priv);
+            RSA_free(pub);
+            free(result);
+            free(result_msg);
+            return status;
+    }
+
     void RsaWrappersTests::RunRsaWrappersTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(RsaWrappersGenerateKey, SUCCESS,
@@ -954,5 +1192,13 @@ namespace UbiPAL
                                  "RsaWrappersKeysEqualFalsePublic", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersKeysEqualFalsePublicPrivate, SUCCESS,
                                  "RsaWrappersKeysEqualFalsePublicPrivate", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersPublicKeyString, SUCCESS,
+                                 "RsaWrappersPublicKeyString", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersPrivateToPublicKeyString, SUCCESS,
+                                 "RsaWrappersPrivateToPublicKeyString", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeyStringVerify, SUCCESS,
+                                 "RsaWrappersKeyStringVerify", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersKeyStringEncrypt, SUCCESS,
+                                 "RsaWrappersKeyStringEncrypt", module_count, module_fails);
     }
 }

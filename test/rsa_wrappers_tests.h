@@ -41,6 +41,10 @@ namespace UbiPAL
             static int RsaWrappersKeysEqualTruePublic();
             static int RsaWrappersKeysEqualFalsePublic();
             static int RsaWrappersKeysEqualFalsePublicPrivate();
+            static int RsaWrappersPublicKeyString();
+            static int RsaWrappersPrivateToPublicKeyString();
+            static int RsaWrappersKeyStringVerify();
+            static int RsaWrappersKeyStringEncrypt();
 
             // End unit tests
         public:
