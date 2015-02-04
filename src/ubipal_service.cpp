@@ -316,10 +316,13 @@ namespace UbiPAL
         BaseMessage base_message;
         Message message;
         NamespaceCertificate name_cert;
+        AccessControlList acl;
         uint32_t size = 0;
-        std::unordered_map<std::string, UbipalName>::iterator trusted_itr;
-        std::unordered_map<std::string, UbipalName>::iterator untrusted_itr;
-        UbipalName temp_un;
+        std::unordered_map<std::string, NamespaceCertificate>::iterator trusted_itr;
+        std::unordered_map<std::string, NamespaceCertificate>::iterator untrusted_itr;
+        std::unordered_map<std::string, std::vector<AccessControlList>>::iterator acl_itr;
+        std::pair<std::unordered_map<std::string, std::vector<AccessControlList>>::iterator, bool> emplace_ret;
+        std::vector<AccessControlList> acl_vector;
 
         if (hc_args == nullptr)
         {
@@ -337,6 +340,10 @@ namespace UbiPAL
             RETURN_STATUS(NETWORKING_FAILURE);
         }
         size = returned_value;
+
+        // TODO crypto!
+        // check if raw bytes need to be decrypted
+        // check if signature matches? maybe lower down
 
         // interpret message
         status = base_message.Decode(buf, returned_value);
@@ -356,6 +363,8 @@ namespace UbiPAL
                     Log::Line(Log::WARN, "UbipalService::HandleConnection: Message::Decode failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
+
+                // TODO check against ACLs
 
                 // find function to call
                 found = us->callback_map.find(message.message);
@@ -391,19 +400,12 @@ namespace UbiPAL
                     if (trusted_itr != us->trusted_services.end())
                     {
                         // it is, so update it
-                        trusted_itr->second.id = name_cert.id;
-                        trusted_itr->second.description = name_cert.description;
-                        trusted_itr->second.address = name_cert.address;
-                        trusted_itr->second.port = name_cert.port;
+                        trusted_itr->second = name_cert;
                     }
                     else
                     {
                         // it isn't, so add it
-                        temp_un.id = name_cert.id;
-                        temp_un.description = name_cert.description;
-                        temp_un.address = name_cert.address;
-                        temp_un.port = name_cert.port;
-                        us->trusted_services.emplace(name_cert.id, temp_un);
+                        us->trusted_services.emplace(name_cert.id, name_cert);
                     }
                 }
                 else
@@ -413,24 +415,56 @@ namespace UbiPAL
                     if (untrusted_itr != us->trusted_services.end())
                     {
                         // it is, so update it
-                        untrusted_itr->second.id = name_cert.id;
-                        untrusted_itr->second.description = name_cert.description;
-                        untrusted_itr->second.address = name_cert.address;
-                        untrusted_itr->second.port = name_cert.port;
+                        untrusted_itr->second = name_cert;
                     }
                     else
                     {
                         // it isn't, so add it
-                        temp_un.id = name_cert.id;
-                        temp_un.description = name_cert.description;
-                        temp_un.address = name_cert.address;
-                        temp_un.port = name_cert.port;
-                        us->untrusted_services.emplace(name_cert.id, temp_un);
+                        us->untrusted_services.emplace(name_cert.id, name_cert);
                     }
                 }
 
                 break;
-            case MessageType::ACCESS_CONTROL_LIST: RETURN_STATUS(GENERAL_FAILURE);
+            case MessageType::ACCESS_CONTROL_LIST:
+                // decode as namespace certificate
+                status = acl.Decode(buf, size);
+                if (status < 0)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: AccessControlList::Decode failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                // find all the acls from this service
+                acl_itr = us->external_acls.find(acl.id);
+                if (acl_itr == us->external_acls.end())
+                {
+                    // wasnt found, so add it
+                    acl_vector.push_back(acl);
+                    emplace_ret = us->external_acls.emplace(acl.id, acl_vector);
+                    if (emplace_ret.second == false)
+                    {
+                        Log::Line(Log::EMERG, "UbipalService::HandleConnection: external_acls.emplace failed");
+                        RETURN_STATUS(GENERAL_FAILURE);
+                    }
+                }
+                else
+                {
+                    // was found, so check through the associated vector to see if this is an update (based on ID)
+                    for (unsigned int i = 0; i < acl_itr->second.size(); ++i)
+                    {
+                        if (acl_itr->second[i].msg_id.compare(acl.msg_id))
+                        {
+                            // we've already heard this one, so we're done.
+                            RETURN_STATUS(SUCCESS);
+                        }
+                    }
+
+                    // if we get here, we haven't heard it, so we're adding it
+                    acl_itr->second.push_back(acl);
+                }
+
+                fprintf(stderr, "ACLs received: %lu\n", us->external_acls.size());
+                break;
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -544,7 +578,7 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const char* const arg, const uint32_t arg_len)
+    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message, const char* const arg, const uint32_t arg_len)
     {
         FUNCTION_START;
         Message* msg = nullptr;
@@ -668,7 +702,7 @@ namespace UbiPAL
         return SUCCESS;
     }
 
-    int UbipalService::SendName(const uint32_t flags, const UbipalName* const send_to)
+    int UbipalService::SendName(const uint32_t flags, const NamespaceCertificate* const send_to)
     {
         FUNCTION_START;
         NamespaceCertificate* msg = nullptr;
@@ -718,14 +752,14 @@ namespace UbiPAL
 
     int UbipalService::SendName(const uint32_t flags, const std::string& address, const std::string& port)
     {
-        UbipalName un;
-        un.address = address;
-        un.port = port;
+        NamespaceCertificate  nc;
+        nc.address = address;
+        nc.port = port;
 
-        return SendName(flags, &un);
+        return SendName(flags, &nc);
     }
 
-    int UbipalService::GetNames(const uint32_t flags, std::vector<UbipalName>& names)
+    int UbipalService::GetNames(const uint32_t flags, std::vector<NamespaceCertificate>& names)
     {
         int status = SUCCESS;
 
@@ -742,7 +776,7 @@ namespace UbiPAL
         // add untrusted, if flagged
         if ((flags & GetNamesFlags::INCLUDE_UNTRUSTED) != 0)
         {
-            std::unordered_map<std::string, UbipalName>::iterator untrusted_itr;
+            std::unordered_map<std::string, NamespaceCertificate>::iterator untrusted_itr;
             for (untrusted_itr = untrusted_services.begin(); untrusted_itr != untrusted_services.end(); ++untrusted_itr)
             {
                 names.push_back(untrusted_itr->second);
@@ -752,7 +786,7 @@ namespace UbiPAL
         // add trusted, if flagged
         if ((flags & GetNamesFlags::INCLUDE_TRUSTED) != 0)
         {
-            std::unordered_map<std::string, UbipalName>::iterator trusted_itr;
+            std::unordered_map<std::string, NamespaceCertificate>::iterator trusted_itr;
             for (trusted_itr = trusted_services.begin(); trusted_itr != trusted_services.end(); ++trusted_itr)
             {
                 names.push_back(trusted_itr->second);

@@ -3,6 +3,7 @@
 // Helper functions for UbiPAL test framework
 
 #include "test_helpers.h"
+#include "../error.h"
 #include <cstdio>
 
 int TestHelpers::RunTestFunc(const TestFunction func, const int nominal, const char* name,
@@ -13,7 +14,7 @@ int TestHelpers::RunTestFunc(const TestFunction func, const int nominal, const c
     status = func();
     if (status != nominal)
     {
-        fprintf(stderr, "    \033[31m%s failed with status %d\n\033[0m", name, status);
+        fprintf(stderr, "    \033[31m%s failed with status %d: %s\n\033[0m", name, status, UbiPAL::GetErrorDescription(status));
         ++fail_count;
     }
     else

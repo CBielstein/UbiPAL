@@ -13,9 +13,33 @@
 // standard
 #include <arpa/inet.h>
 #include <string.h>
+#include <uuid/uuid.h>
 
 namespace UbiPAL
 {
+    BaseMessage::BaseMessage()
+    {
+        // create uuid
+        uuid_t uuid_uu;
+        uuid_generate(uuid_uu);
+
+        // translate to char*
+        // as per the man page, UUID in string form takes 36 bytes + null
+        char* uuid_char = (char*) malloc(37);
+        if (uuid_char == nullptr)
+        {
+            Log::Line(Log::EMERG, "AccessControlList::AccessControlList: malloc failed");
+            return;
+        }
+        uuid_unparse_lower(uuid_uu, uuid_char);
+
+        // translate to string
+        msg_id = std::string(uuid_char);
+
+        // clean up
+        free(uuid_char);
+    }
+
     int BaseMessage::EncodeString(char* const buf, const uint32_t buf_len, const std::string& str)
     {
         return BaseMessage::EncodeBytes(buf, buf_len, str.c_str(), str.size());

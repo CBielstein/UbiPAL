@@ -72,21 +72,34 @@ namespace UbiPAL
     int MessagesTests::MessagesTestBaseMessageEncodeDecode()
     {
         int status = SUCCESS;
+        int length = 0;
         BaseMessage bm;
         BaseMessage bm2;
-        char msg[MAX_MESSAGE_SIZE];
+        char* msg = nullptr;
 
         bm.type = MESSAGE;
         bm.to = std::string("robert");
         bm.from = std::string("cameron");
 
-        status = bm.Encode(msg, MAX_MESSAGE_SIZE);
+        length = bm.EncodedLength();
+        if (length < 0)
+        {
+            return length;
+        }
+
+        msg = (char*) malloc(length);
+        if (msg == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+
+        status = bm.Encode(msg, length);
         if (status < 0)
         {
             return status;
         }
 
-        status = bm2.Decode(msg, MAX_MESSAGE_SIZE);
+        status = bm2.Decode(msg, length);
         if (status < 0)
         {
             return status;
@@ -105,22 +118,35 @@ namespace UbiPAL
     int MessagesTests::MessagesTestMessageEncodeDecode()
     {
         int status = SUCCESS;
+        int length = 0;
         const char* m_arg = "please";
         Message m(m_arg, strlen(m_arg));
         Message m2;
-        char msg[MAX_MESSAGE_SIZE];
+        char* msg = nullptr;
 
         m.to = std::string("robert");
         m.from = std::string("cameron");
         m.message = std::string("door_open");
 
-        status = m.Encode(msg, MAX_MESSAGE_SIZE);
+        length = m.EncodedLength();
+        if (length < 0)
+        {
+            return length;
+        }
+
+        msg = (char*) malloc(length);
+        if (msg == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+
+        status = m.Encode(msg, length);
         if (status < 0)
         {
             return status;
         }
 
-        status = m2.Decode(msg, MAX_MESSAGE_SIZE);
+        status = m2.Decode(msg, length);
         if (status < 0)
         {
             return status;
@@ -266,6 +292,7 @@ namespace UbiPAL
     int MessagesTests::MessagesTestAccessControlListEncodeDecode()
     {
         int status = SUCCESS;
+        int length = 0;
         char* buf = nullptr;
         AccessControlList acl1;
         AccessControlList acl2;
@@ -277,27 +304,28 @@ namespace UbiPAL
         acl1.rules.push_back("so is this");
         acl1.rules.push_back("my creativity is lagging");
 
-        status = acl1.EncodedLength();
-        if (status < 0)
+        length = acl1.EncodedLength();
+        if (length < 0)
         {
+            status = length;
             goto exit;
         }
 
-        buf = (char*) malloc(status);
+        buf = (char*) malloc(length);
         if (buf == nullptr)
         {
             status = MALLOC_FAILURE;
             goto exit;
         }
 
-        status = acl1.Encode(buf, status);
+        status = acl1.Encode(buf, length);
         if (status < 0)
         {
             fprintf(stderr, "MessagesTests::MessagesTestAccessControlListDecode: acl1.Encode failed %s\n", GetErrorDescription(status));
             goto exit;
         }
 
-        status = acl2.Decode(buf, status);
+        status = acl2.Decode(buf, length);
         if (status < 0)
         {
             fprintf(stderr, "MessagesTests::MessagesTestAccessControlListDecode: acl2.Decode %s\n", GetErrorDescription(status));
@@ -329,8 +357,37 @@ namespace UbiPAL
             return status;
     }
 
+    int MessagesTests::MessagesTestAccessControlListDefaultConstructor()
+    {
+        AccessControlList acl;
+        if (acl.type == ACCESS_CONTROL_LIST)
+        {
+            return SUCCESS;
+        }
+        else
+        {
+            return GENERAL_FAILURE;
+        }
+    }
+
+    int MessagesTests::MessagesTestBaseMessageDefaultConstructor()
+    {
+        BaseMessage bm;
+
+        if (bm.msg_id.empty() || bm.msg_id.size() != 36)
+        {
+            return GENERAL_FAILURE;
+        }
+        else
+        {
+            return SUCCESS;
+        }
+    }
+
     void MessagesTests::RunMessagesTests(unsigned int& module_count, unsigned int& module_fails)
     {
+        TestHelpers::RunTestFunc(MessagesTestBaseMessageDefaultConstructor, SUCCESS,
+                                 "MessagesTestBaseMessageDefaultConstructor", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestBaseMessageEncodeStringDecodeString, SUCCESS,
                                  "MessagesTestBaseMessageEncodeStringDecodeString", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestBaseMessageEncodeUint32_tDecodeUint32_t, SUCCESS,
@@ -347,5 +404,7 @@ namespace UbiPAL
                                  "MessagesTestMessageConstructor", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestAccessControlListEncodeDecode, SUCCESS,
                                  "MessagesTestAccessControlListEncodeDecode", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestAccessControlListDefaultConstructor, SUCCESS,
+                                 "MessagesTestAccessControlListDefaultConstructor", module_count, module_fails);
     }
 }

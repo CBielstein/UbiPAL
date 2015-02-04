@@ -65,6 +65,12 @@ namespace UbiPAL
         std::string to;
         std::string from;
 
+        // used to identify ACLs and namespace certificates for revocation
+        std::string msg_id;
+
+        // default constructor generates uuid
+        BaseMessage();
+
         // Encode
         // Takes a buffer buf of length buf_len and outputs an array of bytes representing this message type.
         // If the buffer is too short, additional data is truncated
@@ -175,6 +181,7 @@ namespace UbiPAL
 
     struct AccessControlList : BaseMessage
     {
+        std::string id;
         std::vector<std::string> rules;
 
         AccessControlList();

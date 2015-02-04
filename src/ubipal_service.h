@@ -6,13 +6,10 @@
 #define UBIPAL_SRC_UBIPAL_SERVICE_H
 
 // Ubipal
-#include "ubipal_name.h"
-#include "ubipal_acl.h"
 #include "messages.h"
 
 // Standard
 #include <vector>
-#include <map>
 #include <unordered_map>
 #include <string>
 #include <mutex>
@@ -30,7 +27,6 @@ namespace UbiPAL
 
     // UbipalService
     // Representation of a service in the UbiPAL namespace
-    // Similar to UbipalName, but capable of sending and receiving messages
     class UbipalService
     {
         public:
@@ -154,10 +150,10 @@ namespace UbiPAL
             //          [IN] arg_len: The length of arg
             // return
             //          int: SUCCESS on success
-            int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message, const char* const arg, const uint32_t arg_len);
+            int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message, const char* const arg, const uint32_t arg_len);
 
             // TODO XXX ???
-            // int SendMessage(const uint32_t flags, const UbipalName& to, const std::string& message,
+            // int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
                             // const std::string& args, const UbipalCallback& reply_callback);
 
             // SendName
@@ -168,7 +164,7 @@ namespace UbiPAL
             //          [IN] send_to: The address to which to send, if null, this broadcasts the name
             // return
             //          int: SUCCESS on success
-            int SendName(const uint32_t flags, const UbipalName* const send_to);
+            int SendName(const uint32_t flags, const NamespaceCertificate* const send_to);
 
             // SendName
             // Sends an updated namespace certificate to the given address and port. This is unencrypted.
@@ -187,21 +183,21 @@ namespace UbiPAL
 
             // XXX
             // Returns a mutable pointer to the acl for modification (rule addition or removal)
-            int GetAcl(const std::string& name, UbipalAcl*& acl);
+            int GetAcl(const std::string& name, AccessControlList& acl);
 
             // XXX
             // if send_to is null, broadcast, if it's non-null, send it to a specific location
-            int SendAcl(const UbipalAcl* const acl, const UbipalName* const send_to) const;
-            int SendAcl(const UbipalAcl* const acl, const std::vector<UbipalName*>& send_to) const;
+            int SendAcl(const AccessControlList* const acl, const NamespaceCertificate* const send_to) const;
+            int SendAcl(const AccessControlList* const acl, const std::vector<NamespaceCertificate>& send_to) const;
 
             // XXX
             // deletes Acl and sends revokation certificate to the given names
-            int RevokeAcl(const UbipalAcl* const acl, const UbipalName* const send_to);
-            int RevokeAcl(const UbipalAcl* const acl, const std::vector<UbipalName*>& send_to);
+            int RevokeAcl(const AccessControlList* const acl, const NamespaceCertificate* const send_to);
+            int RevokeAcl(const AccessControlList* const acl, const std::vector<NamespaceCertificate*>& send_to);
 
             // XXX
             // looks up a name advertising the desired message
-            int FindNameForMessage(const std::string& message, UbipalName*& name);
+            int FindNameForMessage(const std::string& message, NamespaceCertificate*& name);
 
             enum GetNamesFlags
             {
@@ -210,7 +206,7 @@ namespace UbiPAL
             };
 
             // GetNames
-            // Constructs a vector of UbipalNames (either trusted, untrusted, or both) to iterate through
+            // Constructs a vector of NamespaceCertificates (either trusted, untrusted, or both) to iterate through
             // This vector is not by reference, so changes here will not be reflected in the private data structures below
             // args
             //          [IN] flags: flags, including
@@ -219,7 +215,7 @@ namespace UbiPAL
             //          [IN/OUT] names: A vector of resultant names
             // return
             //          int: SUCCESS on success, negative error otherwise
-            int GetNames(const uint32_t flags, std::vector<UbipalName>& names);
+            int GetNames(const uint32_t flags, std::vector<NamespaceCertificate>& names);
 
         private:
             // Recv
@@ -281,17 +277,17 @@ namespace UbiPAL
             std::string description;
 
             // stores information parsed from received certificates from services we trust
-            std::unordered_map<std::string, UbipalName> trusted_services;
+            std::unordered_map<std::string, NamespaceCertificate> trusted_services;
 
             // stores information parsed from received certificates from other services
-            std::unordered_map<std::string, UbipalName> untrusted_services;
+            std::unordered_map<std::string, NamespaceCertificate> untrusted_services;
 
             // some data structure to hold ACLs
             // maps the public key string representation to any acls it has sent
-            std::map<std::string, std::vector<UbipalAcl>> other_acls;
+            std::unordered_map<std::string, std::vector<AccessControlList>> external_acls;
 
             // some data structure to hold our rules array of strings or something
-            std::vector<UbipalAcl> local_acls;
+            std::vector<AccessControlList> local_acls;
 
             // the port on which we operate
             std::string port;

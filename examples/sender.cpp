@@ -40,7 +40,7 @@ int main(int argc, char** argv)
     }
 
     // for each line, send to any service we have heard about
-    std::vector<UbiPAL::UbipalName> services;
+    std::vector<UbiPAL::NamespaceCertificate> services;
     while(std::getline(std::cin, argument))
     {
         //std::cout << "Sending: " << argument << std::endl;

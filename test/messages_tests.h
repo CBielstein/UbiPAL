@@ -16,6 +16,7 @@ namespace UbiPAL
     {
         private:
             // Unit tests
+            static int MessagesTestBaseMessageDefaultConstructor();
             static int MessagesTestBaseMessageEncodeStringDecodeString();
             static int MessagesTestBaseMessageEncodeUint32_tDecodeUint32_t();
             static int MessagesTestBaseMessageEncodeDecode();
@@ -24,6 +25,7 @@ namespace UbiPAL
             static int MessagesTestMessageDefaultConstructor();
             static int MessagesTestMessageConstructor();
             static int MessagesTestAccessControlListEncodeDecode();
+            static int MessagesTestAccessControlListDefaultConstructor();
 
             // End Unit tests
 
