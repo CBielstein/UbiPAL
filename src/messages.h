@@ -13,6 +13,7 @@
 // standard
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 /** Network encoding takes the following formats. This is to be used as a reference for encode and decode functions. They should do the rest.
 All types should use the appropriate translations to and from network types for endian correctness
@@ -30,7 +31,7 @@ Message: BaseMessage, plus the following
     4 bytes: arg_len uint32_t
     arg_len bytes: arg char*
 
-NamespaceCerfiticate: BaseMessage, plus the follow
+NamespaceCerfiticate: BaseMessage, plus the following
     4 bytes: id_len uint32_t
     id_len bytes: id char*
     4 bytes: desc_len uint32_t
@@ -39,6 +40,13 @@ NamespaceCerfiticate: BaseMessage, plus the follow
     addr_len bytes: address char*
     4 bytes: port_len uint32_t
     port_len bytes: port char*
+
+Note: ACLs will store rule without leading "<name> says" as it is implied by the signer of the ACL
+AccessControlList: BaseMessage, plus the following
+    4 bytes: num_rules
+    num_rules times the following
+        4 bytes: rule_len
+        rule_len bytes: rule char*
 **/
 
 
@@ -103,6 +111,16 @@ namespace UbiPAL
         //      int: the number of bytes encoded and saved to buf, else a negative error code
         static int EncodeBytes(char* const buf, const uint32_t buf_len, const char* const bytes, const uint32_t bytes_len);
 
+        // EncodeUint32_t
+        // Encodes a uint32_t number to the buffer
+        // args
+        //      [IN/OUT] buf: The buffer into which to encode
+        //      [IN] buf_len: The length of the buffer in buf
+        //      [IN] number: The number to encode in buf
+        // return
+        //      int: the number of bytes encoded and saved to buf, else a negative error code
+        static int EncodeUint32_t(char* const buf, const uint32_t buf_len, const uint32_t number);
+
         // DecodeString
         // Given a buffer of raw bytes, a length for that buffer, and a string object, decodes from the above functions
         // args
@@ -110,8 +128,18 @@ namespace UbiPAL
         //      [IN] buf_len: The number of raw bytes
         //      [IN/OUT] str: The string object to which to save
         // return
-        //      int: the number of bytes decoded
+        //      int: the number of bytes decoded, else a negative error code
         static int DecodeString(const char* const buf, const uint32_t buf_len, std::string& str);
+
+        // DecodeUint32_t
+        // Give a buffer of raw bytes, a length for that buffer, and a uint32_t, decodes from the above functions
+        // args
+        //      [IN] buf: The raw bytes
+        //      [IN] buf_len: THe number of raw bytes
+        //      [IN/OUT]: str: The string object to which to save
+        // return
+        //      int: The number of bytes decoded, else a negative error code
+        static int DecodeUint32_t(const char* const buf, const uint32_t buf_len, uint32_t& number);
     };
 
     // Message
@@ -147,12 +175,13 @@ namespace UbiPAL
 
     struct AccessControlList : BaseMessage
     {
-        //std::vector<std::string> rules;
+        std::vector<std::string> rules;
 
         AccessControlList();
 
-        //virtual int Encode override (char* const buf, const uint32_t buf_len);
-        //virtual int Decode override (const char* const buf, const uint32_t buf_len);
+        virtual int Encode(char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const char* const buf, const uint32_t buf_len) override;
+        virtual int EncodedLength() const override;
     };
 }
 

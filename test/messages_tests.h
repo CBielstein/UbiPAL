@@ -5,6 +5,9 @@
 #ifndef UBIPAL_TEST_MESSAGES_TESTS_H
 #define UBIPAL_TEST_MESSAGES_TESTS_H
 
+// Used for a static buffer length in the MessagesTestBaseMessageEncodeUint32_tDecodeUint32_t function
+#define UINT32_T_TEST_BUF_LEN 9
+
 namespace UbiPAL
 {
     // ErrorTests
@@ -14,11 +17,13 @@ namespace UbiPAL
         private:
             // Unit tests
             static int MessagesTestBaseMessageEncodeStringDecodeString();
+            static int MessagesTestBaseMessageEncodeUint32_tDecodeUint32_t();
             static int MessagesTestBaseMessageEncodeDecode();
             static int MessagesTestMessageEncodeDecode();
             static int MessagesTestNamespaceCertificateEncodeDecode();
             static int MessagesTestMessageDefaultConstructor();
             static int MessagesTestMessageConstructor();
+            static int MessagesTestAccessControlListEncodeDecode();
 
             // End Unit tests
 
