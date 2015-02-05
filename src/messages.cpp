@@ -270,6 +270,18 @@ namespace UbiPAL
             offset += status;
         }
 
+        // decode msg_id
+        status = DecodeString(buf + offset, buf_len - offset, msg_id);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
         return offset;
     }
 
@@ -326,12 +338,24 @@ namespace UbiPAL
             offset += status;
         }
 
+        // encode msg_id
+        status = EncodeString(buf + offset, buf_len - offset, msg_id);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "BaseMessage::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
         return offset;
     }
 
     int BaseMessage::EncodedLength() const
     {
-        return 1 + 4 + to.size() + 4 + from.size();
+        return 1 + 4 + to.size() + 4 + from.size() + 4 + msg_id.size();
     }
 
     int Message::Encode(char* const buf, const uint32_t buf_len) const

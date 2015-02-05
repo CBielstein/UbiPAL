@@ -31,6 +31,8 @@ Message: BaseMessage, plus the following
     msg_len bytes: message char*
     4 bytes: arg_len uint32_t
     arg_len bytes: arg char*
+    4 bytes: msg_id_len uint32_t
+    msg_id_len bytes: msg_id uuid as char*
 
 NamespaceCerfiticate: BaseMessage, plus the following
     4 bytes: id_len uint32_t
