@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <string.h>
 
 /** Network encoding takes the following formats. This is to be used as a reference for encode and decode functions. They should do the rest.
 All types should use the appropriate translations to and from network types for endian correctness
@@ -52,6 +53,7 @@ AccessControlList: BaseMessage, plus the following
 
 namespace UbiPAL
 {
+
     enum MessageType
     {
         MESSAGE = 1,
@@ -190,6 +192,51 @@ namespace UbiPAL
         virtual int Decode(const char* const buf, const uint32_t buf_len) override;
         virtual int EncodedLength() const override;
     };
+
+    // Define comparison operators
+    inline bool operator==(const BaseMessage& lhs, const BaseMessage& rhs)
+    {
+        return ((lhs.type == rhs.type) && (lhs.to.compare(rhs.to) == 0) && (lhs.from.compare(rhs.from) == 0) &&
+                (lhs.msg_id.compare(rhs.msg_id) == 0));
+    }
+    inline bool operator!=(const BaseMessage& lhs, const BaseMessage& rhs) { return !operator==(lhs, rhs); }
+
+    inline bool operator==(const NamespaceCertificate& lhs, const NamespaceCertificate& rhs)
+    {
+        return ((lhs.type == rhs.type) && (lhs.to.compare(rhs.to) == 0) && (lhs.from.compare(rhs.from) == 0) &&
+                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.id.compare(rhs.id) == 0) && (lhs.description.compare(rhs.description) == 0)&&
+                (lhs.address.compare(rhs.address) == 0) && (lhs.port.compare(rhs.port) == 0));
+    }
+    inline bool operator!=(const NamespaceCertificate& lhs, const NamespaceCertificate& rhs) { return !operator==(lhs, rhs); }
+
+    inline bool operator==(const Message& lhs, const Message& rhs)
+    {
+        return ((lhs.type == rhs.type) && (lhs.to.compare(rhs.to) == 0) && (lhs.from.compare(rhs.from) == 0) &&
+                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.message.compare(rhs.message) == 0) && (lhs.arg_len == rhs.arg_len) &&
+                (memcmp(lhs.argument, rhs.argument, lhs.arg_len) == 0));
+    }
+    inline bool operator!=(const Message& lhs, const Message& rhs) { return !operator==(lhs, rhs); }
+
+    inline bool operator==(const AccessControlList& lhs, const AccessControlList& rhs)
+    {
+        if (!((lhs.type == rhs.type) && (lhs.to.compare(rhs.to) == 0) && (lhs.from.compare(rhs.from) == 0) &&
+                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.id.compare(rhs.id) == 0) && (lhs.rules.size() == rhs.rules.size())))
+        {
+            return false;
+        }
+
+        for (unsigned int i = 0; i < lhs.rules.size(); ++i)
+        {
+            if (lhs.rules[i].compare(rhs.rules[i]) != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    inline bool operator!=(const AccessControlList& lhs, const AccessControlList& rhs) { return !operator==(lhs, rhs); }
+
 }
 
 #endif

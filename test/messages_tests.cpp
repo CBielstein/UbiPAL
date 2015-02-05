@@ -105,10 +105,8 @@ namespace UbiPAL
             return status;
         }
 
-        if (bm.type != bm2.type || bm.to.compare(bm2.to) != 0 || bm.from.compare(bm2.from) != 0)
+        if (bm != bm2)
         {
-            fprintf(stderr, "Failed comparison. types: %d == %d, to: %s == %s, from: %s == %s\n",
-                    bm.type, bm2.type, bm.to.c_str(), bm2.to.c_str(), bm.from.c_str(), bm.from.c_str());
             return GENERAL_FAILURE;
         }
 
@@ -152,11 +150,8 @@ namespace UbiPAL
             return status;
         }
 
-        if (m.type != m2.type || m.type != MESSAGE || m2.type != MESSAGE || m.to.compare(m2.to) != 0 || m.from.compare(m2.from) != 0 ||
-            m.message.compare(m2.message) != 0 || m.arg_len != m2.arg_len || memcmp(m.argument, m2.argument, m.arg_len) != 0)
+        if (m != m2)
         {
-            fprintf(stderr, "Failed comparison. types: %d == %d, to: %s == %s, from: %s == %s, message: %s == %s, arg_len: %u == %u, argument: %s == %s\n",
-                    m.type, m2.type, m.to.c_str(), m2.to.c_str(), m.from.c_str(), m.from.c_str(), m.message.c_str(), m2.message.c_str(), m.arg_len, m2.arg_len, m.argument, m2.argument);
             return GENERAL_FAILURE;
         }
 
@@ -238,13 +233,7 @@ namespace UbiPAL
             status = SUCCESS;
         }
 
-        if (nc.id.compare(nc_result.id) != 0 ||
-            nc.description.compare(nc_result.description) != 0 ||
-            nc.address.compare(nc_result.address) != 0 ||
-            nc.port.compare(nc_result.port) != 0 ||
-            nc.type != nc_result.type ||
-            nc.to.compare(nc_result.to) != 0 ||
-            nc.from.compare(nc_result.from) != 0)
+        if (nc != nc_result)
         {
             status = GENERAL_FAILURE;
             goto exit;
@@ -333,8 +322,7 @@ namespace UbiPAL
         }
 
 
-        if (acl1.type != ACCESS_CONTROL_LIST || acl1.type != acl2.type || acl1.from.compare(acl2.from) != 0 ||
-            acl1.to.compare(acl2.to) != 0 || acl1.rules.size() != acl2.rules.size())
+        if (acl1 != acl2)
         {
             status = GENERAL_FAILURE;
             goto exit;
