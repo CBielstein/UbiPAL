@@ -163,7 +163,7 @@ namespace UbiPAL
         int status = SUCCESS;
         Message m;
 
-        if (m.type != MESSAGE)
+        if (m.type != MESSAGE || m.msg_id.empty())
         {
             return GENERAL_FAILURE;
         }
@@ -177,12 +177,28 @@ namespace UbiPAL
         const char* test = "I gotta say it was a good day.";
         Message m(test, strlen(test));
 
-        if (m.type != MESSAGE || m.arg_len != strlen(test) || memcmp(test, m.argument, m.arg_len) != 0)
+        if (m.type != MESSAGE || m.arg_len != strlen(test) || memcmp(test, m.argument, m.arg_len) != 0 || m.msg_id.empty())
         {
             return GENERAL_FAILURE;
         }
 
         return status;
+    }
+
+    int MessagesTests::MessagesTestMessageCopyConstructor()
+    {
+        const char* msg = "It's all good 'til somebody catches a feeling, and I'm feeling again.";
+
+        Message m(msg, strlen(msg));
+        m.message = std::string("Good song");
+
+        Message m2 = m;
+        if (m.argument == m2.argument)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return (m == m2) ? SUCCESS : GENERAL_FAILURE;
     }
 
     int MessagesTests::MessagesTestNamespaceCertificateEncodeDecode()
@@ -348,7 +364,7 @@ namespace UbiPAL
     int MessagesTests::MessagesTestAccessControlListDefaultConstructor()
     {
         AccessControlList acl;
-        if (acl.type == ACCESS_CONTROL_LIST)
+        if (acl.type == ACCESS_CONTROL_LIST && !acl.msg_id.empty())
         {
             return SUCCESS;
         }
@@ -372,6 +388,122 @@ namespace UbiPAL
         }
     }
 
+    int MessagesTests::MessagesTestBaseMessageEqualityTestPass()
+    {
+        BaseMessage bm1;
+        bm1.type = 1;
+        bm1.to = std::string("lauren");
+        bm1.from = std::string("meredith");
+
+        BaseMessage bm2 = bm1;
+
+        return (bm1 == bm2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestBaseMessageEqualityTestFail()
+    {
+        BaseMessage bm1;
+        bm1.type = 1;
+        bm1.to = std::string("lauren");
+        bm1.from = std::string("meredith");
+
+        BaseMessage bm2 = bm1;
+
+        bm2.from = std::string("jonathan");
+
+        return (bm1 != bm2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestMessageEqualityTestPass()
+    {
+        const char* arg = "Let's get it started in here!";
+        Message m(arg, strlen(arg));
+        m.message = std::string("Let's get it started in ha");
+
+        Message m2 = m;
+
+        return (m == m2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestMessageEqualityTestFail()
+    {
+        const char* arg = "Let's get it started in here!";
+        Message m(arg, strlen(arg));
+        m.message = std::string("Let's get it started in ha");
+
+        Message m2 = m;
+
+        m.from = std::string("fail!!");
+
+        return (m != m2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestNamespaceCertificateEqualityTestPass()
+    {
+        NamespaceCertificate nc;
+
+        nc.id = std::string("NASA");
+        nc.description = std::string("She blinded me with science.");
+        nc.address = std::string("Houston, Texas");
+        nc.port = std::string("Cape Canaveral, Florida");
+
+        NamespaceCertificate nc2 = nc;
+
+        return (nc == nc2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestNamespaceCertificateEqualityTestFail()
+    {
+         NamespaceCertificate nc;
+
+        nc.id = std::string("NASA");
+        nc.description = std::string("She blinded me with science.");
+        nc.address = std::string("Houston, Texas");
+        nc.port = std::string("Cape Canaveral, Florida");
+
+        NamespaceCertificate nc2 = nc;
+
+        nc2.port = std::string("We have a problem.");
+
+        return (nc != nc2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestAccessControlListEqualityTestPass()
+    {
+        std::vector<std::string> rules_vector;
+        rules_vector.push_back(std::string("This is the end."));
+        rules_vector.push_back(std::string("Close your eyes and count to ten."));
+
+        AccessControlList acl1;
+        acl1.rules = rules_vector;
+        acl1.id = std::string("Skyfall");
+
+        AccessControlList acl2 = acl1;
+
+        return (acl1 == acl2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
+    int MessagesTests::MessagesTestAccessControlListEqualityTestFail()
+    {
+        std::vector<std::string> rules_vector;
+        std::vector<std::string> rules_vector2;
+        rules_vector.push_back(std::string("This is the end."));
+        rules_vector.push_back(std::string("Close your eyes and count to ten."));
+
+        rules_vector2.push_back(std::string("Close your eyes and count to ten."));
+        rules_vector2.push_back(std::string("This is the end."));
+
+        AccessControlList acl1;
+        acl1.rules = rules_vector;
+        acl1.id = std::string("Skyfall");
+
+        AccessControlList acl2 = acl1;
+
+        acl2.rules = rules_vector2;
+
+        return (acl1 != acl2) ? SUCCESS : GENERAL_FAILURE;
+    }
+
     void MessagesTests::RunMessagesTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(MessagesTestBaseMessageDefaultConstructor, SUCCESS,
@@ -390,9 +522,27 @@ namespace UbiPAL
                                  "MessagesTestMessageDefaultConstructor", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestMessageConstructor, SUCCESS,
                                  "MessagesTestMessageConstructor", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestMessageCopyConstructor, SUCCESS,
+                                 "MessagesTestMessageCopyConstructor", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestAccessControlListEncodeDecode, SUCCESS,
                                  "MessagesTestAccessControlListEncodeDecode", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestAccessControlListDefaultConstructor, SUCCESS,
                                  "MessagesTestAccessControlListDefaultConstructor", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestBaseMessageEqualityTestPass, SUCCESS,
+                                 "MessagesTestBaseMessageEqualityTestPass", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestBaseMessageEqualityTestFail, SUCCESS,
+                                 "MessagesTestBaseMessageEqualityTestFail", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestMessageEqualityTestPass, SUCCESS,
+                                 "MessagesTestMessageEqualityTestPass", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestMessageEqualityTestFail, SUCCESS,
+                                 "MessagesTestMessageEqualityTestFail", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestNamespaceCertificateEqualityTestPass, SUCCESS,
+                                 "MessagesTestNamespaceCertificateEqualityTestPass", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestNamespaceCertificateEqualityTestFail, SUCCESS,
+                                 "MessagesTestNamespaceCertificateEqualityTestFail", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestAccessControlListEqualityTestPass, SUCCESS,
+                                 "MessagesTestAccessControlListEqualityTestPass", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestAccessControlListEqualityTestFail, SUCCESS,
+                                 "MessagesTestAccessControlListEqualityTestFail", module_count, module_fails);
     }
 }

@@ -468,6 +468,7 @@ namespace UbiPAL
     }
 
     Message::Message()
+        : BaseMessage()
     {
         type = MESSAGE;
         argument = nullptr;
@@ -494,17 +495,38 @@ namespace UbiPAL
         }
     }
 
+    Message::Message(const Message& other)
+    {
+        type = other.type;
+        to = other.to;
+        from = other.from;
+        msg_id = other.msg_id;
+        message = other.message;
+        arg_len = other.arg_len;
+
+        argument = (char*) malloc(arg_len);
+        if (argument == nullptr)
+        {
+            Log::Line(Log::EMERG, "Message::Message(const Message&): malloc failed!");
+            return;
+        }
+
+        memcpy(argument, other.argument, arg_len);
+    }
+
     Message::~Message()
     {
         free(argument);
     }
 
     NamespaceCertificate::NamespaceCertificate()
+        : BaseMessage()
     {
        type = NAMESPACE_CERTIFICATE;
     }
 
     AccessControlList::AccessControlList()
+        : BaseMessage()
     {
         type = ACCESS_CONTROL_LIST;
     }

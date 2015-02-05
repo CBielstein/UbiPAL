@@ -24,8 +24,17 @@ namespace UbiPAL
             static int MessagesTestNamespaceCertificateEncodeDecode();
             static int MessagesTestMessageDefaultConstructor();
             static int MessagesTestMessageConstructor();
+            static int MessagesTestMessageCopyConstructor();
             static int MessagesTestAccessControlListEncodeDecode();
             static int MessagesTestAccessControlListDefaultConstructor();
+            static int MessagesTestBaseMessageEqualityTestPass();
+            static int MessagesTestBaseMessageEqualityTestFail();
+            static int MessagesTestMessageEqualityTestPass();
+            static int MessagesTestMessageEqualityTestFail();
+            static int MessagesTestNamespaceCertificateEqualityTestPass();
+            static int MessagesTestNamespaceCertificateEqualityTestFail();
+            static int MessagesTestAccessControlListEqualityTestPass();
+            static int MessagesTestAccessControlListEqualityTestFail();
 
             // End Unit tests
 
