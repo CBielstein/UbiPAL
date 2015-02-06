@@ -378,7 +378,7 @@ namespace UbiPAL
         }
         else
         {
-            offset = status;
+            offset += status;
         }
 
         // encode message
@@ -430,7 +430,7 @@ namespace UbiPAL
         }
         else
         {
-            offset = status;
+            offset += status;
         }
 
         // cast of the constness of buff. It's const in the header to show it won't be changed,
@@ -623,10 +623,10 @@ namespace UbiPAL
         }
         else
         {
-            offset = status;
+            offset += status;
         }
 
-        return status;
+        return offset;
     }
 
     int NamespaceCertificate::Decode(const char* const buf, const uint32_t buf_len)
@@ -697,10 +697,10 @@ namespace UbiPAL
         }
         else
         {
-            offset = status;
+            offset += status;
         }
 
-        return status;
+        return offset;
     }
 
     int NamespaceCertificate::EncodedLength() const

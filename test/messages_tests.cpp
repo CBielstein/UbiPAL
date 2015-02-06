@@ -84,33 +84,43 @@ namespace UbiPAL
         length = bm.EncodedLength();
         if (length < 0)
         {
-            return length;
+            status = length;
+            goto exit;
         }
 
         msg = (char*) malloc(length);
         if (msg == nullptr)
         {
-            return MALLOC_FAILURE;
+            status = MALLOC_FAILURE;
+            goto exit;
         }
 
         status = bm.Encode(msg, length);
         if (status < 0)
         {
-            return status;
+            goto exit;
         }
 
         status = bm2.Decode(msg, length);
         if (status < 0)
         {
-            return status;
+            goto exit;
         }
 
         if (bm != bm2)
         {
-            return GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+            goto exit;
         }
 
-        return SUCCESS;
+        exit:
+            free(msg);
+            return status;
     }
 
     int MessagesTests::MessagesTestMessageEncodeDecode()
@@ -129,33 +139,43 @@ namespace UbiPAL
         length = m.EncodedLength();
         if (length < 0)
         {
-            return length;
+            status = length;
+            goto exit;
         }
 
         msg = (char*) malloc(length);
         if (msg == nullptr)
         {
-            return MALLOC_FAILURE;
+            status = MALLOC_FAILURE;
+            goto exit;
         }
 
         status = m.Encode(msg, length);
         if (status < 0)
         {
-            return status;
+            goto exit;
         }
 
         status = m2.Decode(msg, length);
         if (status < 0)
         {
-            return status;
+            goto exit;
         }
 
         if (m != m2)
         {
-            return GENERAL_FAILURE;
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            status = SUCCESS;
+            goto exit;
         }
 
-        return SUCCESS;
+        exit:
+            free(msg);
+            return status;
     }
 
     int MessagesTests::MessagesTestMessageDefaultConstructor()
