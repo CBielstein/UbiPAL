@@ -14,8 +14,8 @@ namespace UbiPAL
     int RsaWrappersTests::RsaWrappersBasic()
     {
         int status = SUCCESS;
-        unsigned char* sig;
-        unsigned int sig_len;
+        unsigned char* sig = nullptr;
+        unsigned int sig_len = 0;
 
         // create message
         const char* msg = "Hello, is it me you're looking for?";
@@ -63,11 +63,77 @@ namespace UbiPAL
         return status;
     }
 
+    int RsaWrappersTests::RsaWrappersPreAllocatedSig()
+    {
+        int status = SUCCESS;
+        unsigned char* sig = nullptr;
+        unsigned int sig_len = 0;
+
+        // create message
+        const char* msg = "Hello, is it me you're looking for?";
+
+        // get key pair
+        RSA* priv;
+        RSA* pub;
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersBasic: Error in GenerateRsaKey: %d\n", status);
+            goto exit;
+        }
+
+        status = RsaWrappers::CreatePublicKey(priv, pub);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersBasic: Error in CreatePublicKey: %d\n", status);
+            goto exit;
+        }
+
+        // create message signature
+        status = RsaWrappers::SignatureLength(priv);
+        if (status < 0)
+        {
+            goto exit;
+        }
+        else
+        {
+            sig_len = status;
+        }
+        sig = (unsigned char*) malloc(sig_len);
+        if (sig == nullptr)
+        {
+            status = MALLOC_FAILURE;
+            goto exit;
+        }
+
+        status = RsaWrappers::CreateSignedDigest(priv, (unsigned char*)msg, strlen(msg), sig, sig_len);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "RsaWrappersBasic: Error in CreateSignedDigest: %d\n", status);
+            goto exit;
+        }
+
+        // Test verification
+        status = RsaWrappers::VerifySignedDigest(pub, (unsigned char*)msg, strlen(msg), sig, sig_len);
+        if (status != 1)
+        {
+            fprintf(stderr, "RsaWrappersBasic: Failed to validate signature with status %d\n", status);
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        status = SUCCESS;
+
+        exit:
+            RSA_free(priv);
+            RSA_free(pub);
+            free(sig);
+            return status;
+    }
     // signed by private, failed verification by wrong public key
     int RsaWrappersTests::RsaWrappersWrongPubKey()
     {
         int status = SUCCESS;
-        unsigned char* sig;
+        unsigned char* sig = nullptr;
         unsigned int sig_len;
 
         // create message
@@ -139,7 +205,7 @@ namespace UbiPAL
     int RsaWrappersTests::RsaWrappersWrongPrivKey()
     {
         int status = SUCCESS;
-        unsigned char* sig;
+        unsigned char* sig = nullptr;
         unsigned int sig_len;
 
         // create message
@@ -1152,12 +1218,52 @@ namespace UbiPAL
             return status;
     }
 
+    int RsaWrappersTests::RsaWrappersSignatureLength()
+    {
+        int status = SUCCESS;
+        RSA* priv = nullptr;
+
+        status = RsaWrappers::GenerateRsaKey(priv);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        if (RSA_size(priv) != RsaWrappers::SignatureLength(priv))
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        if (RsaWrappers::SignatureLength(nullptr) != NULL_ARG)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        BN_free(priv->n);
+        priv->n = nullptr;
+        if (RsaWrappers::SignatureLength(priv) != INVALID_ARG)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+
+        status = SUCCESS;
+
+        exit:
+            RSA_free(priv);
+            return status;
+    }
+
     void RsaWrappersTests::RunRsaWrappersTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(RsaWrappersGenerateKey, SUCCESS,
                                  "RsaWrappersGenerateKey", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersBasic, SUCCESS,
                                  "RsaWrappersBasic", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersPreAllocatedSig, SUCCESS,
+                                 "RsaWrappersPreAllocatedSig", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersWrongPubKey, SUCCESS,
                                  "RsaWrappersWrongPubKey", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersWrongPrivKey, SUCCESS,
@@ -1200,5 +1306,7 @@ namespace UbiPAL
                                  "RsaWrappersKeyStringVerify", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersKeyStringEncrypt, SUCCESS,
                                  "RsaWrappersKeyStringEncrypt", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersSignatureLength, SUCCESS,
+                                 "RsaWrappersSignatureLength", module_count, module_fails);
     }
 }

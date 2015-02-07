@@ -309,15 +309,20 @@ namespace UbiPAL
     void* UbipalService::HandleConnection(void* hc_args)
     {
         FUNCTION_START;
+
         char buf[MAX_MESSAGE_SIZE];
-        UbipalService* us = nullptr;
-        std::unordered_map<std::string, UbipalCallback>::iterator found;
         int conn_fd = 0;
+        uint32_t size = 0;
+
+        UbipalService* us = nullptr;
+        RSA* from_pub_key = nullptr;
+
         BaseMessage base_message;
         Message message;
         NamespaceCertificate name_cert;
         AccessControlList acl;
-        uint32_t size = 0;
+
+        std::unordered_map<std::string, UbipalCallback>::iterator found;
         std::unordered_map<std::string, NamespaceCertificate>::iterator trusted_itr;
         std::unordered_map<std::string, NamespaceCertificate>::iterator untrusted_itr;
         std::unordered_map<std::string, std::vector<AccessControlList>>::iterator acl_itr;
@@ -353,14 +358,49 @@ namespace UbiPAL
             RETURN_STATUS(status)
         }
 
+        // ensure this isn't directed to somebody else
+        // it's to us or it's broadcast (to nobody)
+        if (base_message.to != us->id && !base_message.to.empty())
+        {
+            status = MESSAGE_WRONG_DESTINATION;
+            Log::Line(Log::DEBUG, "UbipalService::HandleConnection: Received a message not to this service: %s", GetErrorDescription(status));
+            RETURN_STATUS(status);
+        }
+
+        // convert from id to public key for validation
+        status = RsaWrappers::StringToPublicKey(base_message.from, from_pub_key);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
+            RETURN_STATUS(status);
+        }
+
         switch(base_message.type)
         {
             case MessageType::MESSAGE:
+
                 // decode as Message
-                status = message.Decode(buf, size);
-                if (status < 0)
+                returned_value = message.Decode(buf, size);
+                if (returned_value < 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Message::Decode failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Message::Decode failed: %s", GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+
+                // check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, (unsigned char*)buf, returned_value,
+                                                                 (unsigned char*)buf + returned_value, size - returned_value);
+                if (returned_value < 0)
+                {
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest error: %s",
+                              GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+                else if (returned_value == 0)
+                {
+                    status = SIGNATURE_INVALID;
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                              GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
@@ -384,10 +424,28 @@ namespace UbiPAL
                 break;
             case MessageType::NAMESPACE_CERTIFICATE:
                 // decode as namespace certificate
-                status = name_cert.Decode(buf, size);
-                if (status < 0)
+                returned_value = name_cert.Decode(buf, size);
+                if (returned_value < 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: NamespaceCertificate::Decode failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: NamespaceCertificate::Decode failed: %s",
+                              GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+
+                // check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, (unsigned char*)buf, returned_value,
+                                                                 (unsigned char*)buf + returned_value, size - returned_value);
+                if (returned_value < 0)
+                {
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest error: %s",
+                              GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+                else if (returned_value == 0)
+                {
+                    status = SIGNATURE_INVALID;
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                              GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
@@ -426,13 +484,33 @@ namespace UbiPAL
 
                 break;
             case MessageType::ACCESS_CONTROL_LIST:
+
                 // decode as namespace certificate
-                status = acl.Decode(buf, size);
-                if (status < 0)
+                returned_value = acl.Decode(buf, size);
+                if (returned_value < 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: AccessControlList::Decode failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: AccessControlList::Decode failed: %s",
+                              GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+
+                // check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, (unsigned char*)buf, returned_value,
+                                                                 (unsigned char*)buf + returned_value, size - returned_value);
+                if (returned_value < 0)
+                {
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest error: %s",
+                              GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+                else if (returned_value == 0)
+                {
+                    status = SIGNATURE_INVALID;
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                              GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
+
 
                 // find all the acls from this service
                 acl_itr = us->external_acls.find(acl.id);
@@ -643,6 +721,8 @@ namespace UbiPAL
         HandleSendMessageArguments* sm_args = nullptr;
         char* bytes = nullptr;
         int bytes_length = 0;
+        unsigned int sig_len = 0;
+        unsigned char* sig = nullptr;
 
         if (args == nullptr)
         {
@@ -652,6 +732,7 @@ namespace UbiPAL
 
         sm_args = static_cast<HandleSendMessageArguments*>(args);
 
+        // calculate encoded message length
         returned_value = sm_args->msg->EncodedLength();
         if (returned_value < 0)
         {
@@ -660,13 +741,24 @@ namespace UbiPAL
         }
         bytes_length = returned_value;
 
-        bytes = (char*)malloc(bytes_length);
+        // calculate signature length
+        returned_value = RsaWrappers::SignatureLength(sm_args->us->private_key);
+        if (returned_value < 0)
+        {
+            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::SignatureLength failed: %s", GetErrorDescription(returned_value));
+            RETURN_STATUS(status);
+        }
+        sig_len = returned_value;
+
+        // allocate enough space for them both
+        bytes = (char*)malloc(bytes_length + sig_len);
         if (bytes == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
             RETURN_STATUS(MALLOC_FAILURE);
         }
 
+        // encode the message
         status = sm_args->msg->Encode(bytes, bytes_length);
         if (status < 0)
         {
@@ -678,7 +770,17 @@ namespace UbiPAL
             status = SUCCESS;
         }
 
-        status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, bytes_length);
+        // now sign it
+        sig = (unsigned char*)(bytes + bytes_length);
+        status = RsaWrappers::CreateSignedDigest(sm_args->us->private_key, (unsigned char*)bytes, bytes_length, sig, sig_len);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: CreateSignedDigest failed: %s", GetErrorDescription(status));
+            RETURN_STATUS(status);
+        }
+
+        // send it!
+        status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, bytes_length + sig_len);
         if (status < 0)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Encode failed: %s", GetErrorDescription(status));

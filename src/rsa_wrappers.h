@@ -39,6 +39,14 @@ namespace UbiPAL
             //      int: SUCCESS on success, error code otherwise
             static int CreatePublicKey(const RSA* priv_key, RSA*& pub_key);
 
+            // SignatureLength
+            // Computes the number of bytes needed for a signature with a given private key
+            // args
+            //          [IN] priv_key: The private key which will be used to create the signature
+            // return
+            //          int: The number of bytes needed for a signature, or negative error code on a failure
+            static int SignatureLength(const RSA* const priv_key);
+
             // CreateSignedDigest
             // given the appropriate args, hashes and signs a digest, which is stores in sig, with a length stored in sig_len
             // digest uses SHA1
@@ -46,8 +54,9 @@ namespace UbiPAL
             //      [IN] priv_key: the RSA struct to use for signing, must be full private key, not public key
             //      [IN] msg: byte array of data to sign
             //      [IN] msg_length: number of bytes of msg
-            //      [OUT] sig: the signed digest
-            //      [OUT] sig_len: the length of the signed digest (also RSA_size(priv_key))
+            //      [IN/OUT] sig: the memory for the signed digest. If null, space is allocated
+            //      [IN/OUT] sig_len: passes in the length of sig (if non-null),
+            //                        and is set to the length of the signed digest (also RSA_size(priv_key))
             // return
             //      int: SUCCESS on success, error code otherwise
             static int CreateSignedDigest(RSA* priv_key, const unsigned char* msg, const unsigned int msg_length, unsigned char*& sig, unsigned int& sig_len);

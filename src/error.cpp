@@ -25,6 +25,9 @@ namespace UbiPAL
             case MULTIPLE_RECV: return "MULTIPLE_RECV: Multiple calls to recv cannot happen at once on the same object. Recv had already been called.";
             case THREAD_FAILURE: return "THREAD_FAILURE: An error occurred with threading code.";
             case BUFFER_TOO_SMALL: return "BUFFER_TOO_SMALL: A buffer of memory is too small for the attempted operation.";
+            case INVALID_NETWORK_ENCODING: return "INVALID_NETWORK_ENCODING: Invalid network encoding.";
+            case MESSAGE_WRONG_DESTINATION: return "MESSAGE_WRONG_DESTINATION: A message was received at a service to which it was not addressed.";
+            case SIGNATURE_INVALID: return "SIGNATURE_INVALID: A message signature failed validation on the receiving end.";
             default: return "Error code does not have description.";
         }
     }

@@ -106,6 +106,22 @@ namespace UbiPAL
             FUNCTION_END;
     }
 
+    int RsaWrappers::SignatureLength(const RSA* const priv_key)
+    {
+        if (priv_key == nullptr)
+        {
+            return NULL_ARG;
+        }
+        else if (RSA_check_key(priv_key) != 1)
+        {
+            return INVALID_ARG;
+        }
+        else
+        {
+            return RSA_size(priv_key);
+        }
+    }
+
     int RsaWrappers::CreateSignedDigest(RSA* priv_key, const unsigned char* msg,
                                         const unsigned int msg_length, unsigned char*& sig,
                                         unsigned int& sig_len)
@@ -128,11 +144,21 @@ namespace UbiPAL
         }
 
         // sign that digest!
-        sig = (unsigned char*)malloc(RSA_size(priv_key));
         if (sig == nullptr)
         {
-            Log::Line(Log::EMERG, "RsaWrappers::CreateSignedDigest: malloc failed to allocate %lu bytes for signature, returned NULL", RSA_size(priv_key));
-            RETURN_STATUS(MALLOC_FAILURE);
+            sig = (unsigned char*)malloc(RSA_size(priv_key));
+            if (sig == nullptr)
+            {
+                Log::Line(Log::EMERG, "RsaWrappers::CreateSignedDigest: malloc failed to allocate %lu bytes for signature, returned NULL",
+                          RSA_size(priv_key));
+                RETURN_STATUS(MALLOC_FAILURE);
+            }
+        }
+        else if (sig_len < (unsigned int)RSA_size(priv_key))
+        {
+            Log::Line(Log::WARN, "RsaWrappers::CreateSignedDigest: sig was of insufficient size: %lu, needed %lu",
+                      sig_len, RSA_size(priv_key));
+            RETURN_STATUS(BUFFER_TOO_SMALL);
         }
 
         returned_value = RSA_sign(NID_sha1, digest, SHA_DIGEST_LENGTH, sig, &sig_len, priv_key);
@@ -152,6 +178,15 @@ namespace UbiPAL
     {
         FUNCTION_START;
         unsigned char* digest = nullptr;
+
+        if (pub_key == nullptr || msg == nullptr || sig == nullptr)
+        {
+            RETURN_STATUS(NULL_ARG);
+        }
+        else if (sig_len != (unsigned)RSA_size(pub_key))
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
 
         digest = SHA1(msg, msg_length, NULL);
         if (digest == nullptr)

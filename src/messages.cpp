@@ -146,6 +146,10 @@ namespace UbiPAL
             Log::Line(Log::WARN, "BaseMessage::DecodeString: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
             return status;
         }
+        else if (length < 0)
+        {
+            return INVALID_NETWORK_ENCODING;
+        }
         else
         {
             offset += status;

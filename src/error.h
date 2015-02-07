@@ -26,6 +26,9 @@ namespace UbiPAL
         MULTIPLE_RECV = -11,
         THREAD_FAILURE = -12,
         BUFFER_TOO_SMALL = -13,
+        INVALID_NETWORK_ENCODING = -14,
+        MESSAGE_WRONG_DESTINATION = -15,
+        SIGNATURE_INVALID = -16,
     };
 
     // get_error_description
