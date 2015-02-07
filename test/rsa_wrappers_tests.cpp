@@ -364,9 +364,9 @@ namespace UbiPAL
         }
 
         // Encrypt
-        unsigned char* result;
+        char* result;
         unsigned int bytes_Encrypted;
-        status = RsaWrappers::Encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        status = RsaWrappers::Encrypt(pub, msg, strlen(msg), result, &bytes_Encrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptBasic: Error in Encrypt: %d, %d bytes Encrypted\n", status, bytes_Encrypted);
@@ -374,9 +374,9 @@ namespace UbiPAL
         }
 
         // Decrypt
-        unsigned char* result_msg;
+        char* result_msg;
         unsigned int bytes_Decrypted;
-        status = RsaWrappers::Decrypt(priv, result, result_msg, &bytes_Decrypted);
+        status = RsaWrappers::Decrypt(priv, result, bytes_Encrypted, result_msg, &bytes_Decrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptBasic: Error in Decrypt: %d, %d bytes Decrypted\n", status, bytes_Decrypted);
@@ -432,9 +432,9 @@ namespace UbiPAL
         }
 
         // Encrypt
-        unsigned char* result;
+        char* result;
         unsigned int bytes_Encrypted;
-        status = RsaWrappers::Encrypt(priv, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        status = RsaWrappers::Encrypt(priv, msg, strlen(msg), result, &bytes_Encrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptBasicReverse: Error in Encrypt: %d, %d bytes Encrypted\n", status, bytes_Encrypted);
@@ -442,9 +442,9 @@ namespace UbiPAL
         }
 
         // Decrypt
-        unsigned char* result_msg;
+        char* result_msg;
         unsigned int bytes_Decrypted;
-        status = RsaWrappers::Decrypt(pub, result, result_msg, &bytes_Decrypted);
+        status = RsaWrappers::Decrypt(pub, result, bytes_Encrypted, result_msg, &bytes_Decrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptBasicReverse: Error in Decrypt: %d, %d bytes Decrypted\n", status, bytes_Decrypted);
@@ -509,9 +509,9 @@ namespace UbiPAL
         }
 
         // Encrypt
-        unsigned char* result;
+        char* result;
         unsigned int bytes_Encrypted;
-        status = RsaWrappers::Encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        status = RsaWrappers::Encrypt(pub, msg, strlen(msg), result, &bytes_Encrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptWrongKey: Error in Encrypt: %d, %d bytes Encrypted\n", status, bytes_Encrypted);
@@ -519,9 +519,9 @@ namespace UbiPAL
         }
 
         // Decrypt with wrong key
-        unsigned char* result_msg;
+        char* result_msg;
         unsigned int bytes_Decrypted;
-        status = RsaWrappers::Decrypt(priv_wrong, result, result_msg, &bytes_Decrypted);
+        status = RsaWrappers::Decrypt(priv_wrong, result, bytes_Encrypted, result_msg, &bytes_Decrypted);
         if (status == SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptWrongKey: Decrypt wrongly succeeded: %d, %d bytes Decrypted\n", status, bytes_Decrypted);
@@ -573,9 +573,9 @@ namespace UbiPAL
         }
 
         // Encrypt
-        unsigned char* result;
+        char* result;
         unsigned int bytes_Encrypted;
-        status = RsaWrappers::Encrypt(priv, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        status = RsaWrappers::Encrypt(priv, msg, strlen(msg), result, &bytes_Encrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptWrongKeyReverse: Error in Encrypt: %d, %d bytes Encrypted\n", status, bytes_Encrypted);
@@ -583,9 +583,9 @@ namespace UbiPAL
         }
 
         // Decrypt with wrong key
-        unsigned char* result_msg;
+        char* result_msg;
         unsigned int bytes_Decrypted;
-        status = RsaWrappers::Decrypt(pub_wrong, result, result_msg, &bytes_Decrypted);
+        status = RsaWrappers::Decrypt(pub_wrong, result, bytes_Encrypted, result_msg, &bytes_Decrypted);
         if (status == SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptWrongKeyReverse: Decrypt wrongly succeeded: %d, %d bytes Decrypted\n", status, bytes_Decrypted);
@@ -628,9 +628,9 @@ namespace UbiPAL
         }
 
         // Encrypt
-        unsigned char* result;
+        char* result;
         unsigned int bytes_Encrypted;
-        status = RsaWrappers::Encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        status = RsaWrappers::Encrypt(pub, msg, strlen(msg), result, &bytes_Encrypted);
         if (status != SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptPublicFail: Error in Encrypt: %d, %d bytes Encrypted\n", status, bytes_Encrypted);
@@ -638,9 +638,9 @@ namespace UbiPAL
         }
 
         // Decrypt
-        unsigned char* result_msg;
+        char* result_msg;
         unsigned int bytes_Decrypted;
-        status = RsaWrappers::Decrypt(pub, result, result_msg, &bytes_Decrypted);
+        status = RsaWrappers::Decrypt(pub, result, bytes_Encrypted, result_msg, &bytes_Decrypted);
         if (status == SUCCESS)
         {
             fprintf(stderr, "RsaWrappersEncryptDecryptPublicFail: Incorrectly succeeded in Decrypt: %d, %d bytes Decrypted\n", status, bytes_Decrypted);
@@ -1156,9 +1156,9 @@ namespace UbiPAL
         RSA* priv = nullptr;
         RSA* pub = nullptr;
         const char* msg = "Saturday night and we in the spot. Don't believe me? Just watch! Come on!";
-        unsigned char* result_msg = nullptr;
+        char* result_msg = nullptr;
         unsigned int bytes_Decrypted = 0;
-        unsigned char* result = nullptr;
+        char* result = nullptr;
         unsigned int bytes_Encrypted = 0;
         std::string pub_str;
 
@@ -1184,14 +1184,14 @@ namespace UbiPAL
         }
 
         // Encrypt
-        status = RsaWrappers::Encrypt(pub, (unsigned char*)msg, strlen(msg), result, &bytes_Encrypted);
+        status = RsaWrappers::Encrypt(pub, msg, strlen(msg), result, &bytes_Encrypted);
         if (status != SUCCESS)
         {
             goto exit;
         }
 
         // Decrypt
-        status = RsaWrappers::Decrypt(priv, result, result_msg, &bytes_Decrypted);
+        status = RsaWrappers::Decrypt(priv, result, bytes_Encrypted, result_msg, &bytes_Decrypted);
         if (status != SUCCESS)
         {
             goto exit;

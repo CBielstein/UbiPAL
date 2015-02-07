@@ -223,7 +223,7 @@ namespace UbiPAL
         return (key->d == nullptr) ? 0 : 1;
     }
 
-    int RsaWrappers::Encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
+    int RsaWrappers::Encrypt(RSA* key, const char* msg, const unsigned int& msg_len, char*& result, unsigned int* result_len)
     {
         FUNCTION_START;
 
@@ -240,7 +240,7 @@ namespace UbiPAL
         }
 
         // allocate the result pointer
-        result = (unsigned char*)malloc(RSA_size(key));
+        result = (char*)malloc(RSA_size(key));
         if (result == nullptr)
         {
             Log::Line(Log::EMERG, "RsaWrappers::Encrypt: malloc failed to allocate result pointer of size %d", RSA_size(key));
@@ -254,7 +254,7 @@ namespace UbiPAL
         if (returned_value == 1)
         {
             // encrypt private
-            returned_value = RSA_private_encrypt(msg_len, msg, result, key, RSA_PKCS1_PADDING);
+            returned_value = RSA_private_encrypt(msg_len, (unsigned char*)msg, (unsigned char*)result, key, RSA_PKCS1_PADDING);
             if (returned_value < 0)
             {
                 Log::Line(Log::EMERG, "RsaWrappers::Encrypt: RSA_private_encrypt failed, returned status %d with error %s", returned_value, ERR_error_string(ERR_get_error(), NULL));
@@ -264,7 +264,7 @@ namespace UbiPAL
         else if (returned_value == 0)
         {
             // encrypt public
-            returned_value = RSA_public_encrypt(msg_len, msg, result, key, RSA_PKCS1_PADDING);
+            returned_value = RSA_public_encrypt(msg_len, (unsigned char*)msg, (unsigned char*)result, key, RSA_PKCS1_PADDING);
             if (returned_value < 0)
             {
                 Log::Line(Log::EMERG, "RsaWrappers::Encrypt: RSA_public_encrypt failed, returned status %d with error %s", returned_value, ERR_error_string(ERR_get_error(), NULL));
@@ -292,7 +292,7 @@ namespace UbiPAL
             FUNCTION_END;
     }
 
-    int RsaWrappers::Decrypt(RSA* key, const unsigned char* msg, unsigned char*& result, unsigned int* result_len)
+    int RsaWrappers::Decrypt(RSA* key, const char* msg, const unsigned int msg_len, char*& result, unsigned int* result_len)
     {
         FUNCTION_START;
 
@@ -302,7 +302,7 @@ namespace UbiPAL
         }
 
         // allocate the result pointer
-        result = (unsigned char*)malloc(RSA_size(key));
+        result = (char*)malloc(RSA_size(key));
         if (result == nullptr)
         {
             Log::Line(Log::EMERG, "RsaWrappers::Decrypt: malloc failed to allocate result pointer of size %d", RSA_size(key));
@@ -312,8 +312,8 @@ namespace UbiPAL
         returned_value = RsaWrappers::IsPrivateKey(key);
         if (returned_value == 1)
         {
-            // encrypt private
-            returned_value = RSA_private_decrypt(RSA_size(key), msg, result, key, RSA_PKCS1_PADDING);
+            // decrypt private
+            returned_value = RSA_private_decrypt(msg_len, (unsigned char*)msg, (unsigned char*)result, key, RSA_PKCS1_PADDING);
             if (returned_value < 0)
             {
                 Log::Line(Log::EMERG, "RsaWrappers::Decrypt: RSA_private_decrypt failed, returned status %d with error %s", returned_value, ERR_error_string(ERR_get_error(), NULL));
@@ -322,8 +322,8 @@ namespace UbiPAL
         }
         else if (returned_value == 0)
         {
-            // encrypt public
-            returned_value = RSA_public_decrypt(RSA_size(key), msg, result, key, RSA_PKCS1_PADDING);
+            // decrypt public
+            returned_value = RSA_public_decrypt(msg_len, (unsigned char*)msg, (unsigned char*)result, key, RSA_PKCS1_PADDING);
             if (returned_value < 0)
             {
                 Log::Line(Log::EMERG, "RsaWrappers::Decrypt: RSA_public_decrypt failed, returned status %d with error %s", returned_value, ERR_error_string(ERR_get_error(), NULL));

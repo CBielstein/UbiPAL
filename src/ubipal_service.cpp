@@ -310,9 +310,12 @@ namespace UbiPAL
     {
         FUNCTION_START;
 
-        char buf[MAX_MESSAGE_SIZE];
+        char* buf = nullptr;
+        char* buf_decrypted = nullptr;
+        unsigned int buf_decrypted_len = 0;
         int conn_fd = 0;
         uint32_t size = 0;
+        uint32_t to_len = 0;
 
         UbipalService* us = nullptr;
         RSA* from_pub_key = nullptr;
@@ -337,6 +340,7 @@ namespace UbiPAL
 
         us = ((HandleConnectionArguments*)hc_args)->us;
         conn_fd = ((HandleConnectionArguments*)hc_args)->conn_fd;
+        buf = (char*) malloc(MAX_MESSAGE_SIZE);
 
         returned_value = recv(conn_fd, buf, MAX_MESSAGE_SIZE, 0);
         if (returned_value < 0)
@@ -346,12 +350,48 @@ namespace UbiPAL
         }
         size = returned_value;
 
-        // TODO crypto!
-        // check if raw bytes need to be decrypted
-        // check if signature matches? maybe lower down
+        // decryption
+        // The first byte is the type, the next 4 are the size of the to field
+        returned_value = BaseMessage::DecodeUint32_t(buf + 1, size, to_len);
+        if (returned_value < 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::HandleConnection: BaseMessageDecodeUint32_t failed: %s",
+                      GetErrorDescription(returned_value));
+            RETURN_STATUS(returned_value);
+        }
+
+        // if the two field is empty, it's a first handshake, so it's not encrypted
+        if (to_len != 0)
+        {
+            // If the to length is nonzero, compare the next bytes against the service's id.
+            // If they are the same, this is not encrypted. If they do not match, try to derypt and try again
+            if (to_len != us->id.size() || memcmp(buf + 5, us->id.c_str(), us->id.size()) != 0)
+            {
+                // decrypt
+                status = RsaWrappers::Decrypt(us->private_key, buf, size, buf_decrypted, &buf_decrypted_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: RsaWrapers::Decrypt failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                // If they still don't match, toss the message because it isn't to us
+                if (memcmp(buf_decrypted + 5, us->id.c_str(), us->id.size()) != 0)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Message couldn't be interpreted, so it's tossed.");
+                    RETURN_STATUS(INVALID_NETWORK_ENCODING);
+                }
+
+                // so we decrypted and it matched, put buf_decrypted in buf
+                free(buf);
+                buf = buf_decrypted;
+                buf_decrypted = nullptr;
+                size = buf_decrypted_len;
+            }
+        }
 
         // interpret message
-        status = base_message.Decode(buf, returned_value);
+        status = base_message.Decode(buf, size);
         if (status < 0)
         {
             Log::Line(Log::WARN, "UbipalService::HandleConnection: BaseMessage::Decode failed: %s", GetErrorDescription(status));
@@ -551,6 +591,7 @@ namespace UbiPAL
             {
                 Log::Line(Log::DEBUG, "UbipalService::HandleConnection: Exiting failure: %s", GetErrorDescription(status));
             }
+            free(buf);
             return NULL;
     }
 
