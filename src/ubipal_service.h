@@ -136,14 +136,16 @@ namespace UbiPAL
 
             enum SendMessageFlags
             {
-                NONBLOCKING = 1 << 0,
+                NONBLOCKING = 2 << 0,
+                NO_ENCRYPTION = 2 << 1,
             };
 
             // SendMessage
             // sends message with args to to
             // args
             //          [IN] flags: flags, including:
-            //                  NONBLOCKING, returns immediately, uses a different thread to send
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
             //          [IN] to: The name to which to send
             //          [IN] message: the message to send
             //          [IN] arg: Any arguments to the message
@@ -160,7 +162,8 @@ namespace UbiPAL
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
             // args
             //          [IN] flags: Flags, including:
-            //                  NONBLOCKING, returns immediately, uses a different thread to send
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
             //          [IN] send_to: The address to which to send, if null, this broadcasts the name
             // return
             //          int: SUCCESS on success
@@ -170,7 +173,8 @@ namespace UbiPAL
             // Sends an updated namespace certificate to the given address and port. This is unencrypted.
             // args
             //          [IN] flags: Flags, including:
-            //                  NONBLOCKING, returns immediately, uses a different thread to send
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
             //          [IN] address: The address to which to send
             //          [IN] port: The port to which to send
             // return
@@ -250,6 +254,7 @@ namespace UbiPAL
                 std::string address;
                 std::string port;
                 BaseMessage* msg;
+                uint32_t flags;
 
                 HandleSendMessageArguments();
                 HandleSendMessageArguments(const UbipalService* const _us);

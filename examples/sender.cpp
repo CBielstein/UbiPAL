@@ -53,8 +53,14 @@ int main(int argc, char** argv)
 
         for (size_t i = 0; i < services.size(); ++i)
         {
-            status = us.SendName(0, &services[i]);
-            status = us.SendMessage(0, services[i], std::string("PrintToScreen"), argument.c_str(), argument.size());
+            status = us.SendName(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &services[i]);
+            if (status != UbiPAL::SUCCESS)
+            {
+                std::cout << "Failed to send certificate: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            }
+
+            status = us.SendMessage(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, services[i],
+                                    std::string("PrintToScreen"), argument.c_str(), argument.size());
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to send message: " << UbiPAL::GetErrorDescription(status) << std::endl;

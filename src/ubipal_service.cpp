@@ -714,7 +714,7 @@ namespace UbiPAL
             Log::Line(Log::WARN, "UbipalService::SendMessage: message is empty");
             RETURN_STATUS(INVALID_ARG);
         }
-        else if ((flags & ~(SendMessageFlags::NONBLOCKING)) != 0)
+        else if ((flags & ~(SendMessageFlags::NONBLOCKING | SendMessageFlags::NO_ENCRYPTION)) != 0)
         {
             Log::Line(Log::WARN, "UbipalService::SendMessage: called with invalid flags");
             RETURN_STATUS(INVALID_ARG);
@@ -729,6 +729,7 @@ namespace UbiPAL
         sm_args->address = to.address;
         sm_args->port = to.port;
         sm_args->msg = msg;
+        sm_args->flags = flags;
 
         if ((flags & SendMessageFlags::NONBLOCKING) != 0)
         {
@@ -827,7 +828,8 @@ namespace UbiPAL
 
         // if we know the public key of the destination (the ID), encrypt it
         // reasons we wouldn't know the ID: first contact, or multicast
-        if (!sm_args->msg->to.empty())
+        // but don't encrypt if NO_ENCRYPTION
+        if (!sm_args->msg->to.empty() && ((sm_args->flags & SendMessageFlags::NO_ENCRYPTION) == 0))
         {
             status = RsaWrappers::StringToPublicKey(sm_args->msg->to, dest_pub_key);
             if (status != SUCCESS)
@@ -882,7 +884,7 @@ namespace UbiPAL
         NamespaceCertificate* msg = nullptr;
         HandleSendMessageArguments* sm_args = nullptr;
 
-        if ((flags & ~(SendMessageFlags::NONBLOCKING)) != 0)
+        if ((flags & ~(SendMessageFlags::NONBLOCKING | SendMessageFlags::NO_ENCRYPTION)) != 0)
         {
             Log::Line(Log::WARN, "UbipalService::SendMessage: called with invalid flags");
             RETURN_STATUS(INVALID_ARG);
@@ -900,6 +902,7 @@ namespace UbiPAL
         sm_args->address = send_to->address;
         sm_args->port = send_to->port;
         sm_args->msg = msg;
+        sm_args->flags = flags;
 
         if ((flags & SendMessageFlags::NONBLOCKING) != 0)
         {

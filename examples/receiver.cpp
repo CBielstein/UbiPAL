@@ -47,7 +47,8 @@ int main(int argc, char** argv)
     UbiPAL::UbipalService us;
 
     // Announce name
-    status = us.SendName(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING, argv[1], argv[2]);
+    status = us.SendName(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION,
+                         argv[1], argv[2]);
     if (status != UbiPAL::SUCCESS)
     {
         std::cout << "Failed to send name: " << UbiPAL::GetErrorDescription(status) << std::endl;
