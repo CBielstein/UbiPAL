@@ -764,6 +764,10 @@ namespace UbiPAL
         int bytes_length = 0;
         unsigned int sig_len = 0;
         unsigned char* sig = nullptr;
+        RSA* dest_pub_key = nullptr;
+        char* result = nullptr;
+        unsigned int result_len = 0;
+        unsigned int total_len = 0;
 
         if (args == nullptr)
         {
@@ -790,9 +794,10 @@ namespace UbiPAL
             RETURN_STATUS(status);
         }
         sig_len = returned_value;
+        total_len = bytes_length + sig_len;
 
         // allocate enough space for them both
-        bytes = (char*)malloc(bytes_length + sig_len);
+        bytes = (char*)malloc(total_len);
         if (bytes == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
@@ -820,8 +825,34 @@ namespace UbiPAL
             RETURN_STATUS(status);
         }
 
+        // if we know the public key of the destination (the ID), encrypt it
+        // reasons we wouldn't know the ID: first contact, or multicast
+        if (!sm_args->msg->to.empty())
+        {
+            status = RsaWrappers::StringToPublicKey(sm_args->msg->to, dest_pub_key);
+            if (status != SUCCESS)
+            {
+                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
+                RETURN_STATUS(status);
+            }
+
+
+            status = RsaWrappers::Encrypt(sm_args->us->private_key, bytes, total_len, result, &result_len);
+            if (status != SUCCESS)
+            {
+                Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: RsaWrappers::Encrypt failed: %s", GetErrorDescription(status));
+                RETURN_STATUS(status);
+            }
+
+            // make the below code work regardless of encryption or not
+            free(bytes);
+            bytes = result;
+            result = nullptr;
+            total_len = result_len;
+        }
+
         // send it!
-        status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, bytes_length + sig_len);
+        status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, total_len);
         if (status < 0)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Encode failed: %s", GetErrorDescription(status));
