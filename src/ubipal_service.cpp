@@ -23,6 +23,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 
 // OpenSSL
 #include <openssl/err.h>
@@ -41,8 +42,11 @@ namespace UbiPAL
         const int yes = 1;
         struct sockaddr_in bound_sock;
         socklen_t addr_len = 0;
-        char current_addr[INET6_ADDRSTRLEN];
         std::stringstream pub_key_string;
+        struct ifaddrs* ifap = nullptr;
+        struct ifaddrs* ifap_itr = nullptr;
+        struct sockaddr_in* sa = nullptr;
+        char* addr = nullptr;
 
         // initially not receiving
         receiving = false;
@@ -143,12 +147,27 @@ namespace UbiPAL
         }
 
         port = std::to_string(ntohs(bound_sock.sin_port));
-        address = std::string(inet_ntop(AF_INET, &(bound_sock.sin_addr), current_addr, INET6_ADDRSTRLEN));
-        if (address.empty())
+
+        returned_value = getifaddrs(&ifap);
+        if (returned_value < 0)
         {
-            Log::Line(Log::EMERG, "UbipalService::UbipalService: inet_ntop failed: %d, %s", errno, strerror(errno));
+            Log::Line(Log::EMERG, "UbipalService::UbipalService: getifaddrs failed %s", strerror(returned_value));
             goto exit;
         }
+
+        for (ifap_itr = ifap; ifap_itr != nullptr; ifap_itr = ifap_itr->ifa_next)
+        {
+            // register the first address not on the loopback
+            if (ifap_itr->ifa_addr->sa_family == AF_INET && strncmp(ifap_itr->ifa_name, "lo", 2) != 0)
+            {
+                sa = (struct sockaddr_in*) ifap_itr->ifa_addr;
+                addr = inet_ntoa(sa->sin_addr);
+                address = std::string(addr);
+                break;
+            }
+        }
+
+        fprintf(stderr, "%s:%s\n", address.c_str(), port.c_str());
 
         exit:
             freeaddrinfo(server_info);
