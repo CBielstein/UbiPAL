@@ -167,8 +167,6 @@ namespace UbiPAL
             }
         }
 
-        fprintf(stderr, "%s:%s\n", address.c_str(), port.c_str());
-
         exit:
             freeaddrinfo(server_info);
             return;
