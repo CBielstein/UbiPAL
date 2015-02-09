@@ -168,6 +168,7 @@ namespace UbiPAL
         }
 
         exit:
+            freeifaddrs(ifap);
             freeaddrinfo(server_info);
             return;
     }
