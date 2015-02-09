@@ -181,23 +181,59 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int SendName(const uint32_t flags, const std::string& address, const std::string& port);
 
-            // XXX
-            // adds a new Acl to the list of local acls
-            int CreateAcl(const std::string& name, const std::vector<std::string>& rules);
+            // CreateAcl
+            // adds a new Acl to the list of local acls with the given rule-s
+            // args
+            //          [IN] description: a description to put on the ACL, local only does not get published
+            //          [IN] rules: a vector of rules to place in the new ACL
+            //          [OUT] result: the resultant ACL
+            // return
+            //          int: SUCCESS on success, else negative error code
+            int CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result);
 
-            // XXX
-            // Returns a mutable pointer to the acl for modification (rule addition or removal)
-            int GetAcl(const std::string& name, AccessControlList& acl);
+            // GetAclFlags
+            // Flags for GetAcl, descriptions in comments on that function
+            enum GetAclFlags
+            {
+                SEARCH_BY_ID = 2 << 0,
+                SEARCH_BY_DESC = 2 << 1,
+            };
+
+            // GetAcl
+            // Returns a reference to the first control list matching the search term
+            // args
+            //          [IN] flags: Flags, as follows:
+            //                  SEARCH_BY_ID: searches by id
+            //                  SEARCH_BY_DESC: searches by description
+            //          [IN] search_term: the description we want to find
+            //          [OUT] acl: The access control list that was found
+            // return
+            //          int: SUCCESS on success, NOT_FOUND if not found, other negative error code on error
+            int GetAcl(const uint32_t flags, const std::string& search_term, AccessControlList& acl);
 
             // XXX
             // if send_to is null, broadcast, if it's non-null, send it to a specific location
             int SendAcl(const AccessControlList* const acl, const NamespaceCertificate* const send_to) const;
-            int SendAcl(const AccessControlList* const acl, const std::vector<NamespaceCertificate>& send_to) const;
 
-            // XXX
+            // RevokeAclFlags
+            // Flags for the RevokeAcl function, descriptions in the comments for that function
+            enum RevokeAclFlags
+            {
+                NO_SENDING = 2 << 0,
+                BROADCAST = 2 << 1,
+            };
+
+            // RevokeAcl
             // deletes Acl and sends revokation certificate to the given names
-            int RevokeAcl(const AccessControlList* const acl, const NamespaceCertificate* const send_to);
-            int RevokeAcl(const AccessControlList* const acl, const std::vector<NamespaceCertificate*>& send_to);
+            // args
+            //          [IN] flags:
+            //                  NO_SENDING: Does not send notifications
+            //                  BROADCAST: Sends to many parties
+            //          [IN] acl: the id of the ACL to revoke
+            //          [IN] send_to: a service a revoke message
+            // returns
+            //          int: SUCCESS on success, negative error code if not
+            int RevokeAcl(const uint32_t flags, const std::string& acl, const NamespaceCertificate* const send_to);
 
             // XXX
             // looks up a name advertising the desired message
@@ -220,6 +256,26 @@ namespace UbiPAL
             // return
             //          int: SUCCESS on success, negative error otherwise
             int GetNames(const uint32_t flags, std::vector<NamespaceCertificate>& names);
+
+            // CheckAcls
+            // Verifies that the sender can send message based on receiver's ACLs
+            // args
+            //          [IN] message: message in question
+            //          [IN] sender: the service that sent/will send the message
+            //          [IN] receiver: the destination of the message
+            //          [OUT] acl_trail: if not null, the set of ACLs used to validate this message
+            //          [OUT] conditions: if not null, a set of conditions which must hold
+            // returns
+            //          int: SUCCESS if authorized, NOT_IN_ACLS if the current ACLs don't allow it, FAILED_CONDITIONS if conditions didn't hold
+            //               else an error code
+            int CheckAcls(const std::string& message, const std::string& sender, const std::string& receiver,
+                          std::vector<std::string>* acl_trail, std::vector<std::string>* conditions);
+
+            // GetId
+            // Returns the id of this service
+            // returns
+            //          std::string the ID of this service
+            std::string GetId();
 
         private:
             // Recv
@@ -294,6 +350,9 @@ namespace UbiPAL
             // some data structure to hold our rules array of strings or something
             std::vector<AccessControlList> local_acls;
 
+            // prevents time-of-check to time-of-use race in local_acls
+            std::mutex local_acls_mutex;
+
             // the port on which we operate
             std::string port;
 
@@ -331,6 +390,30 @@ namespace UbiPAL
 
             // Enable tests
             friend class UbipalServiceTests;
+
+            // ConsiderService
+            // A structure used internally in CheckAclsRecurse
+            struct ConsiderService
+            {
+                std::string service_id;
+                std::vector<std::string> conditions;
+                std::string referenced_from_acl;
+            };
+
+            // CheckAclsRecurse
+            // Recurseive call to verify that the sender can send message based on receiver's ACLs
+            // args
+            //          [IN] message: message in question
+            //          [IN] sender: the service that sent/will send the message
+            //          [IN] receiver: the destination of the message
+            //          [IN] current: the current service being evaluated
+            //          [IN/OUT] acl_trail: the set of ACLs used to validate this message
+            //          [IN/OUT] conditions: a set of conditions which must hold
+            // returns
+            //          int: SUCCESS if authorized, NOT_IN_ACLS if the current ACLs don't allow it, FAILED_CONDITIONS if conditions didn't hold
+            //               else an error code
+            int CheckAclsRecurse(const std::string& message, const std::string& sender, const std::string& receiver, const std::string& current,
+                                 std::vector<std::string>& acl_trail, std::vector<std::string>& conditions);
     };
 }
 

@@ -29,6 +29,9 @@ namespace UbiPAL
         INVALID_NETWORK_ENCODING = -14,
         MESSAGE_WRONG_DESTINATION = -15,
         SIGNATURE_INVALID = -16,
+        NOT_IN_ACLS = -17,
+        FAILED_CONDITIONS = -18,
+        NOT_FOUND = -19,
     };
 
     // get_error_description

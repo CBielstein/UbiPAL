@@ -64,12 +64,58 @@ int main(int argc, char** argv)
     }
 
     // Begin receiving (with some error checking for my sake)
-    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::DONT_PUBLISH_NAME);
+    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::DONT_PUBLISH_NAME | UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
     if (status != UbiPAL::SUCCESS)
     {
         std::cout << "Failed to start receiving: " << UbiPAL::GetErrorDescription(status) << std::endl;
         us.EndRecv();
         return -1;
+    }
+
+    char command;
+    std::vector<UbiPAL::NamespaceCertificate> services;
+    std::vector<std::string> rules;
+    std::string rule;
+    UbiPAL::AccessControlList acl_all;
+    while(1)
+    {
+        std::cin >> command;
+        switch(command)
+        {
+            case 'a':
+                std::cout << "Allowing all." << std::endl;
+                status = us.GetNames(UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED,
+                                     services);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "Failed to get service names: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    return status;
+                }
+                for (unsigned int i = 0; i < services.size(); ++i)
+                {
+                    rule = services[i].id;
+                    rule += " can send message PrintToScreen to ";
+                    rule += us.GetId();
+                    rules.push_back(rule);
+                }
+                status = us.CreateAcl("all", rules, acl_all);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    return status;
+                }
+                break;
+            case 'b':
+                status = us.RevokeAcl(UbiPAL::UbipalService::RevokeAclFlags::NO_SENDING, acl_all.msg_id, NULL);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "Failed to revoke acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    return status;
+                }
+                break;
+            case 'q': return status;
+            default: continue;
+        }
     }
 
     return status;

@@ -187,6 +187,10 @@ namespace UbiPAL
     struct AccessControlList : BaseMessage
     {
         std::string id;
+
+        // a local description, not published
+        std::string description;
+
         std::vector<std::string> rules;
 
         AccessControlList();

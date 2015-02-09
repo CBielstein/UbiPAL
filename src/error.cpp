@@ -28,6 +28,9 @@ namespace UbiPAL
             case INVALID_NETWORK_ENCODING: return "INVALID_NETWORK_ENCODING: Invalid network encoding.";
             case MESSAGE_WRONG_DESTINATION: return "MESSAGE_WRONG_DESTINATION: A message was received at a service to which it was not addressed.";
             case SIGNATURE_INVALID: return "SIGNATURE_INVALID: A message signature failed validation on the receiving end.";
+            case NOT_IN_ACLS: return "NOT_IN_ACLS: Access to sending a message could not be granted because the ACLs on hand do not allow it.";
+            case FAILED_CONDITIONS: return "FAILED_CONDITIONS: Access to sending a message could not be granted because the conditions did not hold.";
+            case NOT_FOUND: return "NOT_FOUND: The requested object was not found.";
             default: return "Error code does not have description.";
         }
     }
