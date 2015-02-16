@@ -11,6 +11,7 @@
 #include "log_tests.h"
 #include "ubipal_service_tests.h"
 #include "messages_tests.h"
+#include "aes_wrappers_tests.h"
 
 // Capture log output, but print to stderr for most messages in case the log is failing
 // this test log may be helpful however, so we'll keep it around
@@ -47,6 +48,9 @@ int main()
                                overall_test_count, overall_fail_count,
                                module_count, failed_modules);
     TestHelpers::RunTestModule(UbiPAL::MessagesTests::RunMessagesTests, "MessagesTests",
+                               overall_test_count, overall_fail_count,
+                               module_count, failed_modules);
+    TestHelpers::RunTestModule(UbiPAL::AesWrappersTests::RunAesWrappersTests, "AesWrappersTests",
                                overall_test_count, overall_fail_count,
                                module_count, failed_modules);
 
