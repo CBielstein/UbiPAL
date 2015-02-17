@@ -14,6 +14,8 @@
 #include <string>
 #include <mutex>
 #include <pthread.h>
+#include <queue>
+#include <condition_variable>
 
 // OpenSSL
 #include <openssl/rsa.h>
@@ -24,6 +26,7 @@ namespace UbiPAL
 {
     // A callback type for received messages
     typedef int(*UbipalCallback)(std::string message, char* arg, uint32_t arg_len);
+    typedef int(*UbipalReplyCallback)(std::string message, char* arg, uint32_t arg_len, Message original_message);
 
     // UbipalService
     // Representation of a service in the UbiPAL namespace
@@ -82,6 +85,14 @@ namespace UbiPAL
             // return
             //          int: SUCCESS on success
             int BeginRecv(const uint32_t flags);
+
+            // ConsumeConnections
+            // Used by Recv to be a consumer of incoming connections in incoming_connections queue
+            // args
+            //          [IN] arg: UbipalService* pointer to this
+            // return
+            //          void*: NULL
+            static void* ConsumeConnections(void* arg);
 
             // RegisterCallback
             // Adds a function to be called upon receiving a given message
@@ -154,9 +165,21 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message, const char* const arg, const uint32_t arg_len);
 
-            // TODO XXX ???
-            // int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
-                            // const std::string& args, const UbipalCallback& reply_callback);
+            // SendMessage
+            // sends message with args to to, registers a callback function to allow replies
+            // args
+            //          [IN] flags: flags, including:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] to: The name to which to send
+            //          [IN] message: the message to send
+            //          [IN] arg: Any arguments to the message
+            //          [IN] arg_len: The length of arg
+            //          [IN] reply_callback: Function to call upon reply to this message
+            // return
+            //          int: SUCCESS on success
+            int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+                            const char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback);
 
             // SendName
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
@@ -220,6 +243,15 @@ namespace UbiPAL
             // return
             //          int: SUCCESS on success, negative error otherwise
             int GetNames(const uint32_t flags, std::vector<NamespaceCertificate>& names);
+
+            // SetThreadCounts
+            // Sets the thread limits
+            // args
+            //          [IN] recv_threads: Number of threads for receiving
+            //          [IN] send_threads: Number of threads for sending
+            // return
+            //          int: SUCCESS on success
+            int SetThreadCounts(const unsigned int& recv_threads, const unsigned int& send_threads);
 
         private:
             // Recv
@@ -313,8 +345,23 @@ namespace UbiPAL
             // The 0th thread is used for Recv
             std::vector<pthread_t> recv_threads;
 
+            // Incomming connections to be handled
+            std::queue<HandleConnectionArguments*> incoming_connections;
+
+            // Mutex for incoming connections
+            std::mutex incoming_conn_mutex;
+
+            // Condition variable for incoming connections
+            std::condition_variable incoming_conn_cv;
+
+            // The number of threads to use for receiving
+            unsigned int num_recv_threads;
+
             // threads for async sends
             std::vector<pthread_t> send_threads;
+
+            // The number of threads to use for sending
+            unsigned int num_send_threads;
 
             // mutex for thread creation and message passing
             std::mutex threads_mutex;
@@ -328,6 +375,12 @@ namespace UbiPAL
 
             // mutex to avoid time-of-check-to-time-of-use race conditions in RegisterCallback
             std::mutex callbacks_mutex;
+
+            // maps message ID to reply callback
+            std::unordered_map<std::string, UbipalReplyCallback> reply_callback_map;
+
+            // mutex to avoid toc-tou race conditions
+            std::mutex reply_callback_mutex;
 
             // Enable tests
             friend class UbipalServiceTests;

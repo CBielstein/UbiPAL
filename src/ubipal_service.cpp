@@ -48,6 +48,10 @@ namespace UbiPAL
         struct sockaddr_in* sa = nullptr;
         char* addr = nullptr;
 
+        // Set default thread counts
+        num_recv_threads = 5;
+        num_send_threads = 5;
+
         // initially not receiving
         receiving = false;
 
@@ -279,6 +283,19 @@ namespace UbiPAL
 
         us = (UbipalService*)arg;
 
+        // spin up thread for receiving
+        us->threads_mutex.lock();
+        for (unsigned int i = 0; i < us->num_recv_threads; ++i)
+        {
+            us->recv_threads.emplace(us->recv_threads.end());
+            returned_value = pthread_create(&(us->recv_threads[us->recv_threads.size() - 1]), NULL, ConsumeConnections, us);
+            if (returned_value != 0)
+            {
+                Log::Line(Log::WARN, "UbipalService::Recv: A call to pthread_create failed: %d", returned_value);
+            }
+        }
+        us->threads_mutex.unlock();
+
         // listen on sockfd for 10 queued connections
         returned_value = listen(us->sockfd, 10);
         if (returned_value != 0)
@@ -299,17 +316,13 @@ namespace UbiPAL
             }
 
             // new thread!!
-            us->threads_mutex.lock();
+            us->incoming_conn_mutex.lock();
             hc_args = new HandleConnectionArguments(us, connect_fd);
-            us->recv_threads.emplace(us->recv_threads.end());
-            returned_value = pthread_create(&(us->recv_threads[us->recv_threads.size() - 1]), NULL, HandleConnection, hc_args);
-            us->threads_mutex.unlock();
-            if (returned_value != 0)
-            {
-                Log::Line(Log::EMERG, "UbipalService::Recv: pthread_create failed: %d", returned_value);
-                RETURN_STATUS(THREAD_FAILURE);
-            }
-
+            us->incoming_connections.push(hc_args);
+            hc_args = nullptr;
+            us->incoming_conn_mutex.unlock();
+            // signal a worker thread
+            us->incoming_conn_cv.notify_one();
         }
 
         exit:
@@ -322,6 +335,40 @@ namespace UbiPAL
                 us->recv_status = status;
                 return &us->recv_status;
             }
+    }
+
+    void* UbipalService::ConsumeConnections(void* arg)
+    {
+        if (arg == nullptr)
+        {
+            Log::Line(Log::WARN, "UbipalService::ConsumeConnections: arg was null.");
+            return NULL;
+        }
+
+        UbipalService* us = (UbipalService*)arg;
+        HandleConnectionArguments* hc_args = nullptr;
+        std::unique_lock<std::mutex> lock(us->incoming_conn_mutex, std::defer_lock);
+
+        while(us->receiving)
+        {
+            lock.lock();
+
+            // wait for non-empty queue
+            while(us->incoming_connections.size() == 0)
+            {
+                us->incoming_conn_cv.wait(lock);
+            }
+
+            // grab stuff off the queue
+            hc_args = us->incoming_connections.front();
+            us->incoming_connections.pop();
+
+            // unlock the queue to handle the connection
+            lock.unlock();
+            HandleConnection(hc_args);
+        }
+
+        return NULL;
     }
 
     void* UbipalService::HandleConnection(void* hc_args)
@@ -715,11 +762,19 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message, const char* const arg, const uint32_t arg_len)
+    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+                                   const char* const arg, const uint32_t arg_len)
+    {
+        return SendMessage(flags, to, message, arg, arg_len, NULL);
+    }
+
+    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+                                   const char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback)
     {
         FUNCTION_START;
         Message* msg = nullptr;
         HandleSendMessageArguments* sm_args = nullptr;
+        std::pair<std::unordered_map<std::string, UbipalReplyCallback>::iterator, bool> returned_pair;
 
         // check args
         if (to.address.empty() || to.port.empty())
@@ -742,6 +797,20 @@ namespace UbiPAL
         msg->to = to.id;
         msg->from = id;
         msg->message = message;
+
+        // register callback function for replies
+        if (reply_callback != nullptr)
+        {
+            reply_callback_mutex.lock();
+
+            returned_pair = reply_callback_map.emplace(msg->msg_id, reply_callback);
+            if (returned_pair.second == false)
+            {
+                returned_pair.first->second = reply_callback;
+            }
+
+            reply_callback_mutex.unlock();
+        }
 
         sm_args = new HandleSendMessageArguments(this);
         sm_args->address = to.address;
@@ -904,7 +973,7 @@ namespace UbiPAL
 
         if ((flags & ~(SendMessageFlags::NONBLOCKING | SendMessageFlags::NO_ENCRYPTION)) != 0)
         {
-            Log::Line(Log::WARN, "UbipalService::SendMessage: called with invalid flags");
+            Log::Line(Log::WARN, "UbipalService::SendName: called with invalid flags");
             RETURN_STATUS(INVALID_ARG);
         }
 
@@ -931,7 +1000,7 @@ namespace UbiPAL
             threads_mutex.unlock();
             if (returned_value != 0)
             {
-                Log::Line(Log::EMERG, "UbipalService::SendMessage: pthread_create failed: %d", returned_value);
+                Log::Line(Log::EMERG, "UbipalService::SendName: pthread_create failed: %d", returned_value);
                 RETURN_STATUS(THREAD_FAILURE);
             }
         }
@@ -989,5 +1058,12 @@ namespace UbiPAL
         }
 
         return status;
+    }
+
+    int UbipalService::SetThreadCounts(const unsigned int& recv_threads, const unsigned int& send_threads)
+    {
+        num_recv_threads = recv_threads;
+        num_send_threads = send_threads;
+        return SUCCESS;
     }
 }
