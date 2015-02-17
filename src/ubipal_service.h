@@ -24,9 +24,14 @@
 
 namespace UbiPAL
 {
+    // forward declaration for the callbacks
+    class UbipalService;
+
     // A callback type for received messages
-    typedef int(*UbipalCallback)(std::string message, char* arg, uint32_t arg_len);
-    typedef int(*UbipalReplyCallback)(std::string message, char* arg, uint32_t arg_len, Message original_message);
+    typedef int(*UbipalCallback)(UbipalService* us, Message message);
+
+    // A callback for received replies.
+    typedef int(*UbipalReplyCallback)(UbipalService* us, Message original_message, Message reply_message);
 
     // UbipalService
     // Representation of a service in the UbiPAL namespace
@@ -149,6 +154,7 @@ namespace UbiPAL
             {
                 NONBLOCKING = 2 << 0,
                 NO_ENCRYPTION = 2 << 1,
+                MESSAGE_AWAIT_REPLY = 2 << 2,
             };
 
             // SendMessage
@@ -180,6 +186,17 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
                             const char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback);
+
+            // ReplyToMessage
+            // Sends a message reply back for msg
+            // args
+            //          [IN] flags: Flags, same as for SendMessage
+            //          [IN] msg: The message to which to reply
+            //          [IN] arg: The arguments of the reply
+            //          [IN} arg_len: The length of the arguments
+            // return
+            //          int: SUCCESSS on success
+            int ReplyToMessage(const uint32_t flags, const Message* const msg, const char* const arg, const uint32_t arg_len);
 
             // SendName
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
@@ -253,6 +270,12 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int SetThreadCounts(const unsigned int& recv_threads, const unsigned int& send_threads);
 
+            // GetId
+            // Returns the string ID of this service
+            // return
+            //          string: ID of this service
+            inline std::string GetId() { return id; }
+
         private:
             // Recv
             // Does all the actual work of receiving and filtering messages to their appropriate functions
@@ -300,6 +323,7 @@ namespace UbiPAL
             //                  address: The address to send to
             //                  port: The port to receive from
             //                  msg: The message to send
+            //                  flags: Flags for the function, including MESSAGE_AWAITING_REPLY which avoids freeing the message
             // returns
             //          void*: NULL
             static void* HandleSendMessage(void* args);
@@ -341,8 +365,7 @@ namespace UbiPAL
             // mutual exclusion for the above variable
             std::mutex receiving_mutex;
 
-            // threads for replying to messages
-            // The 0th thread is used for Recv
+            // threads for receiving messages
             std::vector<pthread_t> recv_threads;
 
             // Incomming connections to be handled
@@ -381,6 +404,9 @@ namespace UbiPAL
 
             // mutex to avoid toc-tou race conditions
             std::mutex reply_callback_mutex;
+
+            // holds messages for which we are awaiting replies
+            std::vector<Message*> msgs_awaiting_reply;
 
             // Enable tests
             friend class UbipalServiceTests;

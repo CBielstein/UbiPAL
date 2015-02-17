@@ -10,6 +10,12 @@
 #include "../src/error.h"
 #include "../src/log.h"
 
+int print_replies(UbiPAL::UbipalService* us, UbiPAL::Message original_message, UbiPAL::Message reply_message)
+{
+    std::cout << "Reply: " <<  reply_message.argument << std::endl;
+    return UbiPAL::SUCCESS;
+}
+
 int main(int argc, char** argv)
 {
     int status = UbiPAL::SUCCESS;
@@ -60,7 +66,7 @@ int main(int argc, char** argv)
             }
 
             status = us.SendMessage(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, services[i],
-                                    std::string("PrintToScreen"), argument.c_str(), argument.size());
+                                    std::string("PrintToScreen"), argument.c_str(), argument.size(), print_replies);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to send message: " << UbiPAL::GetErrorDescription(status) << std::endl;

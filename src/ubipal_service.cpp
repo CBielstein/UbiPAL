@@ -509,6 +509,65 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
+                // if it's a reply, let's handle it. This avoids the ACLs since we explicitly allowed for the reply
+                if (message.message.compare(0, strlen("REPLY_"), "REPLY_") == 0)
+                {
+                    us->reply_callback_mutex.lock();
+
+                    // if we have a message with the given ID sent to the sender, let's go at it
+                    std::string replying_id = message.message.substr(strlen("REPLY_"));
+                    if (us->reply_callback_map.count(replying_id) == 1)
+                    {
+                        UbipalReplyCallback callback_func = us->reply_callback_map[replying_id];
+                        if (callback_func == nullptr)
+                        {
+                            Log::Line(Log::EMERG, "UbipalService::HandleConnection: reply_callback_map.coun() was 1, but fetching element returned null.");
+                            us->reply_callback_mutex.unlock();
+                            RETURN_STATUS(GENERAL_FAILURE);
+                        }
+
+                        returned_value = us->reply_callback_map.erase(replying_id);
+                        if (returned_value != 1)
+                        {
+                            Log::Line(Log::EMERG, "UbipalService::HandleConnection: reply_callback_map.erase() failed to remove the mapping.");
+                            us->reply_callback_mutex.unlock();
+                            RETURN_STATUS(GENERAL_FAILURE);
+                        }
+
+                        Message original_message;
+                        bool found_original_message = false;
+                        for (unsigned int i = 0; i < us->msgs_awaiting_reply.size(); ++i)
+                        {
+                            if (us->msgs_awaiting_reply[i]->msg_id == replying_id)
+                            {
+                                original_message = *(us->msgs_awaiting_reply[i]);
+                                free(us->msgs_awaiting_reply[i]);
+                                us->msgs_awaiting_reply.erase(us->msgs_awaiting_reply.begin() + i);
+                                found_original_message = true;
+                                break;
+                            }
+                        }
+
+                        if (found_original_message == false)
+                        {
+                            Log::Line(Log::EMERG, "UbipalService::HandleConnection: msgs_awaiting_reply did not have the original message");
+                            us->reply_callback_mutex.unlock();
+                            RETURN_STATUS(GENERAL_FAILURE);
+                        }
+
+                        us->reply_callback_mutex.unlock();
+                        status = callback_func(us, original_message, message);
+                        RETURN_STATUS(status);
+                    }
+                    else
+                    {
+                        // else we toss the message
+                        Log::Line(Log::INFO, "UbipalService::HandleConnection: Received a reply to a message we were not expecting or did not send.");
+                        us->reply_callback_mutex.unlock();
+                        RETURN_STATUS(status);
+                    }
+                }
+
                 // TODO check against ACLs
 
                 // find function to call
@@ -519,7 +578,7 @@ namespace UbiPAL
                     RETURN_STATUS(GENERAL_FAILURE);
                 }
 
-                status = found->second(message.message, message.argument, message.arg_len);
+                status = found->second(us, message);
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::WARN, "UbipalService::HandleConnection: Callback returned %d, %s", status, GetErrorDescription(status));
@@ -762,6 +821,41 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalService::ReplyToMessage(const uint32_t flags, const Message* const msg, const char* const arg, const uint32_t arg_len)
+    {
+        int status = SUCCESS;
+        NamespaceCertificate reply_to;
+        std::string message;
+
+        // Set reply message
+        message = "REPLY_" + msg->msg_id;
+
+        // Find NamespaceCertificate
+        std::vector<NamespaceCertificate> names;
+        bool found_name = false;
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, names);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+        for (unsigned int i = 0; i < names.size(); ++i)
+        {
+            if (names[i].id == msg->from)
+            {
+                reply_to = names[i];
+                found_name = true;
+                break;
+            }
+        }
+
+        if (found_name == false)
+        {
+            return NAMESPACE_CERTIFICATE_NOT_FOUND;
+        }
+
+        return SendMessage(flags, reply_to, message, arg, arg_len);
+    }
+
     int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
                                    const char* const arg, const uint32_t arg_len)
     {
@@ -798,7 +892,7 @@ namespace UbiPAL
         msg->from = id;
         msg->message = message;
 
-        // register callback function for replies
+        // register callback function for replies and record outgoing message
         if (reply_callback != nullptr)
         {
             reply_callback_mutex.lock();
@@ -809,7 +903,9 @@ namespace UbiPAL
                 returned_pair.first->second = reply_callback;
             }
 
+            msgs_awaiting_reply.push_back(msg);
             reply_callback_mutex.unlock();
+
         }
 
         sm_args = new HandleSendMessageArguments(this);
@@ -817,6 +913,10 @@ namespace UbiPAL
         sm_args->port = to.port;
         sm_args->msg = msg;
         sm_args->flags = flags;
+        if (reply_callback != nullptr)
+        {
+            sm_args->flags |= SendMessageFlags::MESSAGE_AWAIT_REPLY;
+        }
 
         if ((flags & SendMessageFlags::NONBLOCKING) != 0)
         {
@@ -953,7 +1053,10 @@ namespace UbiPAL
         }
 
         exit:
-            free(sm_args->msg);
+            if ((sm_args->flags & SendMessageFlags::MESSAGE_AWAIT_REPLY) == 0)
+            {
+                free(sm_args->msg);
+            }
             free(sm_args);
             free(bytes);
             return nullptr;

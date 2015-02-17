@@ -10,18 +10,22 @@
 #include "../src/error.h"
 #include "../src/log.h"
 
-int printer(std::string message, char* arg, uint32_t arg_len)
+int printer(UbiPAL::UbipalService* us, UbiPAL::Message message)
 {
     // for my own sanity, ensure everything is good
-    if (message.compare(std::string("PrintToScreen")) != 0)
+    if (message.message.compare(std::string("PrintToScreen")) != 0)
     {
-        std::cout << "Something wrong has happened. We received a message of type " << message << std::endl;
+        std::cout << "Something wrong has happened. We received a message of type " << message.message << std::endl;
         return UbiPAL::GENERAL_FAILURE;
     }
 
     // now handle the argument given us how we want to
-    std::string to_print(arg, arg_len);
+    std::string to_print(message.argument, message.arg_len);
     std::cout << to_print << std::endl;
+
+    // reply to message
+    std::string reply_string("Printed by " + us->GetId() + "!");
+    us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, reply_string.c_str(), reply_string.size() + 1);
 
     // tell UbiPAL everything went well
     return UbiPAL::SUCCESS;

@@ -28,6 +28,7 @@ namespace UbiPAL
             case INVALID_NETWORK_ENCODING: return "INVALID_NETWORK_ENCODING: Invalid network encoding.";
             case MESSAGE_WRONG_DESTINATION: return "MESSAGE_WRONG_DESTINATION: A message was received at a service to which it was not addressed.";
             case SIGNATURE_INVALID: return "SIGNATURE_INVALID: A message signature failed validation on the receiving end.";
+            case NAMESPACE_CERTIFICATE_NOT_FOUND: return "NAMESPACE_CERTIFICATE_NOT_FOUND: The desired namespace certificate could not be located.";
             default: return "Error code does not have description.";
         }
     }

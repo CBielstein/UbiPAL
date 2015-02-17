@@ -234,7 +234,7 @@ namespace UbiPAL
         return status;
     }
 
-    int test_callback(std::string message, char* arg, uint32_t arg_len)
+    int test_callback(UbipalService* us, Message message)
     {
         return SUCCESS;
     }
@@ -262,7 +262,7 @@ namespace UbiPAL
         return status;
     }
 
-    int test_callback2(std::string message, char* arg, uint32_t arg_len)
+    int test_callback2(UbipalService* us, Message message)
     {
         return SUCCESS + 1;
     }
