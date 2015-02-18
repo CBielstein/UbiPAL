@@ -1256,6 +1256,52 @@ namespace UbiPAL
             return status;
     }
 
+    int RsaWrappersTests::RsaWrappersPrivateKeyString()
+    {
+        int status = SUCCESS;
+        RSA* key = nullptr;
+        RSA* result_key = nullptr;
+        std::string key_string;
+
+        status = RsaWrappers::GenerateRsaKey(key);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::PrivateKeyToString(key, key_string);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::StringToPrivateKey(key_string, result_key);
+        if (status != SUCCESS)
+        {
+            goto exit;
+        }
+
+        status = RsaWrappers::KeysEqual(key, result_key);
+        if (status == 1)
+        {
+            status = SUCCESS;
+            goto exit;
+        }
+        else if (status == 0)
+        {
+            status = GENERAL_FAILURE;
+            goto exit;
+        }
+        else
+        {
+            goto exit;
+        }
+
+        exit:
+            RSA_free(key);
+            return status;
+    }
+
     void RsaWrappersTests::RunRsaWrappersTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(RsaWrappersGenerateKey, SUCCESS,
@@ -1308,5 +1354,7 @@ namespace UbiPAL
                                  "RsaWrappersKeyStringEncrypt", module_count, module_fails);
         TestHelpers::RunTestFunc(RsaWrappersSignatureLength, SUCCESS,
                                  "RsaWrappersSignatureLength", module_count, module_fails);
+        TestHelpers::RunTestFunc(RsaWrappersPrivateKeyString, SUCCESS,
+                                 "RsaWrappersPrivateKeyString", module_count, module_fails);
     }
 }

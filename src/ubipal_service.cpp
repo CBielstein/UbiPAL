@@ -32,6 +32,56 @@ namespace UbiPAL
 {
     UbipalService::UbipalService() : UbipalService(NULL, NULL) {}
 
+    UbipalService::UbipalService(const std::string& file_path)
+    {
+        int status = SUCCESS;
+        RSA* _private_key = nullptr;
+        FILE* fd = nullptr;
+        char buf[1024];
+        char* port = nullptr;
+        std::string line;
+
+        fd = fopen(file_path.c_str(), "r");
+        if (fd == nullptr)
+        {
+            Log::Line(Log::WARN, "UbipalService::UbipalService(const std::string& file_path): Failed to open file_path: %s", file_path.c_str());
+            return;
+        }
+
+        if (fgets(buf, 1024, fd) == nullptr)
+        {
+            Log::Line(Log::WARN, "UbipalService::UbipalService(const std::string& file_path): fgets failed");
+            return;
+        }
+        // remove newline, if applicable
+        if (buf[strlen(buf) - 1] == '\n')
+        {
+            buf[strlen(buf) - 1] = '\0';
+        }
+        line = buf;
+        status = RsaWrappers::StringToPrivateKey(line, _private_key);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::WARN, "UbipalService::UbipalService(const std::string& file_path): StringToPrivateKey: %s", GetErrorDescription(status));
+            return;
+        }
+
+        if (fgets(buf, 1024, fd) != nullptr)
+        {
+            if (buf[strlen(buf) - 1] == '\n')
+            {
+                buf[strlen(buf) - 1] = '\0';
+            }
+            port = buf;
+        }
+        else
+        {
+            port = NULL;
+        }
+
+        UbipalService(_private_key, port);
+    }
+
     UbipalService::UbipalService(const RSA* const _private_key, const char* const _port)
     {
         int status = SUCCESS;
@@ -184,6 +234,46 @@ namespace UbiPAL
 
         // close socket
         close(sockfd);
+    }
+
+    int UbipalService::SaveService(const std::string& file_path)
+    {
+        int status = SUCCESS;
+        unsigned int returned_value = 0;
+        FILE* fp = nullptr;
+        std::string key;
+
+        fp = fopen(file_path.c_str(), "w");
+        if (fp == nullptr)
+        {
+            return OPEN_FILE_FAILED;
+        }
+
+        status = RsaWrappers::PrivateKeyToString(private_key, key);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        returned_value = fwrite(key.c_str(), sizeof(char), key.size(), fp);
+        if (returned_value != key.size() * sizeof(char))
+        {
+            return FAILED_FILE_WRITE;
+        }
+
+        returned_value = fwrite("\n", sizeof(char), 1, fp);
+        if (returned_value != 1 * sizeof(char))
+        {
+            return FAILED_FILE_WRITE;
+        }
+
+        returned_value = fwrite(port.c_str(), sizeof(char), port.size(), fp);
+        if (returned_value != port.size())
+        {
+            return FAILED_FILE_WRITE;
+        }
+
+        return status;
     }
 
     int UbipalService::BeginRecv(const uint32_t flags)

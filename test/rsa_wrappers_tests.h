@@ -47,6 +47,7 @@ namespace UbiPAL
             static int RsaWrappersKeyStringVerify();
             static int RsaWrappersKeyStringEncrypt();
             static int RsaWrappersSignatureLength();
+            static int RsaWrappersPrivateKeyString();
 
             // End unit tests
         public:

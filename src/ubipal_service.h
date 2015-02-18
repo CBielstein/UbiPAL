@@ -49,12 +49,13 @@ namespace UbiPAL
             //          [IN] port: Binds to this port. If NULL, picks a random port
             UbipalService(const RSA* const _private_key, const char* const _port);
 
-            // TODO XXX ???
             // UbipalService
             // Constructor: pointed to a file, recovers the settings in the file
+            // File format is private key\nport
+            // port is optional
             // args
             //          [IN] file_path: The path to the file which holds the settings for this server
-            // UbipalService(const std::string& file_path);
+            UbipalService(const std::string& file_path);
 
             // ~UbipalService
             // Destructor
@@ -64,14 +65,14 @@ namespace UbiPAL
             // Only one of each service should exist to avoid double receiving
             UbipalService(const UbipalService& other) = delete;
 
-            // TODO XXX ???
             // SaveService
-            // Given a file pointer, saves the relevant information to a file for restarting the service later
+            // Given a file path, saves the relevant information to a file for restarting the service later
+            // File format is private key\nport
             // args
             //          [IN] file_path: a path at which to save the file, overwrites the file at that destination
             // return
             //          int: status. SUCCESS on successful write, failure otherwise
-            // int SaveService(const std::string& file_path);
+            int SaveService(const std::string& file_path);
 
             // Flags for BeginRecv
             enum BeginRecvFlags

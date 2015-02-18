@@ -321,6 +321,44 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalServiceTests::UbipalServiceTestSaveReadFile()
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+        UbipalService us1;
+        std::string line("test_save_service");
+
+        status = us1.SaveService(line);
+        if (status != SUCCESS);
+        {
+            remove(line.c_str());
+            return status;
+        }
+
+        UbipalService us2(line);
+
+        returned_value = RsaWrappers::KeysEqual(us1.private_key, us2.private_key);
+        if (returned_value == 0)
+        {
+            remove(line.c_str());
+            return GENERAL_FAILURE;
+        }
+        else if (returned_value < 0)
+        {
+            remove(line.c_str());
+            return returned_value;
+        }
+
+        if (us1.port != us2.port)
+        {
+            remove(line.c_str());
+            return GENERAL_FAILURE;
+        }
+
+        remove(line.c_str());
+        return status;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -343,5 +381,7 @@ namespace UbiPAL
                                  "UbipalServiceTestRegisterCallback", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestRegisterCallbackUpdate, SUCCESS,
                                  "UbipalServiceTestRegisterCallbackUpdate", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestSaveReadFile, SUCCESS,
+                                 "UbipalServiceTestSaveReadFile", module_count, module_fails);
     }
 }

@@ -520,4 +520,286 @@ namespace UbiPAL
             }
             FUNCTION_END;
     }
+
+    int RsaWrappers::PrivateKeyToString(const RSA* const key, std::string& str)
+    {
+        FUNCTION_START;
+        char* num = nullptr;
+
+        // check args
+        if (key == nullptr)
+        {
+            RETURN_STATUS(NULL_ARG);
+        }
+
+        // private elements must be present
+        returned_value = IsPrivateKey(key);
+        if (returned_value == 0)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        else if (returned_value < 0)
+        {
+            RETURN_STATUS(returned_value);
+        }
+
+        // empty the string
+        if (str.empty() == false)
+        {
+            str.erase();
+        }
+
+        // append n
+        num = BN_bn2hex(key->n);
+        if (num == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+        str.append(num);
+        OPENSSL_free(num);
+
+        // append '-'
+        str.append("-");
+
+        // append e
+        num = BN_bn2hex(key->e);
+        if (num == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+        str.append(num);
+        OPENSSL_free(num);
+
+        // append '-'
+        str.append("-");
+
+        // append d
+        num = BN_bn2hex(key->d);
+        if (num == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+        str.append(num);
+        OPENSSL_free(num);
+
+        // append '-'
+        str.append("-");
+
+        // append p if it's present in the key
+        if (key->p != nullptr)
+        {
+            num = BN_bn2hex(key->p);
+            if (num == nullptr)
+            {
+                RETURN_STATUS(OPENSSL_ERROR);
+            }
+            str.append(num);
+            OPENSSL_free(num);
+        }
+
+        // append '-'
+        str.append("-");
+
+        // append q if it's present in the key
+        if (key->q != nullptr)
+        {
+            num = BN_bn2hex(key->q);
+            if (num == nullptr)
+            {
+                RETURN_STATUS(OPENSSL_ERROR);
+            }
+            str.append(num);
+            OPENSSL_free(num);
+        }
+
+        // append '-'
+        str.append("-");
+
+        // append dmp1 if it's present in the key
+        if (key->dmp1 != nullptr)
+        {
+            num = BN_bn2hex(key->dmp1);
+            if (num == nullptr)
+            {
+                RETURN_STATUS(OPENSSL_ERROR);
+            }
+            str.append(num);
+            OPENSSL_free(num);
+        }
+
+        // append '-'
+        str.append("-");
+
+        // append dmq1 if it's present in the key
+        if (key->dmq1 != nullptr)
+        {
+            num = BN_bn2hex(key->dmq1);
+            if (num == nullptr)
+            {
+                RETURN_STATUS(OPENSSL_ERROR);
+            }
+            str.append(num);
+            OPENSSL_free(num);
+        }
+
+        // append '-'
+        str.append("-");
+
+        // append iqmp if it's present in the key
+        if (key->iqmp != nullptr)
+        {
+            num = BN_bn2hex(key->iqmp);
+            if (num == nullptr)
+            {
+                RETURN_STATUS(OPENSSL_ERROR);
+            }
+            str.append(num);
+            OPENSSL_free(num);
+        }
+
+        exit:
+            FUNCTION_END;
+    }
+
+    int RsaWrappers::StringToPrivateKey(const std::string& str, RSA*& key)
+    {
+        FUNCTION_START;
+        std::string num;
+        size_t begin = 0;
+        size_t end = 0;
+
+        if (str.empty() == true)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        // allocate key
+        key = RSA_new();
+        if (key == nullptr)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse n
+        begin = 0;
+        end = str.find('-');
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->n, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse e
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->e, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse d
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->d, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse p
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->p, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse q
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->q, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse dmp1
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->dmp1, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse dmq1
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end == std::string::npos)
+        {
+            RETURN_STATUS(INVALID_ARG);
+        }
+        num = str.substr(begin, end - begin);
+        returned_value = BN_hex2bn(&key->dmq1, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        // parse iqmp
+        begin = end + 1;
+        end = str.find('-', begin);
+        if (end != std::string::npos)
+        {
+            // in this case, if there IS another segment,
+            // it's incorrect and we should fail
+            RETURN_STATUS(INVALID_ARG);
+        }
+        // take substring to the end of the string
+        num = str.substr(begin);
+        returned_value = BN_hex2bn(&key->iqmp, num.c_str());
+        if (returned_value < 1)
+        {
+            RETURN_STATUS(OPENSSL_ERROR);
+        }
+
+        exit:
+            if (status != SUCCESS)
+            {
+                RSA_free(key);
+            }
+            FUNCTION_END;
+    }
 }

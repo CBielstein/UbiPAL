@@ -23,6 +23,7 @@ namespace UbiPAL
             static int UbipalServiceTestSetDescription();
             static int UbipalServiceTestRegisterCallback();
             static int UbipalServiceTestRegisterCallbackUpdate();
+            static int UbipalServiceTestSaveReadFile();
 
             // End Unit tests
 

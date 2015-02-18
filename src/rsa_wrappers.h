@@ -122,7 +122,7 @@ namespace UbiPAL
             // Format is "n-e"
             // args
             //          [IN] key: The key
-            //          [IN/OUT] str: The string which will hold the representation
+            //          [OUT] str: The string which will hold the representation
             // return
             //          int: SUCCESS on success, negative error otherwise
             static int PublicKeyToString(const RSA* const key, std::string& str);
@@ -132,10 +132,30 @@ namespace UbiPAL
             // Format is "n-e"
             // args
             //          [IN] str: the string representing the public key
-            //          [IN/OUT] key: a pointer to allocate and set the public key
+            //          [OUT] key: a pointer to allocate and set the public key
             // return
             //          int: SUCCESS on success, negative error otherwise
             static int StringToPublicKey(const std::string& str, RSA*& key);
+
+            // PrivateKeyToString
+            // Creates a string representation of the given private key
+            // Format is "n-e-d-q-p-dmp1-dmq1-iqmp"
+            // args
+            //          [IN] key: The key
+            //          [OUT] str: The string which will hold the representation
+            // return
+            //          int: SUCCESS on success, negative error otherwise
+            static int PrivateKeyToString(const RSA* const key, std::string& str);
+
+            // StringToPrivateKey
+            // Allocates and creates a private key from the given string
+            // Format is "n-e-d-q-p-dmp1-dmq1-iqmp"
+            // args
+            //          [IN] str: the string representing the public key
+            //          [OUT] key: a pointer to allocate and set the public key
+            // return
+            //          int: SUCCESS on success, negative error otherwise
+            static int StringToPrivateKey(const std::string& str, RSA*& key);
 
         private:
             // IsPrivateKey
