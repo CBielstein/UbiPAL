@@ -462,6 +462,50 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
+                if (message.message.compare(0, strlen("REVOKE_"), "REVOKE_") == 0)
+                {
+                    us->external_acls_mutex.lock();
+                    returned_value = message.message.find("_");
+                    std::string revoke_id = message.message.substr(returned_value + 1);
+
+                    // if the message is a revocation, take the necessary action then return
+                    if (us->trusted_services.count(message.from) == 1)
+                    {
+                        if (us->trusted_services[message.from].msg_id == revoke_id)
+                        {
+                            us->trusted_services.erase(message.from);
+                            us->external_acls_mutex.unlock();
+                            RETURN_STATUS(status);
+                        }
+                    }
+
+                    if (us->untrusted_services.count(message.from) == 1)
+                    {
+                        if (us->untrusted_services[message.from].msg_id == revoke_id)
+                        {
+                            us->untrusted_services.erase(message.from);
+                            us->external_acls_mutex.unlock();
+                            RETURN_STATUS(status);
+                        }
+                    }
+
+                    if (us->external_acls.count(message.from) == 1)
+                    {
+                        for (unsigned int i = 0; i < us->external_acls[message.from].size(); ++i)
+                        {
+                            if (us->external_acls[message.from][i].msg_id == revoke_id)
+                            {
+                                us->external_acls[message.from].erase(us->external_acls[message.from].begin() + i);
+                                us->external_acls_mutex.unlock();
+                                RETURN_STATUS(status);
+                            }
+                        }
+                    }
+
+                    us->external_acls_mutex.unlock();
+                    RETURN_STATUS(status);
+                }
+
                 status = us->CheckAcls(message.message, message.from, message.to, NULL, NULL);
                 if (status != SUCCESS)
                 {
@@ -574,8 +618,8 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
-
                 // find all the acls from this service
+                us->external_acls_mutex.lock();
                 acl_itr = us->external_acls.find(acl.id);
                 if (acl_itr == us->external_acls.end())
                 {
@@ -585,6 +629,7 @@ namespace UbiPAL
                     if (emplace_ret.second == false)
                     {
                         Log::Line(Log::EMERG, "UbipalService::HandleConnection: external_acls.emplace failed");
+                        us->external_acls_mutex.unlock();
                         RETURN_STATUS(GENERAL_FAILURE);
                     }
                 }
@@ -596,6 +641,7 @@ namespace UbiPAL
                         if (acl_itr->second[i].msg_id.compare(acl.msg_id))
                         {
                             // we've already heard this one, so we're done.
+                            us->external_acls_mutex.unlock();
                             RETURN_STATUS(SUCCESS);
                         }
                     }
@@ -604,8 +650,8 @@ namespace UbiPAL
                     acl_itr->second.push_back(acl);
                 }
 
-                fprintf(stderr, "ACLs received: %lu\n", us->external_acls.size());
-                break;
+                us->external_acls_mutex.unlock();
+                RETURN_STATUS(status);
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -999,6 +1045,10 @@ namespace UbiPAL
     int UbipalService::CheckAcls(const std::string& message, const std::string& sender, const std::string& receiver,
                                  std::vector<std::string>* acl_trail, std::vector<std::string>* conditions)
     {
+        local_acls_mutex.lock();
+        external_acls_mutex.lock();
+
+        int status = SUCCESS;
         std::vector<std::string> acl_trail_new;
         std::vector<std::string> conditions_new;
 
@@ -1011,7 +1061,12 @@ namespace UbiPAL
             conditions = &conditions_new;
         }
 
-        return CheckAclsRecurse(message, sender, receiver, receiver, *acl_trail, *conditions);
+        status = CheckAclsRecurse(message, sender, receiver, receiver, *acl_trail, *conditions);
+
+        external_acls_mutex.unlock();
+        local_acls_mutex.unlock();
+
+        return status;
     }
 
     int UbipalService::CheckAclsRecurse(const std::string& message, const std::string& sender, const std::string& receiver, const std::string& current,
@@ -1239,10 +1294,10 @@ namespace UbiPAL
                 break;
             }
         }
+        local_acls_mutex.unlock();
 
         // TODO network notifications
 
-        local_acls_mutex.unlock();
         return status;
     }
 }

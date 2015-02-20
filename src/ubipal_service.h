@@ -347,6 +347,9 @@ namespace UbiPAL
             // maps the public key string representation to any acls it has sent
             std::unordered_map<std::string, std::vector<AccessControlList>> external_acls;
 
+            // prevents toc-tou race in external_acls
+            std::mutex external_acls_mutex;
+
             // some data structure to hold our rules array of strings or something
             std::vector<AccessControlList> local_acls;
 
