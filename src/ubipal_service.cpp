@@ -658,7 +658,56 @@ namespace UbiPAL
                     }
                 }
 
-                // TODO check against ACLs
+                if (message.message == std::string("REVOKE"))
+                {
+                    us->external_acls_mutex.lock();
+                    std::string revoke_id(message.argument, message.arg_len);
+
+                    // if the message is a revocation, take the necessary action then return
+                    if (us->trusted_services.count(message.from) == 1)
+                    {
+                        if (us->trusted_services[message.from].msg_id == revoke_id)
+                        {
+                            us->trusted_services.erase(message.from);
+                            us->external_acls_mutex.unlock();
+                            RETURN_STATUS(status);
+                        }
+                    }
+
+                    if (us->untrusted_services.count(message.from) == 1)
+                    {
+                        if (us->untrusted_services[message.from].msg_id == revoke_id)
+                        {
+                            us->untrusted_services.erase(message.from);
+                            us->external_acls_mutex.unlock();
+                            RETURN_STATUS(status);
+                        }
+                    }
+
+                    if (us->external_acls.count(message.from) == 1)
+                    {
+                        for (unsigned int i = 0; i < us->external_acls[message.from].size(); ++i)
+                        {
+                            if (us->external_acls[message.from][i].msg_id == revoke_id)
+                            {
+                                us->external_acls[message.from].erase(us->external_acls[message.from].begin() + i);
+                                us->external_acls_mutex.unlock();
+                                RETURN_STATUS(status);
+                            }
+                        }
+                    }
+
+                    us->external_acls_mutex.unlock();
+                    RETURN_STATUS(status);
+                }
+
+                // check against ACLs
+                status = us->CheckAcls(message.message, message.from, message.to, NULL, NULL);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
 
                 // find function to call
                 found = us->callback_map.find(message.message);
@@ -765,8 +814,8 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
-
                 // find all the acls from this service
+                us->external_acls_mutex.lock();
                 acl_itr = us->external_acls.find(acl.id);
                 if (acl_itr == us->external_acls.end())
                 {
@@ -776,6 +825,7 @@ namespace UbiPAL
                     if (emplace_ret.second == false)
                     {
                         Log::Line(Log::EMERG, "UbipalService::HandleConnection: external_acls.emplace failed");
+                        us->external_acls_mutex.unlock();
                         RETURN_STATUS(GENERAL_FAILURE);
                     }
                 }
@@ -787,6 +837,7 @@ namespace UbiPAL
                         if (acl_itr->second[i].msg_id.compare(acl.msg_id))
                         {
                             // we've already heard this one, so we're done.
+                            us->external_acls_mutex.unlock();
                             RETURN_STATUS(SUCCESS);
                         }
                     }
@@ -795,8 +846,8 @@ namespace UbiPAL
                     acl_itr->second.push_back(acl);
                 }
 
-                fprintf(stderr, "ACLs received: %lu\n", us->external_acls.size());
-                break;
+                us->external_acls_mutex.unlock();
+                RETURN_STATUS(status);
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -1258,5 +1309,259 @@ namespace UbiPAL
         num_recv_threads = recv_threads;
         num_send_threads = send_threads;
         return SUCCESS;
+    }
+
+    int UbipalService::CheckAcls(const std::string& message, const std::string& sender, const std::string& receiver,
+                                 std::vector<std::string>* acl_trail, std::vector<std::string>* conditions)
+    {
+        local_acls_mutex.lock();
+        external_acls_mutex.lock();
+
+        int status = SUCCESS;
+        std::vector<std::string> acl_trail_new;
+        std::vector<std::string> conditions_new;
+
+        if (acl_trail == nullptr)
+        {
+            acl_trail = &acl_trail_new;
+        }
+        if (conditions == nullptr)
+        {
+            conditions = &conditions_new;
+        }
+
+        status = CheckAclsRecurse(message, sender, receiver, receiver, *acl_trail, *conditions);
+
+        external_acls_mutex.unlock();
+        local_acls_mutex.unlock();
+
+        return status;
+    }
+
+    int UbipalService::CheckAclsRecurse(const std::string& message, const std::string& sender, const std::string& receiver, const std::string& current,
+                                        std::vector<std::string>& acl_trail, std::vector<std::string>& conditions)
+    {
+        int status = SUCCESS;
+        size_t first_can = 0;
+        size_t first_can_say = 0;
+        std::vector<std::string> new_acl_trail;
+        std::vector<std::string> new_conditions;
+        std::vector<ConsiderService> to_consider;
+        ConsiderService temp_consider;
+        std::vector<AccessControlList> current_acls;
+        std::unordered_map<std::string, std::vector<AccessControlList>>::iterator external_acls_itr;
+
+        if (current == id)
+        {
+            current_acls = local_acls;
+        }
+        else
+        {
+            external_acls_itr = external_acls.find(current);
+            if (external_acls_itr == external_acls.end())
+            {
+                return NOT_IN_ACLS;
+            }
+            else
+            {
+                current_acls = external_acls_itr->second;
+            }
+        }
+
+        // for each of the vectors of ACLs from service
+        for (unsigned int i = 0; i < current_acls.size(); ++i)
+        {
+            // ensure this ACL hasn't been seen before, we don't want loops
+            for (unsigned int k = 0; k < acl_trail.size(); ++k)
+            {
+                if (acl_trail[k] == current_acls[i].msg_id)
+                {
+                    continue;
+                }
+            }
+
+            // for each rules in the acl
+            for (unsigned int j = 0; j < current_acls[i].rules.size(); ++j)
+            {
+                // if message is mentioned in rule
+                if (current_acls[i].rules[j].find(message) != std::string::npos)
+                {
+                    // verbs are either can, can say, or is
+                    first_can = current_acls[i].rules[j].find("can");
+                    first_can_say = current_acls[i].rules[j].find("can say");
+
+                    // if rule first verb is "can say"
+                    if (first_can_say <= first_can && first_can_say != std::string::npos)
+                    {
+                        // push_back on vector to be considered later
+                        temp_consider.service_id = current_acls[i].id;
+                        temp_consider.referenced_from_acl = current_acls[i].msg_id;
+                        // TODO record the conditions needed
+                        to_consider.push_back(temp_consider);
+                    }
+                    // if rules first verb is "can"
+                    else if (first_can != std::string::npos && first_can_say == std::string::npos)
+                    {
+                        // check if this rule is talking about the sender and the receiver, if not continue;
+                        if ((current_acls[i].rules[j].compare(0, sender.size(), sender) != 0) ||
+                            current_acls[i].rules[j].find(receiver) == std::string::npos)
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            temp_consider.service_id = current;
+                            temp_consider.referenced_from_acl = current_acls[i].msg_id;
+                            // TODO record the conditions needed
+                            to_consider.insert(to_consider.begin(), temp_consider);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (to_consider.size() == 0)
+        {
+            return NOT_IN_ACLS;
+        }
+
+        // call this recursively for each in the consideration vector
+        for (unsigned int i = 0; i < to_consider.size(); ++i)
+        {
+            // if to_consider[i].id is current, then just check conditions
+            if (to_consider[i].service_id == current)
+            {
+                // TODO CHECK CONDITIONS
+                return SUCCESS;
+            }
+            // else recurse
+            else
+            {
+                // set up temporary recursion variables
+                new_acl_trail = acl_trail;
+                new_acl_trail.push_back(to_consider[i].referenced_from_acl);
+                new_conditions = conditions;
+                for (unsigned int j = 0; j < to_consider[i].conditions.size(); ++j)
+                {
+                    new_conditions.push_back(to_consider[i].conditions[j]);
+                }
+
+                // TODO push on to acl_trail and conditions
+                status = CheckAclsRecurse(message, sender, receiver, to_consider[i].service_id, acl_trail, conditions);
+                if (status == SUCCESS)
+                {
+                    acl_trail = new_acl_trail;
+                    conditions = new_conditions;
+                    return status;
+                }
+                else if (status != NOT_IN_ACLS || status != FAILED_CONDITIONS)
+                {
+                    return status;
+                }
+            }
+        }
+
+        return NOT_IN_ACLS;
+    }
+
+    int UbipalService::CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)
+    {
+        local_acls_mutex.lock();
+
+        int status = SUCCESS;
+
+        AccessControlList temp_acl;
+
+        temp_acl.id = id;
+        temp_acl.description = description;
+        temp_acl.rules = rules;
+
+        local_acls.push_back(temp_acl);
+        result = temp_acl;
+
+        local_acls_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::GetAcl(const uint32_t flags, const std::string& search_term, AccessControlList& acl)
+    {
+        bool search_id = false;
+        bool search_desc = false;
+        if ((flags & ~(GetAclFlags::SEARCH_BY_ID | GetAclFlags::SEARCH_BY_DESC)) != 0)
+        {
+            return INVALID_ARG;
+        }
+        if ((flags & GetAclFlags::SEARCH_BY_ID) != 0)
+        {
+            search_id = true;
+        }
+        if ((flags & GetAclFlags::SEARCH_BY_DESC) != 0)
+        {
+            if (search_id == true)
+            {
+                return INVALID_ARG;
+            }
+            search_desc = true;
+        }
+
+        local_acls_mutex.lock();
+
+        for (unsigned int i = 0; i < local_acls.size(); ++i)
+        {
+            if (search_desc && (search_term == local_acls[i].description))
+            {
+                acl = local_acls[i];
+                return SUCCESS;
+            }
+            if (search_id && (search_term == local_acls[i].msg_id))
+            {
+                acl = local_acls[i];
+                return SUCCESS;
+            }
+        }
+
+        return NOT_FOUND;
+    }
+
+    int UbipalService::RevokeAcl(const uint32_t flags, const std::string& acl, const NamespaceCertificate* const send_to)
+    {
+        // check flags
+        if ((flags & ~(RevokeAclFlags::NO_SENDING | RevokeAclFlags::BROADCAST)) != 0)
+        {
+            return INVALID_ARG;
+        }
+
+        // convert to bool for ease of use later
+        bool no_sending = false;
+        // bool broadcast = false;
+        if ((flags & RevokeAclFlags::NO_SENDING) != 0)
+        {
+            no_sending = true;
+        }
+        if ((flags & RevokeAclFlags::BROADCAST) != 0)
+        {
+            if (no_sending == true)
+            {
+                return INVALID_ARG;
+            }
+        //    broadcast = true;
+        }
+
+        local_acls_mutex.lock();
+        int status = SUCCESS;
+
+        for (unsigned int i = 0; i < local_acls.size(); ++i)
+        {
+            if (local_acls[i].msg_id == acl)
+            {
+                local_acls.erase(local_acls.begin() + i);
+                break;
+            }
+        }
+        local_acls_mutex.unlock();
+
+        // TODO network notifications
+
+        return status;
     }
 }

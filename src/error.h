@@ -30,6 +30,9 @@ namespace UbiPAL
         MESSAGE_WRONG_DESTINATION = -15,
         SIGNATURE_INVALID = -16,
         NAMESPACE_CERTIFICATE_NOT_FOUND = -17,
+        NOT_IN_ACLS = -18,
+        FAILED_CONDITIONS = -19,
+        NOT_FOUND = -20,
     };
 
     // get_error_description
