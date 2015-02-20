@@ -462,11 +462,10 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
-                if (message.message.compare(0, strlen("REVOKE_"), "REVOKE_") == 0)
+                if (message.message == std::string("REVOKE"))
                 {
                     us->external_acls_mutex.lock();
-                    returned_value = message.message.find("_");
-                    std::string revoke_id = message.message.substr(returned_value + 1);
+                    std::string revoke_id(message.argument, message.arg_len);
 
                     // if the message is a revocation, take the necessary action then return
                     if (us->trusted_services.count(message.from) == 1)
