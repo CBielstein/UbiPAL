@@ -222,6 +222,18 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int SendName(const uint32_t flags, const std::string& address, const std::string& port);
 
+            // SendAcl
+            // Sends an AccessControlList to send_to. If sent_to is null, then broadcast it
+            // args
+            //          [IN] flags: Flags, including:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] acl: The access control list to send
+            //          [IN] send_to: the NamespaceCertificate of the service to which to send. If send_to is null, broadcast
+            //  return
+            //          int: SUCCESS on success, negative error on failure
+            int SendAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
+
             // CreateAcl
             // adds a new Acl to the list of local acls with the given rule-s
             // args
@@ -252,16 +264,13 @@ namespace UbiPAL
             //          int: SUCCESS on success, NOT_FOUND if not found, other negative error code on error
             int GetAcl(const uint32_t flags, const std::string& search_term, AccessControlList& acl);
 
-            // XXX
-            // if send_to is null, broadcast, if it's non-null, send it to a specific location
-            int SendAcl(const AccessControlList* const acl, const NamespaceCertificate* const send_to) const;
-
             // RevokeAclFlags
             // Flags for the RevokeAcl function, descriptions in the comments for that function
             enum RevokeAclFlags
             {
                 NO_SENDING = 2 << 0,
                 BROADCAST = 2 << 1,
+                NO_ENCRYPT = 2 << 2,
             };
 
             // RevokeAcl
@@ -270,11 +279,12 @@ namespace UbiPAL
             //          [IN] flags:
             //                  NO_SENDING: Does not send notifications
             //                  BROADCAST: Sends to many parties
+            //                  NO_ENCRYPT: Revoke messages are not encrypted
             //          [IN] acl: the id of the ACL to revoke
             //          [IN] send_to: a service a revoke message
             // returns
             //          int: SUCCESS on success, negative error code if not
-            int RevokeAcl(const uint32_t flags, const std::string& acl, const NamespaceCertificate* const send_to);
+            int RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
             // XXX
             // looks up a name advertising the desired message

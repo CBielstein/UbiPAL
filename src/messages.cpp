@@ -52,10 +52,15 @@ namespace UbiPAL
         char* str_bits = nullptr;
 
         // check args
-        if (buf == nullptr || bytes == nullptr)
+        if (buf == nullptr)
         {
             Log::Line(Log::WARN, "BaseMessage::EncodeBytes: null args EncodeBytes(%p, %u, %p, %u)", buf, buf_len, bytes, bytes_len);
             return NULL_ARG;
+        }
+        if (bytes == nullptr && bytes_len != 0)
+        {
+            Log::Line(Log::WARN, "BaseMessage::EncodeBytes: Invalid argument. bytes is null, but bytes_len = %lu", bytes_len);
+            return INVALID_ARG;
         }
 
         // encode length

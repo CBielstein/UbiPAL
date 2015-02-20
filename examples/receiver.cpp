@@ -108,13 +108,34 @@ int main(int argc, char** argv)
                     std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
                     return status;
                 }
+
+                // send to the world
+                for (unsigned int i = 0; i < services.size(); ++i)
+                {
+                    status = us.SendAcl(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, acl_all, &services[i]);
+                    if (status != UbiPAL::SUCCESS)
+                    {
+                        std::cout << "Failed to send acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                        continue;
+                    }
+                }
                 break;
             case 'b':
-                status = us.RevokeAcl(UbiPAL::UbipalService::RevokeAclFlags::NO_SENDING, acl_all.msg_id, NULL);
+                status = us.GetNames(UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED,
+                                     services);
                 if (status != UbiPAL::SUCCESS)
                 {
-                    std::cout << "Failed to revoke acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    std::cout << "Failed to get service names: " << UbiPAL::GetErrorDescription(status) << std::endl;
                     return status;
+                }
+                for (unsigned int i = 0; i < services.size(); ++i)
+                {
+                    status = us.RevokeAcl(UbiPAL::UbipalService::RevokeAclFlags::NO_ENCRYPT, acl_all, &services[i]);
+                    if (status != UbiPAL::SUCCESS)
+                    {
+                        std::cout << "Failed to revoke acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                        return status;
+                    }
                 }
                 break;
             case 'q': return status;

@@ -5,7 +5,7 @@
 #ifndef UBIPAL_SRC_MESSAGES_H
 #define UBIPAL_SRC_MESSAGES_H
 
-#define MAX_MESSAGE_SIZE 1024
+#define MAX_MESSAGE_SIZE 4096
 
 // ubipal
 #include "rsa_wrappers.h"

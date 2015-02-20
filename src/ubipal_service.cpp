@@ -691,12 +691,14 @@ namespace UbiPAL
                             if (us->external_acls[message.from][i].msg_id == revoke_id)
                             {
                                 us->external_acls[message.from].erase(us->external_acls[message.from].begin() + i);
+                                fprintf(stderr, "Number of exteernal_acls: %lu\n", us->external_acls.size());
                                 us->external_acls_mutex.unlock();
                                 RETURN_STATUS(status);
                             }
                         }
                     }
 
+                    fprintf(stderr, "Number of exteernal_acls: %lu\n", us->external_acls.size());
                     us->external_acls_mutex.unlock();
                     RETURN_STATUS(status);
                 }
@@ -846,6 +848,7 @@ namespace UbiPAL
                     acl_itr->second.push_back(acl);
                 }
 
+                fprintf(stderr, "Number of external_acls: %lu\n", us->external_acls.size());
                 us->external_acls_mutex.unlock();
                 RETURN_STATUS(status);
             default: RETURN_STATUS(GENERAL_FAILURE);
@@ -1255,6 +1258,11 @@ namespace UbiPAL
         }
 
         exit:
+            if (status != SUCCESS)
+            {
+                free(msg);
+                free(sm_args);
+            }
             FUNCTION_END;
     }
 
@@ -1265,6 +1273,58 @@ namespace UbiPAL
         nc.port = port;
 
         return SendName(flags, &nc);
+    }
+
+    int UbipalService::SendAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to)
+    {
+        FUNCTION_START;
+        AccessControlList* msg = nullptr;
+        HandleSendMessageArguments* sm_args = nullptr;
+
+        if ((flags & ~(SendMessageFlags::NONBLOCKING | SendMessageFlags::NO_ENCRYPTION)) != 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::SendName: called with invalid flags");
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        msg = new AccessControlList();
+        msg->msg_id = acl.msg_id;
+        msg->to = send_to->id;
+        msg->from = id;
+        msg->rules = acl.rules;
+
+        sm_args = new HandleSendMessageArguments(this);
+        sm_args->address = send_to->address;
+        sm_args->port = send_to->port;
+        sm_args->msg = msg;
+        sm_args->flags = flags;
+
+        if ((flags & SendMessageFlags::NONBLOCKING) != 0)
+        {
+            // if nonblocking, spin off a thread
+            threads_mutex.lock();
+            send_threads.emplace(send_threads.end());
+            returned_value = pthread_create(&send_threads[send_threads.size() - 1], NULL, HandleSendMessage, sm_args);
+            threads_mutex.unlock();
+            if (returned_value != 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::SendName: pthread_create failed: %d", returned_value);
+                RETURN_STATUS(THREAD_FAILURE);
+            }
+        }
+        else
+        {
+            // call from here!
+            HandleSendMessage(sm_args);
+        }
+
+        exit:
+            if (status != SUCCESS)
+            {
+                free(msg);
+                free(sm_args);
+            }
+            FUNCTION_END;
     }
 
     int UbipalService::GetNames(const uint32_t flags, std::vector<NamespaceCertificate>& names)
@@ -1523,10 +1583,10 @@ namespace UbiPAL
         return NOT_FOUND;
     }
 
-    int UbipalService::RevokeAcl(const uint32_t flags, const std::string& acl, const NamespaceCertificate* const send_to)
+    int UbipalService::RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to)
     {
         // check flags
-        if ((flags & ~(RevokeAclFlags::NO_SENDING | RevokeAclFlags::BROADCAST)) != 0)
+        if ((flags & ~(RevokeAclFlags::NO_SENDING | RevokeAclFlags::BROADCAST | RevokeAclFlags::NO_ENCRYPT)) != 0)
         {
             return INVALID_ARG;
         }
@@ -1552,7 +1612,7 @@ namespace UbiPAL
 
         for (unsigned int i = 0; i < local_acls.size(); ++i)
         {
-            if (local_acls[i].msg_id == acl)
+            if (local_acls[i].msg_id == acl.msg_id)
             {
                 local_acls.erase(local_acls.begin() + i);
                 break;
@@ -1560,7 +1620,24 @@ namespace UbiPAL
         }
         local_acls_mutex.unlock();
 
-        // TODO network notifications
+        if (no_sending == false)
+        {
+            // TODO broadcast network notifications
+            if (send_to != nullptr)
+            {
+                uint32_t send_message_flags = 0;
+                if ((flags & RevokeAclFlags::NO_ENCRYPT) != 0)
+                {
+                    send_message_flags |= SendMessageFlags::NO_ENCRYPTION;
+                }
+                status = SendMessage(send_message_flags, *send_to, std::string("REVOKE") + acl.msg_id, NULL, 0);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::RevokeAcl: Failed to SendMessage: %s", GetErrorDescription(status));
+                    return status;
+                }
+            }
+        }
 
         return status;
     }
