@@ -658,6 +658,7 @@ namespace UbiPAL
                     }
                 }
 
+                // note: currently, each service may only revoke its own ACLs
                 if (message.message == std::string("REVOKE"))
                 {
                     us->external_acls_mutex.lock();
@@ -691,6 +692,10 @@ namespace UbiPAL
                             if (us->external_acls[message.from][i].msg_id == revoke_id)
                             {
                                 us->external_acls[message.from].erase(us->external_acls[message.from].begin() + i);
+                                if (us->external_acls[message.from].size() == 0)
+                                {
+                                    us->external_acls.erase(message.from);
+                                }
                                 fprintf(stderr, "Number of exteernal_acls: %lu\n", us->external_acls.size());
                                 us->external_acls_mutex.unlock();
                                 RETURN_STATUS(status);
@@ -1292,6 +1297,7 @@ namespace UbiPAL
         msg->to = send_to->id;
         msg->from = id;
         msg->rules = acl.rules;
+        msg->id = acl.id;
 
         sm_args = new HandleSendMessageArguments(this);
         sm_args->address = send_to->address;
@@ -1630,7 +1636,7 @@ namespace UbiPAL
                 {
                     send_message_flags |= SendMessageFlags::NO_ENCRYPTION;
                 }
-                status = SendMessage(send_message_flags, *send_to, std::string("REVOKE") + acl.msg_id, NULL, 0);
+                status = SendMessage(send_message_flags, *send_to, std::string("REVOKE"), acl.msg_id.c_str(), acl.msg_id.size());
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::WARN, "UbipalService::RevokeAcl: Failed to SendMessage: %s", GetErrorDescription(status));

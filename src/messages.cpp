@@ -741,6 +741,19 @@ namespace UbiPAL
             status = SUCCESS;
         }
 
+        // encode id
+        status = EncodeString(buf + offset, buf_len - offset, id);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "AccessControlList::Encode: BaseMessage::EncodeString failed: %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+            status = SUCCESS;
+        }
+
         // encode number of strings
         status = EncodeUint32_t(buf + offset, buf_len - offset, rules.size());
         if (status < 0)
@@ -799,6 +812,19 @@ namespace UbiPAL
             status = SUCCESS;
         }
 
+        // decode the id
+        status = DecodeString(buf + offset, buf_len - offset, id);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "AccessControlList::Decode: BaseMessage::DecodeString failed: %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+            status = SUCCESS;
+        }
+
         // decode number of strings
         status = DecodeUint32_t(buf + offset, buf_len - offset, num_rules);
         if (status < 0)
@@ -838,8 +864,11 @@ namespace UbiPAL
 
         length = BaseMessage::EncodedLength();
 
-        length += 4;
+        // id
+        length += 4 + id.size();
 
+        // rules
+        length += 4;
         for (unsigned int i = 0; i < rules.size(); ++i)
         {
             length += 4 + rules[i].size();
