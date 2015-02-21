@@ -710,9 +710,24 @@ namespace UbiPAL
 
                 // check against ACLs
                 status = us->CheckAcls(message.message, message.from, message.to, NULL, NULL);
-                if (status != SUCCESS)
+                if (status == NOT_IN_ACLS)
                 {
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s", GetErrorDescription(status));
+                    us->ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, "NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s for message %s from %s",
+                              GetErrorDescription(status), message.message.c_str(), message.from.c_str());
+                    RETURN_STATUS(status);
+                }
+                else if (status == FAILED_CONDITIONS)
+                {
+                    us->ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, "FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s for message %s from %s",
+                              GetErrorDescription(status), message.message.c_str(), message.from.c_str());
+                    RETURN_STATUS(status);
+                }
+                else if (status != SUCCESS)
+                {
+                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s for message %s from %s",
+                              GetErrorDescription(status), message.message.c_str(), message.from.c_str());
                     RETURN_STATUS(status);
                 }
 
