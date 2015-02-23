@@ -40,16 +40,18 @@ namespace UbiPAL
         free(uuid_char);
     }
 
-    int BaseMessage::EncodeString(char* const buf, const uint32_t buf_len, const std::string& str)
+    BaseMessage::~BaseMessage() {}
+
+    int BaseMessage::EncodeString(unsigned char* const buf, const uint32_t buf_len, const std::string& str)
     {
-        return BaseMessage::EncodeBytes(buf, buf_len, str.c_str(), str.size());
+        return BaseMessage::EncodeBytes(buf, buf_len, (unsigned char*)str.c_str(), str.size());
     }
 
-    int BaseMessage::EncodeBytes(char* const buf, const uint32_t buf_len, const char* const bytes, const uint32_t bytes_len)
+    int BaseMessage::EncodeBytes(unsigned char* const buf, const uint32_t buf_len, const unsigned char* const bytes, const uint32_t bytes_len)
     {
         int status = SUCCESS;
         uint32_t offset = 0;
-        char* str_bits = nullptr;
+        unsigned char* str_bits = nullptr;
 
         // check args
         if (buf == nullptr)
@@ -83,13 +85,13 @@ namespace UbiPAL
             return BUFFER_TOO_SMALL;
         }
         str_bits = buf + offset;
-        strncpy(str_bits, bytes, bytes_len);
+        memcpy(str_bits, bytes, bytes_len);
         offset += bytes_len;
 
         return offset;
     }
 
-    int BaseMessage::EncodeUint32_t(char* const buf, const uint32_t buf_len, const uint32_t number)
+    int BaseMessage::EncodeUint32_t(unsigned char* const buf, const uint32_t buf_len, const uint32_t number)
     {
         uint32_t offset = 0;
         uint32_t length = 4;
@@ -120,13 +122,13 @@ namespace UbiPAL
         return length;
     }
 
-    int BaseMessage::DecodeString(const char* const buf, const uint32_t buf_len, std::string& str)
+    int BaseMessage::DecodeString(const unsigned char* const buf, const uint32_t buf_len, std::string& str)
     {
         int status = SUCCESS;
         uint32_t length = 0;
         uint32_t offset = 0;
-        char* str_bits = nullptr;
-        char* buff = nullptr;
+        unsigned char* str_bits = nullptr;
+        unsigned char* buff = nullptr;
 
         // check args
         if (buf == nullptr)
@@ -137,7 +139,7 @@ namespace UbiPAL
 
         // cast of the constness of buff. It's const in the header to show it won't be changed,
         // but it needs to be non-const for later casts
-        buff = const_cast<char*>(buf);
+        buff = const_cast<unsigned char*>(buf);
         if (buff == nullptr)
         {
             Log::Line(Log::EMERG, "BaseMessage::DecodeString: const_cast failed.");
@@ -168,17 +170,17 @@ namespace UbiPAL
             return BUFFER_TOO_SMALL;
         }
         str_bits = buff + offset;
-        str = std::string(str_bits, length);
+        str = std::string((char*)str_bits, length);
         offset += length;
 
         return offset;
     }
 
-    int BaseMessage::DecodeUint32_t(const char* const buf, const uint32_t buf_len, uint32_t& number)
+    int BaseMessage::DecodeUint32_t(const unsigned char* const buf, const uint32_t buf_len, uint32_t& number)
     {
         uint32_t length = 0;
         uint32_t offset = 0;
-        char* buff = nullptr;
+        unsigned char* buff = nullptr;
         uint32_t* num_ptr = nullptr;
 
         // check args
@@ -190,7 +192,7 @@ namespace UbiPAL
 
         // cast of the constness of buff. It's const in the header to show it won't be changed,
         // but it needs to be non-const for later casts
-        buff = const_cast<char*>(buf);
+        buff = const_cast<unsigned char*>(buf);
         if (buff == nullptr)
         {
             Log::Line(Log::EMERG, "BaseMessage::DecodeUint32_t: const_cast failed.");
@@ -216,12 +218,12 @@ namespace UbiPAL
         return offset;
     }
 
-    int BaseMessage::Decode(const char* const buf, const uint32_t buf_len)
+    int BaseMessage::Decode(const unsigned char* const buf, const uint32_t buf_len)
     {
         int status = SUCCESS;
         uint8_t* type_ptr = nullptr;
         uint32_t length = 0;
-        char* buff = nullptr;
+        unsigned char* buff = nullptr;
         uint32_t offset = 0;
 
         if (buf == nullptr || buf_len == 0)
@@ -232,7 +234,7 @@ namespace UbiPAL
 
         // cast of the constness of buff. It's const in the header to show it won't be changed,
         // but it needs to be non-const for later casts
-        buff = const_cast<char*>(buf);
+        buff = const_cast<unsigned char*>(buf);
         if (buff == nullptr)
         {
             Log::Line(Log::EMERG, "BaseMessage::Decode: const_cast failed.");
@@ -294,7 +296,7 @@ namespace UbiPAL
         return offset;
     }
 
-    int BaseMessage::Encode(char* const buf, const uint32_t buf_len) const
+    int BaseMessage::Encode(unsigned char* const buf, const uint32_t buf_len) const
     {
         int status = SUCCESS;
         uint8_t* type_ptr = nullptr;
@@ -367,7 +369,7 @@ namespace UbiPAL
         return 1 + 4 + to.size() + 4 + from.size() + 4 + msg_id.size();
     }
 
-    int Message::Encode(char* const buf, const uint32_t buf_len) const
+    int Message::Encode(unsigned char* const buf, const uint32_t buf_len) const
     {
         int status = SUCCESS;
         uint32_t offset = 0;
@@ -417,11 +419,11 @@ namespace UbiPAL
         return offset;
     }
 
-    int Message::Decode(const char* const buf, const uint32_t buf_len)
+    int Message::Decode(const unsigned char* const buf, const uint32_t buf_len)
     {
         int status = SUCCESS;
-        char* str_bits = nullptr;
-        char* buff = nullptr;
+        unsigned char* str_bits = nullptr;
+        unsigned char* buff = nullptr;
         uint32_t offset = 0;
 
         if (buf == nullptr || buf_len == 0)
@@ -444,7 +446,7 @@ namespace UbiPAL
 
         // cast of the constness of buff. It's const in the header to show it won't be changed,
         // but it needs to be non-const for later casts
-        buff = const_cast<char*>(buf);
+        buff = const_cast<unsigned char*>(buf);
         if (buff == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Decode: reinterpet_cast failed.");
@@ -483,7 +485,7 @@ namespace UbiPAL
             return BUFFER_TOO_SMALL;
         }
         str_bits = buff + offset;
-        argument = (char*)malloc(arg_len);
+        argument = (unsigned char*)malloc(arg_len);
         if (argument == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Decode: malloc failed");
@@ -507,7 +509,7 @@ namespace UbiPAL
         argument = nullptr;
     }
 
-    Message::Message(const char* const arg, const uint32_t arg_size)
+    Message::Message(const unsigned char* const arg, const uint32_t arg_size)
         : Message()
     {
         if (arg == nullptr || arg_size == 0)
@@ -515,7 +517,7 @@ namespace UbiPAL
             return;
         }
 
-        argument = (char*)malloc(arg_size);
+        argument = (unsigned char*)malloc(arg_size);
         if (argument == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Message: malloc failed.");
@@ -537,7 +539,7 @@ namespace UbiPAL
         message = other.message;
         arg_len = other.arg_len;
 
-        argument = (char*) malloc(arg_len);
+        argument = (unsigned char*) malloc(arg_len);
         if (argument == nullptr)
         {
             Log::Line(Log::EMERG, "Message::Message(const Message&): malloc failed!");
@@ -564,7 +566,7 @@ namespace UbiPAL
         type = ACCESS_CONTROL_LIST;
     }
 
-    int NamespaceCertificate::Encode(char* const buf, const uint32_t buf_len) const
+    int NamespaceCertificate::Encode(unsigned char* const buf, const uint32_t buf_len) const
     {
         int status = SUCCESS;
         uint32_t offset = 0;
@@ -638,7 +640,7 @@ namespace UbiPAL
         return offset;
     }
 
-    int NamespaceCertificate::Decode(const char* const buf, const uint32_t buf_len)
+    int NamespaceCertificate::Decode(const unsigned char* const buf, const uint32_t buf_len)
     {
         int status = SUCCESS;
         uint32_t offset = 0;
@@ -717,7 +719,7 @@ namespace UbiPAL
         return BaseMessage::EncodedLength() + 4 + id.size() + 4 + description.size() + 4 + address.size() + 4 + port.size();
     }
 
-    int AccessControlList::Encode(char* const buf, const uint32_t buf_len) const
+    int AccessControlList::Encode(unsigned char* const buf, const uint32_t buf_len) const
     {
         int status = SUCCESS;
         uint32_t offset = 0;
@@ -786,7 +788,7 @@ namespace UbiPAL
         return offset;
     }
 
-    int AccessControlList::Decode(const char* const buf, const uint32_t buf_len)
+    int AccessControlList::Decode(const unsigned char* const buf, const uint32_t buf_len)
     {
         int status = SUCCESS;
         uint32_t offset = 0;

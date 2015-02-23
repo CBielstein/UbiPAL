@@ -84,7 +84,7 @@ namespace UbiPAL
             //      [OUT] result_len: The number of bytes encrypted, if not NULL
             // return
             //      int: SUCCESS on success, error code otherwise
-            static int Encrypt(RSA* key, const char* msg, const unsigned int& msg_len, char*& result, unsigned int* result_len);
+            static int Encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len);
 
             // Decrypt
             // detects whether the given key is private or public and calls the appropriate OpenSSL function, placing the result in the pointer at result
@@ -96,7 +96,7 @@ namespace UbiPAL
             //      [OUT] result_len: The number of bytes decrypted, if not NULL
             // return
             //      int: SUCCESS on success, error code otherwise
-            static int Decrypt(RSA* key, const char* msg, const unsigned int msg_len, char*& result, unsigned int* result_len);
+            static int Decrypt(RSA* key, const unsigned char* msg, const unsigned int msg_len, unsigned char*& result, unsigned int* result_len);
 
             // CopyKey
             // Allocates a to key and duplicates the big number fields in from to to.

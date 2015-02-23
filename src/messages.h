@@ -74,6 +74,7 @@ namespace UbiPAL
 
         // default constructor generates uuid
         BaseMessage();
+        virtual ~BaseMessage();
 
         // Encode
         // Takes a buffer buf of length buf_len and outputs an array of bytes representing this message type.
@@ -83,7 +84,7 @@ namespace UbiPAL
         //      [IN] buf_len: The length of the buffer. This ensures it's of appropriate length
         // return
         //      int: the length of the resulting bytes, or a negative error code
-        virtual int Encode(char* const buf, const uint32_t buf_len) const;
+        virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const;
 
         // Decode
         // Takes a buffer buf of length buf_len and decodes the data to the fields in this message type.
@@ -92,7 +93,7 @@ namespace UbiPAL
         //      [IN] buf_len: The length of the bytes to decode
         // return
         //      int: The number of bytes used, negative error code otherwise
-        virtual int Decode(const char* const buf, const uint32_t buf_len);
+        virtual int Decode(const unsigned char* const buf, const uint32_t buf_len);
 
         // EncodedLength
         // Returns the number of bytes required to encode this message
@@ -108,7 +109,7 @@ namespace UbiPAL
         //      [IN] str: The string we want to encode
         // return
         //      int: the number of bytes encoded and saved to buf, else a negative error code
-        static int EncodeString(char* const buf, const uint32_t buf_len, const std::string& str);
+        static int EncodeString(unsigned char* const buf, const uint32_t buf_len, const std::string& str);
 
         // EncodeBytes
         // Give a buffer, raw bytes, and a length for both, this encodes as 4 bytes unsigned length then the bytes themselves
@@ -119,7 +120,7 @@ namespace UbiPAL
         //      [IN] bytes_len: The number of bytes to encode
         // return
         //      int: the number of bytes encoded and saved to buf, else a negative error code
-        static int EncodeBytes(char* const buf, const uint32_t buf_len, const char* const bytes, const uint32_t bytes_len);
+        static int EncodeBytes(unsigned char* const buf, const uint32_t buf_len, const unsigned char* const bytes, const uint32_t bytes_len);
 
         // EncodeUint32_t
         // Encodes a uint32_t number to the buffer
@@ -129,27 +130,27 @@ namespace UbiPAL
         //      [IN] number: The number to encode in buf
         // return
         //      int: the number of bytes encoded and saved to buf, else a negative error code
-        static int EncodeUint32_t(char* const buf, const uint32_t buf_len, const uint32_t number);
+        static int EncodeUint32_t(unsigned char* const buf, const uint32_t buf_len, const uint32_t number);
 
         // DecodeString
         // Given a buffer of raw bytes, a length for that buffer, and a string object, decodes from the above functions
         // args
         //      [IN] buf: The raw bytes
         //      [IN] buf_len: The number of raw bytes
-        //      [IN/OUT] str: The string object to which to save
+        //      [OUT] str: The string object to which to save
         // return
         //      int: the number of bytes decoded, else a negative error code
-        static int DecodeString(const char* const buf, const uint32_t buf_len, std::string& str);
+        static int DecodeString(const unsigned char* const buf, const uint32_t buf_len, std::string& str);
 
         // DecodeUint32_t
         // Give a buffer of raw bytes, a length for that buffer, and a uint32_t, decodes from the above functions
         // args
         //      [IN] buf: The raw bytes
         //      [IN] buf_len: THe number of raw bytes
-        //      [IN/OUT]: str: The string object to which to save
+        //      [OUT] number: The number to which to save
         // return
         //      int: The number of bytes decoded, else a negative error code
-        static int DecodeUint32_t(const char* const buf, const uint32_t buf_len, uint32_t& number);
+        static int DecodeUint32_t(const unsigned char* const buf, const uint32_t buf_len, uint32_t& number);
     };
 
     // Message
@@ -158,15 +159,15 @@ namespace UbiPAL
     {
         std::string message;
         uint32_t arg_len;
-        char* argument;
+        unsigned char* argument;
 
         Message();
-        Message(const char* const arg, const uint32_t arg_size);
+        Message(const unsigned char* const arg, const uint32_t arg_size);
         Message(const Message& other);
-        ~Message();
+        ~Message() override;
 
-        virtual int Encode(char* const buf, const uint32_t buf_len) const override;
-        virtual int Decode(const char* const buf, const uint32_t buf_len) override;
+        virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
         virtual int EncodedLength() const override;
     };
 
@@ -179,8 +180,8 @@ namespace UbiPAL
 
         NamespaceCertificate();
 
-        virtual int Encode(char* const buf, const uint32_t buf_len) const override;
-        virtual int Decode(const char* const buf, const uint32_t buf_len) override;
+        virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
         virtual int EncodedLength() const override;
     };
 
@@ -195,8 +196,8 @@ namespace UbiPAL
 
         AccessControlList();
 
-        virtual int Encode(char* const buf, const uint32_t buf_len) const override;
-        virtual int Decode(const char* const buf, const uint32_t buf_len) override;
+        virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
         virtual int EncodedLength() const override;
     };
 

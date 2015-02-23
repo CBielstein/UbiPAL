@@ -23,11 +23,11 @@ namespace UbiPAL
         int status = SUCCESS;
         std::string test_in("Super Bowl XLIX");
         std::string test_result;
-        char* buf = nullptr;
+        unsigned char* buf = nullptr;
         uint32_t buf_len = 0;
 
         buf_len = sizeof(char) * test_in.size() + 4;
-        buf = (char*) malloc(buf_len);
+        buf = (unsigned char*) malloc(buf_len);
         if (buf == nullptr)
         {
             status = MALLOC_FAILURE;
@@ -75,7 +75,7 @@ namespace UbiPAL
         int length = 0;
         BaseMessage bm;
         BaseMessage bm2;
-        char* msg = nullptr;
+        unsigned char* msg = nullptr;
 
         bm.type = MESSAGE;
         bm.to = std::string("robert");
@@ -88,7 +88,7 @@ namespace UbiPAL
             goto exit;
         }
 
-        msg = (char*) malloc(length);
+        msg = (unsigned char*) malloc(length);
         if (msg == nullptr)
         {
             status = MALLOC_FAILURE;
@@ -128,9 +128,9 @@ namespace UbiPAL
         int status = SUCCESS;
         int length = 0;
         const char* m_arg = "please";
-        Message m(m_arg, strlen(m_arg));
+        Message m((unsigned char*)m_arg, strlen(m_arg));
         Message m2;
-        char* msg = nullptr;
+        unsigned char* msg = nullptr;
 
         m.to = std::string("robert");
         m.from = std::string("cameron");
@@ -143,7 +143,7 @@ namespace UbiPAL
             goto exit;
         }
 
-        msg = (char*) malloc(length);
+        msg = (unsigned char*) malloc(length);
         if (msg == nullptr)
         {
             status = MALLOC_FAILURE;
@@ -195,7 +195,7 @@ namespace UbiPAL
     {
         int status = SUCCESS;
         const char* test = "I gotta say it was a good day.";
-        Message m(test, strlen(test));
+        Message m((unsigned char*)test, strlen(test));
 
         if (m.type != MESSAGE || m.arg_len != strlen(test) || memcmp(test, m.argument, m.arg_len) != 0 || m.msg_id.empty())
         {
@@ -209,7 +209,7 @@ namespace UbiPAL
     {
         const char* msg = "It's all good 'til somebody catches a feeling, and I'm feeling again.";
 
-        Message m(msg, strlen(msg));
+        Message m((unsigned char*)msg, strlen(msg));
         m.message = std::string("Good song");
 
         Message m2 = m;
@@ -226,7 +226,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         NamespaceCertificate nc;
-        char* buf = nullptr;
+        unsigned char* buf = nullptr;
         uint32_t buf_len = 0;
         NamespaceCertificate nc_result;
 
@@ -242,7 +242,7 @@ namespace UbiPAL
             goto exit;
         }
 
-        buf = (char*) malloc(buf_len);
+        buf = (unsigned char*) malloc(buf_len);
         if (buf == nullptr)
         {
             status = MALLOC_FAILURE;
@@ -288,7 +288,7 @@ namespace UbiPAL
     int MessagesTests::MessagesTestBaseMessageEncodeUint32_tDecodeUint32_t()
     {
         int status = SUCCESS;
-        char buf[UINT32_T_TEST_BUF_LEN];
+        unsigned char buf[UINT32_T_TEST_BUF_LEN];
         const uint32_t number = 1337;
         uint32_t result_number = 0;
 
@@ -318,7 +318,7 @@ namespace UbiPAL
     {
         int status = SUCCESS;
         int length = 0;
-        char* buf = nullptr;
+        unsigned char* buf = nullptr;
         AccessControlList acl1;
         AccessControlList acl2;
 
@@ -336,7 +336,7 @@ namespace UbiPAL
             goto exit;
         }
 
-        buf = (char*) malloc(length);
+        buf = (unsigned char*) malloc(length);
         if (buf == nullptr)
         {
             status = MALLOC_FAILURE;
@@ -437,7 +437,7 @@ namespace UbiPAL
     int MessagesTests::MessagesTestMessageEqualityTestPass()
     {
         const char* arg = "Let's get it started in here!";
-        Message m(arg, strlen(arg));
+        Message m((unsigned char*)arg, strlen(arg));
         m.message = std::string("Let's get it started in ha");
 
         Message m2 = m;
@@ -448,7 +448,7 @@ namespace UbiPAL
     int MessagesTests::MessagesTestMessageEqualityTestFail()
     {
         const char* arg = "Let's get it started in here!";
-        Message m(arg, strlen(arg));
+        Message m((unsigned char*)arg, strlen(arg));
         m.message = std::string("Let's get it started in ha");
 
         Message m2 = m;

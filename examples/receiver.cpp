@@ -20,12 +20,13 @@ int printer(UbiPAL::UbipalService* us, UbiPAL::Message message)
     }
 
     // now handle the argument given us how we want to
-    std::string to_print(message.argument, message.arg_len);
+    std::string to_print((char*)message.argument, message.arg_len);
     std::cout << to_print << std::endl;
 
     // reply to message
     std::string reply_string("Printed by " + us->GetId() + "!");
-    us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, reply_string.c_str(), reply_string.size() + 1);
+    us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message,
+                       (unsigned char*)reply_string.c_str(), reply_string.size() + 1);
 
     // tell UbiPAL everything went well
     return UbiPAL::SUCCESS;

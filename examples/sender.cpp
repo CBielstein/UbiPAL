@@ -66,7 +66,7 @@ int main(int argc, char** argv)
             }
 
             status = us.SendMessage(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, services[i],
-                                    std::string("PrintToScreen"), argument.c_str(), argument.size(), print_replies);
+                                    std::string("PrintToScreen"), (unsigned char*)argument.c_str(), argument.size(), print_replies);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to send message: " << UbiPAL::GetErrorDescription(status) << std::endl;

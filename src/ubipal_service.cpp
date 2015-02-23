@@ -278,13 +278,14 @@ namespace UbiPAL
 
     int UbipalService::BeginRecv(const uint32_t flags)
     {
-        FUNCTION_START;
-        void* returned_ptr = nullptr;
+        int status = SUCCESS;
+        int returned_value = 0;
+        pthread_t new_thread = 0;
 
         if ((flags & ~(BeginRecvFlags::DONT_PUBLISH_NAME | BeginRecvFlags::NON_BLOCKING)) != 0)
         {
             Log::Line(Log::WARN, "UbipalService::BeginRecv: Invalid flags.");
-            RETURN_STATUS(INVALID_ARG);
+            return INVALID_ARG;
         }
 
         // use mutual exclusion and state variables to ensure only one thread is receiving at once
@@ -293,12 +294,24 @@ namespace UbiPAL
             {
                 Log::Line(Log::INFO, "UbipalService::BeginRecv: Already receiving. Return!");
                 receiving_mutex.unlock();
-                RETURN_STATUS(MULTIPLE_RECV);
+                return MULTIPLE_RECV;
             }
             else
             {
                 receiving = true;
                 Log::Line(Log::INFO, "UbipalService::BeginRecv: Beginning receiving on port %s", port.c_str());
+
+                // spin up thread for receiving
+                for (unsigned int i = 0; i < num_recv_threads; ++i)
+                {
+                    returned_value = pthread_create(&new_thread, NULL, ConsumeIncoming, this);
+                    if (returned_value != 0)
+                    {
+                        Log::Line(Log::EMERG, "UbipalService::BeginRecv: A call to pthread_create failed: %d", returned_value);
+                    }
+
+                    recv_threads.push_back(new_thread);
+                }
             }
         receiving_mutex.unlock();
 
@@ -314,40 +327,30 @@ namespace UbiPAL
             }*/
         }
 
-        // spin a new thread to begin receiving, probably in a different function?
+        // TODO begin receiving broadcasts
+
+        // begin receiving unicasts. Spin a new thread if we're nonblocking
         if ((flags & BeginRecvFlags::NON_BLOCKING)!= 0)
         {
             threads_mutex.lock();
-            recv_threads.emplace(recv_threads.end());
-            returned_value = pthread_create(&recv_threads[recv_threads.size() - 1], NULL, Recv, this);
-            threads_mutex.unlock();
+
+            returned_value = pthread_create(&new_thread, NULL, RecvUnicast, this);
             if (returned_value != 0)
             {
                 Log::Line(Log::EMERG, "UbipalService::BeginRecv: pthread_create failed: %d", returned_value);
-                RETURN_STATUS(THREAD_FAILURE);
+                threads_mutex.unlock();
+                return THREAD_FAILURE;
             }
+
+            recv_threads.push_back(new_thread);
+            threads_mutex.unlock();
         }
         else
         {
-            returned_ptr  = Recv(this);
-            if (returned_ptr != nullptr)
-            {
-                status = *((int*)returned_ptr);
-                if (status != SUCCESS)
-                {
-                    Log::Line(Log::EMERG, "UbipalService:BeginRecv: blocking Recv not successful: %s", GetErrorDescription(status));
-                    RETURN_STATUS(status);
-                }
-            }
-            else
-            {
-                Log::Line(Log::EMERG, "UbipalService::BeginRecv: blocking Recv returned null");
-                RETURN_STATUS(NETWORKING_FAILURE);
-            }
+            RecvUnicast(this);
         }
 
-        exit:
-            FUNCTION_END;
+        return status;
     }
 
     int UbipalService::EndRecv()
@@ -358,159 +361,162 @@ namespace UbiPAL
         return SUCCESS;
     }
 
-    void* UbipalService::Recv(void* arg)
+    void* UbipalService::RecvUnicast(void* arg)
     {
-        FUNCTION_START;
+        int returned_value = 0;
         int connect_fd = 0;
         UbipalService* us = nullptr;
-        HandleConnectionArguments* hc_args = nullptr;
+        IncomingData* incoming_data = nullptr;
 
         if (arg == nullptr)
         {
-            Log::Line(Log::WARN, "UbipalService::Recv: null argument.");
-            RETURN_STATUS(NULL_ARG);
+            Log::Line(Log::WARN, "UbipalService::RecvUnicast: null argument.");
+            return NULL;
         }
 
         us = (UbipalService*)arg;
-
-        // spin up thread for receiving
-        us->threads_mutex.lock();
-        for (unsigned int i = 0; i < us->num_recv_threads; ++i)
-        {
-            us->recv_threads.emplace(us->recv_threads.end());
-            returned_value = pthread_create(&(us->recv_threads[us->recv_threads.size() - 1]), NULL, ConsumeConnections, us);
-            if (returned_value != 0)
-            {
-                Log::Line(Log::WARN, "UbipalService::Recv: A call to pthread_create failed: %d", returned_value);
-            }
-        }
-        us->threads_mutex.unlock();
 
         // listen on sockfd for 10 queued connections
         returned_value = listen(us->sockfd, 10);
         if (returned_value != 0)
         {
-            Log::Line(Log::EMERG, "UbipalService::Recv: listen failed: %d, %s", errno, strerror(errno));
-            RETURN_STATUS(NETWORKING_FAILURE);
+            Log::Line(Log::EMERG, "UbipalService::RecvUnicast: listen failed: %d, %s", errno, strerror(errno));
+            return NULL;
         }
 
-        // while this service is receiving
+        // this is the receiving loop
         while(us->receiving)
         {
             connect_fd = accept(us->sockfd, NULL, NULL);
             if (connect_fd == -1)
             {
                 // if there was an error, log it and give up on this connection, there are other connections in the sea
-                Log::Line(Log::WARN, "UbipalService::Recv: A call to accept failed: %d, %s", errno, strerror(errno));
+                Log::Line(Log::WARN, "UbipalService::RecvUnicast: A call to accept failed: %d, %s", errno, strerror(errno));
                 continue;
             }
 
-            // new thread!!
-            us->incoming_conn_mutex.lock();
-            hc_args = new HandleConnectionArguments(us, connect_fd);
-            us->incoming_connections.push(hc_args);
-            hc_args = nullptr;
-            us->incoming_conn_mutex.unlock();
+            // enqueue
+            us->incoming_msg_mutex.lock();
+            incoming_data = new IncomingData(connect_fd, NULL, 0);
+            us->incoming_messages.push(incoming_data);
+            incoming_data = nullptr;
+            us->incoming_msg_mutex.unlock();
             // signal a worker thread
-            us->incoming_conn_cv.notify_one();
+            us->incoming_msg_cv.notify_one();
         }
 
-        exit:
-            if (us == nullptr)
-            {
-                return NULL;
-            }
-            else
-            {
-                us->recv_status = status;
-                return &us->recv_status;
-            }
+        return NULL;
     }
 
-    void* UbipalService::ConsumeConnections(void* arg)
+    void* UbipalService::ConsumeIncoming(void* arg)
     {
+        int status = SUCCESS;
+
         if (arg == nullptr)
         {
-            Log::Line(Log::WARN, "UbipalService::ConsumeConnections: arg was null.");
+            Log::Line(Log::WARN, "UbipalService::ConsumeIncoming: arg was null.");
             return NULL;
         }
 
         UbipalService* us = (UbipalService*)arg;
-        HandleConnectionArguments* hc_args = nullptr;
-        std::unique_lock<std::mutex> lock(us->incoming_conn_mutex, std::defer_lock);
+        IncomingData* incoming_data = nullptr;
+        std::unique_lock<std::mutex> lock(us->incoming_msg_mutex, std::defer_lock);
 
         while(us->receiving)
         {
             lock.lock();
 
             // wait for non-empty queue
-            while(us->incoming_connections.size() == 0)
+            while(us->incoming_messages.size() == 0)
             {
-                us->incoming_conn_cv.wait(lock);
+                us->incoming_msg_cv.wait(lock);
             }
 
             // grab stuff off the queue
-            hc_args = us->incoming_connections.front();
-            us->incoming_connections.pop();
+            incoming_data = us->incoming_messages.front();
+            us->incoming_messages.pop();
 
             // unlock the queue to handle the connection
             lock.unlock();
-            HandleConnection(hc_args);
+
+            if (incoming_data->buffer == NULL)
+            {
+                // this is an incoming connection, get the actual data
+                status = us->HandleIncomingConnection(incoming_data);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::ConsumeIncoming: HandleIncomingConnection failed: %s", GetErrorDescription(status));
+                    status = SUCCESS;
+                    continue;
+                }
+            }
+
+            status = us->HandleMessage(incoming_data);
         }
 
         return NULL;
     }
 
-    void* UbipalService::HandleConnection(void* hc_args)
+    int UbipalService::HandleIncomingConnection(IncomingData* const incoming_data) const
     {
         FUNCTION_START;
+        unsigned char* buf = nullptr;
 
-        char* buf = nullptr;
-        char* buf_decrypted = nullptr;
-        unsigned int buf_decrypted_len = 0;
-        int conn_fd = 0;
-        uint32_t size = 0;
-        uint32_t to_len = 0;
-
-        UbipalService* us = nullptr;
-        RSA* from_pub_key = nullptr;
-
-        BaseMessage base_message;
-        Message message;
-        NamespaceCertificate name_cert;
-        AccessControlList acl;
-
-        std::unordered_map<std::string, UbipalCallback>::iterator found;
-        std::unordered_map<std::string, NamespaceCertificate>::iterator trusted_itr;
-        std::unordered_map<std::string, NamespaceCertificate>::iterator untrusted_itr;
-        std::unordered_map<std::string, std::vector<AccessControlList>>::iterator acl_itr;
-        std::pair<std::unordered_map<std::string, std::vector<AccessControlList>>::iterator, bool> emplace_ret;
-        std::vector<AccessControlList> acl_vector;
-
-        if (hc_args == nullptr)
+        if (incoming_data == nullptr)
         {
-            Log::Line(Log::WARN, "UBipalService::HandleConnection: null arg");
+            Log::Line(Log::WARN, "UbipalService::HandleIncomingConnection: null arg");
             RETURN_STATUS(NULL_ARG);
         }
 
-        us = ((HandleConnectionArguments*)hc_args)->us;
-        conn_fd = ((HandleConnectionArguments*)hc_args)->conn_fd;
-        buf = (char*) malloc(MAX_MESSAGE_SIZE);
+        buf = (unsigned char*)malloc(MAX_MESSAGE_SIZE);
 
-        returned_value = recv(conn_fd, buf, MAX_MESSAGE_SIZE, 0);
+        returned_value = recv(incoming_data->conn_fd, buf, MAX_MESSAGE_SIZE, 0);
         if (returned_value < 0)
         {
             Log::Line(Log::INFO, "UbipalService::HandleConnection: receive failed: %s", strerror(errno));
             RETURN_STATUS(NETWORKING_FAILURE);
         }
-        size = returned_value;
+        else
+        {
+            incoming_data->buffer = buf;
+            incoming_data->buffer_len = returned_value;
+        }
 
-        // decryption
+        exit:
+            if (status != SUCCESS)
+            {
+                free(buf);
+            }
+            FUNCTION_END;
+    }
+
+    int UbipalService::HandleMessage(IncomingData* const incoming_data)
+    {
+        FUNCTION_START;
+        unsigned char* buf_decrypted = nullptr;
+        unsigned int buf_decrypted_len = 0;
+        uint32_t to_len = 0;
+        RSA* from_pub_key = nullptr;
+        BaseMessage* msg = nullptr;
+
+        if (incoming_data == nullptr)
+        {
+            Log::Line(Log::INFO, "UbipalStatus::HandleMessage: Passed null argument");
+            RETURN_STATUS(NULL_ARG);
+        }
+        else if (incoming_data->buffer == nullptr)
+        {
+            Log::Line(Log::INFO, "UbipalStatus::HandleMessage: Passed incoming_data with null buffer.");
+            RETURN_STATUS(INVALID_ARG);
+        }
+
+        /// decryption
+
         // The first byte is the type, the next 4 are the size of the to field
-        returned_value = BaseMessage::DecodeUint32_t(buf + 1, size, to_len);
+        returned_value = BaseMessage::DecodeUint32_t(incoming_data->buffer + 1, incoming_data->buffer_len, to_len);
         if (returned_value < 0)
         {
-            Log::Line(Log::WARN, "UbipalService::HandleConnection: BaseMessageDecodeUint32_t failed: %s",
+            Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessageDecodeUint32_t failed: %s",
                       GetErrorDescription(returned_value));
             RETURN_STATUS(returned_value);
         }
@@ -520,357 +526,164 @@ namespace UbiPAL
         {
             // If the to length is nonzero, compare the next bytes against the service's id.
             // If they are the same, this is not encrypted. If they do not match, try to derypt and try again
-            if (to_len != us->id.size() || memcmp(buf + 5, us->id.c_str(), us->id.size()) != 0)
+            if (to_len != id.size() || memcmp(incoming_data->buffer + 5, id.c_str(), id.size()) != 0)
             {
                 // decrypt
-                status = RsaWrappers::Decrypt(us->private_key, buf, size, buf_decrypted, &buf_decrypted_len);
+                status = RsaWrappers::Decrypt(private_key, incoming_data->buffer, incoming_data->buffer_len, buf_decrypted, &buf_decrypted_len);
                 if (status != SUCCESS)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: RsaWrapers::Decrypt failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RsaWrapers::Decrypt failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
                 // If they still don't match, toss the message because it isn't to us
-                if (memcmp(buf_decrypted + 5, us->id.c_str(), us->id.size()) != 0)
+                if (memcmp(buf_decrypted + 5, id.c_str(), id.size()) != 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Message couldn't be interpreted, so it's tossed.");
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: Message couldn't be interpreted, so it's tossed.");
                     RETURN_STATUS(INVALID_NETWORK_ENCODING);
                 }
 
                 // so we decrypted and it matched, put buf_decrypted in buf
-                free(buf);
-                buf = buf_decrypted;
+                free(incoming_data->buffer);
+                incoming_data->buffer = buf_decrypted;
                 buf_decrypted = nullptr;
-                size = buf_decrypted_len;
+                incoming_data->buffer_len = buf_decrypted_len;
             }
         }
 
         // interpret message
-        status = base_message.Decode(buf, size);
+        msg = new BaseMessage();
+        status = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "UbipalService::HandleConnection: BaseMessage::Decode failed: %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::Decode failed: %s", GetErrorDescription(status));
             RETURN_STATUS(status)
         }
 
         // ensure this isn't directed to somebody else
         // it's to us or it's broadcast (to nobody)
-        if (base_message.to != us->id && !base_message.to.empty())
+        if (msg->to != id && !msg->to.empty())
         {
             status = MESSAGE_WRONG_DESTINATION;
-            Log::Line(Log::DEBUG, "UbipalService::HandleConnection: Received a message not to this service: %s", GetErrorDescription(status));
+            Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Received a message not to this service: %s", GetErrorDescription(status));
             RETURN_STATUS(status);
         }
 
         // convert from id to public key for validation
-        status = RsaWrappers::StringToPublicKey(base_message.from, from_pub_key);
+        status = RsaWrappers::StringToPublicKey(msg->from, from_pub_key);
         if (status != SUCCESS)
         {
-            Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
+            Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
             RETURN_STATUS(status);
         }
 
-        switch(base_message.type)
+        switch(msg->type)
         {
             case MessageType::MESSAGE:
-
-                // decode as Message
-                returned_value = message.Decode(buf, size);
-                if (returned_value < 0)
+                // reinterpret and authenticate
+                delete msg;
+                msg = new Message();
+                returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
+                if (status < 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Message::Decode failed: %s", GetErrorDescription(returned_value));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: Message::Decode failed: %s", GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
                 }
 
-                // check signature
-                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, (unsigned char*)buf, returned_value,
-                                                                 (unsigned char*)buf + returned_value, size - returned_value);
+                // authenticate - check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
+                                                                 incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
                 if (returned_value < 0)
                 {
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest error: %s",
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
                               GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
                 }
                 else if (returned_value == 0)
                 {
                     status = SIGNATURE_INVALID;
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
                               GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
-                // if it's a reply, let's handle it. This avoids the ACLs since we explicitly allowed for the reply
-                if (message.message.compare(0, strlen("REPLY_"), "REPLY_") == 0)
-                {
-                    us->reply_callback_mutex.lock();
-
-                    // if we have a message with the given ID sent to the sender, let's go at it
-                    std::string replying_id = message.message.substr(strlen("REPLY_"));
-                    if (us->reply_callback_map.count(replying_id) == 1)
-                    {
-                        UbipalReplyCallback callback_func = us->reply_callback_map[replying_id];
-                        if (callback_func == nullptr)
-                        {
-                            Log::Line(Log::EMERG, "UbipalService::HandleConnection: reply_callback_map.coun() was 1, but fetching element returned null.");
-                            us->reply_callback_mutex.unlock();
-                            RETURN_STATUS(GENERAL_FAILURE);
-                        }
-
-                        returned_value = us->reply_callback_map.erase(replying_id);
-                        if (returned_value != 1)
-                        {
-                            Log::Line(Log::EMERG, "UbipalService::HandleConnection: reply_callback_map.erase() failed to remove the mapping.");
-                            us->reply_callback_mutex.unlock();
-                            RETURN_STATUS(GENERAL_FAILURE);
-                        }
-
-                        Message original_message;
-                        bool found_original_message = false;
-                        for (unsigned int i = 0; i < us->msgs_awaiting_reply.size(); ++i)
-                        {
-                            if (us->msgs_awaiting_reply[i]->msg_id == replying_id)
-                            {
-                                original_message = *(us->msgs_awaiting_reply[i]);
-                                free(us->msgs_awaiting_reply[i]);
-                                us->msgs_awaiting_reply.erase(us->msgs_awaiting_reply.begin() + i);
-                                found_original_message = true;
-                                break;
-                            }
-                        }
-
-                        if (found_original_message == false)
-                        {
-                            Log::Line(Log::EMERG, "UbipalService::HandleConnection: msgs_awaiting_reply did not have the original message");
-                            us->reply_callback_mutex.unlock();
-                            RETURN_STATUS(GENERAL_FAILURE);
-                        }
-
-                        us->reply_callback_mutex.unlock();
-                        status = callback_func(us, original_message, message);
-                        RETURN_STATUS(status);
-                    }
-                    else
-                    {
-                        // else we toss the message
-                        Log::Line(Log::INFO, "UbipalService::HandleConnection: Received a reply to a message we were not expecting or did not send.");
-                        us->reply_callback_mutex.unlock();
-                        RETURN_STATUS(status);
-                    }
-                }
-
-                // note: currently, each service may only revoke its own ACLs
-                if (message.message == std::string("REVOKE"))
-                {
-                    us->external_acls_mutex.lock();
-                    std::string revoke_id(message.argument, message.arg_len);
-
-                    // if the message is a revocation, take the necessary action then return
-                    if (us->trusted_services.count(message.from) == 1)
-                    {
-                        if (us->trusted_services[message.from].msg_id == revoke_id)
-                        {
-                            us->trusted_services.erase(message.from);
-                            us->external_acls_mutex.unlock();
-                            RETURN_STATUS(status);
-                        }
-                    }
-
-                    if (us->untrusted_services.count(message.from) == 1)
-                    {
-                        if (us->untrusted_services[message.from].msg_id == revoke_id)
-                        {
-                            us->untrusted_services.erase(message.from);
-                            us->external_acls_mutex.unlock();
-                            RETURN_STATUS(status);
-                        }
-                    }
-
-                    if (us->external_acls.count(message.from) == 1)
-                    {
-                        for (unsigned int i = 0; i < us->external_acls[message.from].size(); ++i)
-                        {
-                            if (us->external_acls[message.from][i].msg_id == revoke_id)
-                            {
-                                us->external_acls[message.from].erase(us->external_acls[message.from].begin() + i);
-                                if (us->external_acls[message.from].size() == 0)
-                                {
-                                    us->external_acls.erase(message.from);
-                                }
-                                fprintf(stderr, "Number of exteernal_acls: %lu\n", us->external_acls.size());
-                                us->external_acls_mutex.unlock();
-                                RETURN_STATUS(status);
-                            }
-                        }
-                    }
-
-                    fprintf(stderr, "Number of exteernal_acls: %lu\n", us->external_acls.size());
-                    us->external_acls_mutex.unlock();
-                    RETURN_STATUS(status);
-                }
-
-                // check against ACLs
-                status = us->CheckAcls(message.message, message.from, message.to, NULL, NULL);
-                if (status == NOT_IN_ACLS)
-                {
-                    us->ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, "NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s for message %s from %s",
-                              GetErrorDescription(status), message.message.c_str(), message.from.c_str());
-                    RETURN_STATUS(status);
-                }
-                else if (status == FAILED_CONDITIONS)
-                {
-                    us->ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, "FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s for message %s from %s",
-                              GetErrorDescription(status), message.message.c_str(), message.from.c_str());
-                    RETURN_STATUS(status);
-                }
-                else if (status != SUCCESS)
-                {
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: UbipalService::CheckAcls returned %s for message %s from %s",
-                              GetErrorDescription(status), message.message.c_str(), message.from.c_str());
-                    RETURN_STATUS(status);
-                }
-
-                // find function to call
-                found = us->callback_map.find(message.message);
-                if (found == us->callback_map.end())
-                {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Does not have the appropriate callback.");
-                    RETURN_STATUS(GENERAL_FAILURE);
-                }
-
-                status = found->second(us, message);
+                status = RecvMessage((Message*)msg);
                 if (status != SUCCESS)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: Callback returned %d, %s", status, GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvMessage failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
-
                 break;
             case MessageType::NAMESPACE_CERTIFICATE:
-                // decode as namespace certificate
-                returned_value = name_cert.Decode(buf, size);
-                if (returned_value < 0)
+                // reinterpret and authenticate
+                delete msg;
+                msg = new NamespaceCertificate();
+                returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
+                if (status < 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: NamespaceCertificate::Decode failed: %s",
-                              GetErrorDescription(returned_value));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: Message::Decode failed: %s", GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
                 }
 
-                // check signature
-                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, (unsigned char*)buf, returned_value,
-                                                                 (unsigned char*)buf + returned_value, size - returned_value);
+                // authenticate - check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
+                                                                 incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
                 if (returned_value < 0)
                 {
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest error: %s",
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
                               GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
                 }
                 else if (returned_value == 0)
                 {
                     status = SIGNATURE_INVALID;
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
                               GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
-                // check if it was sent by a trusted source
-                trusted_itr = us->trusted_services.find(name_cert.from);
-                if (trusted_itr != us->trusted_services.end())
+                status = RecvNamespaceCertificate((NamespaceCertificate*)msg);
+                if (status != SUCCESS)
                 {
-                    // we trust the sender, see if the actual name is in our trusted list.
-                    trusted_itr = us->trusted_services.find(name_cert.id);
-                    if (trusted_itr != us->trusted_services.end())
-                    {
-                        // it is, so update it
-                        trusted_itr->second = name_cert;
-                    }
-                    else
-                    {
-                        // it isn't, so add it
-                        us->trusted_services.emplace(name_cert.id, name_cert);
-                    }
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvNamespaceCertificate failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
                 }
-                else
-                {
-                    // check if the actual name is in the untrusted
-                    untrusted_itr = us->untrusted_services.find(name_cert.id);
-                    if (untrusted_itr != us->trusted_services.end())
-                    {
-                        // it is, so update it
-                        untrusted_itr->second = name_cert;
-                    }
-                    else
-                    {
-                        // it isn't, so add it
-                        us->untrusted_services.emplace(name_cert.id, name_cert);
-                    }
-                }
-
                 break;
             case MessageType::ACCESS_CONTROL_LIST:
-
-                // decode as namespace certificate
-                returned_value = acl.Decode(buf, size);
-                if (returned_value < 0)
+                // reinterpret and authenticate
+                delete msg;
+                msg = new AccessControlList();
+                returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
+                if (status < 0)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleConnection: AccessControlList::Decode failed: %s",
-                              GetErrorDescription(returned_value));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: Message::Decode failed: %s", GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
                 }
 
-                // check signature
-                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, (unsigned char*)buf, returned_value,
-                                                                 (unsigned char*)buf + returned_value, size - returned_value);
+                // authenticate - check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
+                                                                 incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
                 if (returned_value < 0)
                 {
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest error: %s",
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
                               GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
                 }
                 else if (returned_value == 0)
                 {
                     status = SIGNATURE_INVALID;
-                    Log::Line(Log::INFO, "UbipalService::HandleConnection: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
                               GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
-                // find all the acls from this service
-                us->external_acls_mutex.lock();
-                acl_itr = us->external_acls.find(acl.id);
-                if (acl_itr == us->external_acls.end())
+                status = RecvAcl((AccessControlList*)msg);
+                if (status != SUCCESS)
                 {
-                    // wasnt found, so add it
-                    acl_vector.push_back(acl);
-                    emplace_ret = us->external_acls.emplace(acl.id, acl_vector);
-                    if (emplace_ret.second == false)
-                    {
-                        Log::Line(Log::EMERG, "UbipalService::HandleConnection: external_acls.emplace failed");
-                        us->external_acls_mutex.unlock();
-                        RETURN_STATUS(GENERAL_FAILURE);
-                    }
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvNamespaceCertificate failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
                 }
-                else
-                {
-                    // was found, so check through the associated vector to see if this is an update (based on ID)
-                    for (unsigned int i = 0; i < acl_itr->second.size(); ++i)
-                    {
-                        if (acl_itr->second[i].msg_id.compare(acl.msg_id))
-                        {
-                            // we've already heard this one, so we're done.
-                            us->external_acls_mutex.unlock();
-                            RETURN_STATUS(SUCCESS);
-                        }
-                    }
-
-                    // if we get here, we haven't heard it, so we're adding it
-                    acl_itr->second.push_back(acl);
-                }
-
-                fprintf(stderr, "Number of external_acls: %lu\n", us->external_acls.size());
-                us->external_acls_mutex.unlock();
-                RETURN_STATUS(status);
+                break;
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -879,11 +692,265 @@ namespace UbiPAL
             {
                 Log::Line(Log::DEBUG, "UbipalService::HandleConnection: Exiting failure: %s", GetErrorDescription(status));
             }
-            free(buf);
-            return NULL;
+            delete msg;
+            return status;
     }
 
-    int UbipalService::SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len) const
+    int UbipalService::RecvAcl(const AccessControlList* const acl)
+    {
+        int status = SUCCESS;
+        std::unordered_map<std::string, std::vector<AccessControlList>>::iterator acl_itr;
+        std::vector<AccessControlList> acl_vector;
+
+        if (acl == nullptr)
+        {
+            Log::Line(Log::DEBUG, "UbipalService::RecvAcl: Null arg");
+            return NULL_ARG;
+        }
+
+        // find all the acls from this service
+        external_acls_mutex.lock();
+        acl_itr = external_acls.find(acl->id);
+        if (acl_itr == external_acls.end())
+        {
+            // wasnt found, so add it
+            acl_vector.push_back(*acl);
+            external_acls.emplace(acl->id, acl_vector);
+        }
+        else
+        {
+            // was found, so check through the associated vector to see if this is an update (based on ID)
+            for (unsigned int i = 0; i < acl_itr->second.size(); ++i)
+            {
+                if (acl_itr->second[i].msg_id.compare(acl->msg_id))
+                {
+                    // we've already heard this one, so we're done.
+                    external_acls_mutex.unlock();
+                    return SUCCESS;
+                }
+            }
+
+            // if we get here, we haven't heard it, so we're adding it
+            acl_itr->second.push_back(*acl);
+        }
+
+        external_acls_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::RecvNamespaceCertificate(const NamespaceCertificate* const name_cert)
+    {
+        int status = SUCCESS;
+        std::unordered_map<std::string, NamespaceCertificate>::iterator itr;
+
+        if (name_cert == nullptr)
+        {
+            Log::Line(Log::DEBUG, "UbipalService::RecvNamespaceCertificate: Null arg");
+            return NULL_ARG;
+        }
+
+        services_mutex.lock();
+        // check if it was sent by a trusted source
+        itr = trusted_services.find(name_cert->from);
+        if (itr != trusted_services.end())
+        {
+            // we trust the sender, see if the actual name is in our trusted list.
+            itr = trusted_services.find(name_cert->id);
+            if (itr != trusted_services.end())
+            {
+                // it is, so update it
+                itr->second = *name_cert;
+            }
+            else
+            {
+                // it isn't, so add it
+                trusted_services.emplace(name_cert->id, *name_cert);
+            }
+        }
+        else
+        {
+            // check if the actual name is in the untrusted
+            itr = untrusted_services.find(name_cert->id);
+            if (itr != trusted_services.end())
+            {
+                // it is, so update it
+                itr->second = *name_cert;
+            }
+            else
+            {
+                // it isn't, so add it
+                untrusted_services.emplace(name_cert->id, *name_cert);
+            }
+        }
+
+        services_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::RecvMessage(const Message* const message)
+    {
+        FUNCTION_START;
+        std::unordered_map<std::string, UbipalCallback>::iterator found;
+        std::pair<std::unordered_map<std::string, std::vector<AccessControlList>>::iterator, bool> emplace_ret;
+
+        if (message == nullptr)
+        {
+            Log::Line(Log::INFO, "UbipalServices::RecvMessage: null argument");
+            return NULL_ARG;
+        }
+
+        // if it's a reply, let's handle it. This avoids the ACLs since we explicitly allowed for the reply
+        if (message->message.compare(0, strlen("REPLY_"), "REPLY_") == 0)
+        {
+            reply_callback_mutex.lock();
+
+            // if we have a message with the given ID sent to the sender, let's go at it
+            std::string replying_id = message->message.substr(strlen("REPLY_"));
+            if (reply_callback_map.count(replying_id) == 1)
+            {
+                UbipalReplyCallback callback_func = reply_callback_map[replying_id];
+                if (callback_func == nullptr)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.coun() was 1, but fetching element returned null.");
+                    reply_callback_mutex.unlock();
+                    return GENERAL_FAILURE;
+                }
+
+                returned_value = reply_callback_map.erase(replying_id);
+                if (returned_value != 1)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.erase() failed to remove the mapping.");
+                    reply_callback_mutex.unlock();
+                    return GENERAL_FAILURE;
+                }
+
+                Message original_message;
+                bool found_original_message = false;
+                for (unsigned int i = 0; i < msgs_awaiting_reply.size(); ++i)
+                {
+                    if (msgs_awaiting_reply[i]->msg_id == replying_id)
+                    {
+                        original_message = *(msgs_awaiting_reply[i]);
+                        free(msgs_awaiting_reply[i]);
+                        msgs_awaiting_reply.erase(msgs_awaiting_reply.begin() + i);
+                        found_original_message = true;
+                        break;
+                    }
+                }
+
+                if (found_original_message == false)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::RecvMessage: msgs_awaiting_reply did not have the original message");
+                    reply_callback_mutex.unlock();
+                    return GENERAL_FAILURE;
+                }
+
+                reply_callback_mutex.unlock();
+                status = callback_func(this, original_message, *message);
+                return status;
+            }
+            else
+            {
+                // else we toss the message
+                Log::Line(Log::INFO, "UbipalService::RecvMessage: Received a reply to a message we were not expecting or did not send.");
+                reply_callback_mutex.unlock();
+                return status;
+            }
+        }
+
+        // note: currently, each service may only revoke its own ACLs
+        if (message->message == std::string("REVOKE"))
+        {
+            std::string revoke_id((char*)message->argument, message->arg_len);
+
+            // if the message is a revocation, take the necessary action then return
+            services_mutex.lock();
+            if (trusted_services.count(message->from) == 1)
+            {
+                if (trusted_services[message->from].msg_id == revoke_id)
+                {
+                    trusted_services.erase(message->from);
+                    services_mutex.unlock();
+                    return status;
+                }
+            }
+
+            if (untrusted_services.count(message->from) == 1)
+            {
+                if (untrusted_services[message->from].msg_id == revoke_id)
+                {
+                    untrusted_services.erase(message->from);
+                    services_mutex.unlock();
+                    return status;
+                }
+            }
+
+            services_mutex.unlock();
+
+            external_acls_mutex.lock();
+            if (external_acls.count(message->from) == 1)
+            {
+                for (unsigned int i = 0; i < external_acls[message->from].size(); ++i)
+                {
+                    if (external_acls[message->from][i].msg_id == revoke_id)
+                    {
+                        external_acls[message->from].erase(external_acls[message->from].begin() + i);
+                        if (external_acls[message->from].size() == 0)
+                        {
+                            external_acls.erase(message->from);
+                        }
+                        external_acls_mutex.unlock();
+                        return status;
+                    }
+                }
+            }
+
+            external_acls_mutex.unlock();
+            return status;
+        }
+
+        // check against ACLs
+        status = CheckAcls(message->message, message->from, message->to, NULL, NULL);
+        if (status == NOT_IN_ACLS)
+        {
+            ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
+            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
+                      GetErrorDescription(status), message->message.c_str(), message->from.c_str());
+            return status;
+        }
+        else if (status == FAILED_CONDITIONS)
+        {
+            ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
+                      GetErrorDescription(status), message->message.c_str(), message->from.c_str());
+            return status;
+        }
+        else if (status != SUCCESS)
+        {
+            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
+                      GetErrorDescription(status), message->message.c_str(), message->from.c_str());
+            return status;
+        }
+
+        // find function to call
+        found = callback_map.find(message->message);
+        if (found == callback_map.end())
+        {
+            Log::Line(Log::WARN, "UbipalService::RecvMessage: Does not have the appropriate callback.");
+            return GENERAL_FAILURE;
+        }
+
+        status = found->second(this, *message);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::WARN, "UbipalService::RecvMessage: Callback returned %d, %s", status, GetErrorDescription(status));
+            return status;
+        }
+
+        return status;
+    }
+
+    int UbipalService::SendData(const std::string& address, const std::string& port, const unsigned char* const data, const uint32_t data_len) const
     {
         FUNCTION_START;
         int conn_fd = 0;
@@ -985,7 +1052,7 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::ReplyToMessage(const uint32_t flags, const Message* const msg, const char* const arg, const uint32_t arg_len)
+    int UbipalService::ReplyToMessage(const uint32_t flags, const Message* const msg, const unsigned char* const arg, const uint32_t arg_len)
     {
         int status = SUCCESS;
         NamespaceCertificate reply_to;
@@ -1021,13 +1088,13 @@ namespace UbiPAL
     }
 
     int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
-                                   const char* const arg, const uint32_t arg_len)
+                                   const unsigned char* const arg, const uint32_t arg_len)
     {
         return SendMessage(flags, to, message, arg, arg_len, NULL);
     }
 
     int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
-                                   const char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback)
+                                   const unsigned char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback)
     {
         FUNCTION_START;
         Message* msg = nullptr;
@@ -1112,12 +1179,12 @@ namespace UbiPAL
     {
         FUNCTION_START;
         HandleSendMessageArguments* sm_args = nullptr;
-        char* bytes = nullptr;
+        unsigned char* bytes = nullptr;
         int bytes_length = 0;
         unsigned int sig_len = 0;
         unsigned char* sig = nullptr;
         RSA* dest_pub_key = nullptr;
-        char* result = nullptr;
+        unsigned char* result = nullptr;
         unsigned int result_len = 0;
         unsigned int total_len = 0;
 
@@ -1149,7 +1216,7 @@ namespace UbiPAL
         total_len = bytes_length + sig_len;
 
         // allocate enough space for them both
-        bytes = (char*)malloc(total_len);
+        bytes = (unsigned char*)malloc(total_len);
         if (bytes == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
@@ -1363,6 +1430,7 @@ namespace UbiPAL
         names.clear();
 
         // add untrusted, if flagged
+        services_mutex.lock();
         if ((flags & GetNamesFlags::INCLUDE_UNTRUSTED) != 0)
         {
             std::unordered_map<std::string, NamespaceCertificate>::iterator untrusted_itr;
@@ -1381,6 +1449,7 @@ namespace UbiPAL
                 names.push_back(trusted_itr->second);
             }
         }
+        services_mutex.unlock();
 
         return status;
     }
@@ -1651,7 +1720,7 @@ namespace UbiPAL
                 {
                     send_message_flags |= SendMessageFlags::NO_ENCRYPTION;
                 }
-                status = SendMessage(send_message_flags, *send_to, std::string("REVOKE"), acl.msg_id.c_str(), acl.msg_id.size());
+                status = SendMessage(send_message_flags, *send_to, std::string("REVOKE"), (unsigned char*)acl.msg_id.c_str(), acl.msg_id.size());
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::WARN, "UbipalService::RevokeAcl: Failed to SendMessage: %s", GetErrorDescription(status));

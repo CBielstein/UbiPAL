@@ -92,14 +92,6 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int BeginRecv(const uint32_t flags);
 
-            // ConsumeConnections
-            // Used by Recv to be a consumer of incoming connections in incoming_connections queue
-            // args
-            //          [IN] arg: UbipalService* pointer to this
-            // return
-            //          void*: NULL
-            static void* ConsumeConnections(void* arg);
-
             // RegisterCallback
             // Adds a function to be called upon receiving a given message
             // If the message has previously registered a callback, it is replaced with the new callback
@@ -142,15 +134,6 @@ namespace UbiPAL
             //          int:: SUCCESS on success
             int SetDescription(const std::string& desc);
 
-            // SendData
-            // Actually does the act of sending data to an address. No formatting or anything is done.
-            // args
-            //          [IN] address: the address to which to send
-            //          [IN] port: the port to send to
-            //          [IN] data: the bytes to send
-            //          [IN] data_len: The number of bytes to send
-            int SendData(const std::string& address, const std::string& port, const char* const data, const uint32_t data_len) const;
-
             enum SendMessageFlags
             {
                 NONBLOCKING = 2 << 0,
@@ -170,7 +153,8 @@ namespace UbiPAL
             //          [IN] arg_len: The length of arg
             // return
             //          int: SUCCESS on success
-            int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message, const char* const arg, const uint32_t arg_len);
+            int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+                            const unsigned char* const arg, const uint32_t arg_len);
 
             // SendMessage
             // sends message with args to to, registers a callback function to allow replies
@@ -186,7 +170,7 @@ namespace UbiPAL
             // return
             //          int: SUCCESS on success
             int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
-                            const char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback);
+                            const unsigned char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback);
 
             // ReplyToMessage
             // Sends a message reply back for msg
@@ -197,7 +181,7 @@ namespace UbiPAL
             //          [IN} arg_len: The length of the arguments
             // return
             //          int: SUCCESSS on success
-            int ReplyToMessage(const uint32_t flags, const Message* const msg, const char* const arg, const uint32_t arg_len);
+            int ReplyToMessage(const uint32_t flags, const Message* const msg, const unsigned char* const arg, const uint32_t arg_len);
 
             // SendName
             // Sends an updated namespace certificate to the given name, or broadcasts it if null
@@ -338,31 +322,95 @@ namespace UbiPAL
                           std::vector<std::string>* acl_trail, std::vector<std::string>* conditions);
 
         private:
-            // Recv
-            // Does all the actual work of receiving and filtering messages to their appropriate functions
+            // SendData
+            // Actually does the act of sending data to an address. No formatting or anything is done.
+            // args
+            //          [IN] address: the address to which to send
+            //          [IN] port: the port to send to
+            //          [IN] data: the bytes to send
+            //          [IN] data_len: The number of bytes to send
+            int SendData(const std::string& address, const std::string& port, const unsigned char* const data, const uint32_t data_len) const;
+
+            // RecvUnicast
+            // Receives messages bound only for this and enqueues them to be hanelded by a separate thread
             // args
             //          [IN] arg: The UbipalService* on which to receive
             // return
             //          int: SUCCESS on successful stop, negative error code otherwise. Does not return until EndRecv is called
-            static void* Recv(void* arg);
+            static void* RecvUnicast(void* arg);
 
-            // allows passing two arguments to HandleConnection
-            struct HandleConnectionArguments
+            // RecvMessage
+            // Handles receiving for a message which has already be decrypted, decoded, and authenticated.
+            // This function handles ACLs and callbacks.
+            // args
+            //          [IN] message: A message pointer
+            // return
+            //          int: SUCCESS on success, else a negative error, does not return if callback for message does not return
+            int RecvMessage(const Message* const message);
+
+            // RecvNamespaceCertificate
+            // Handles receiving for a NamespaceCertificate which has already be decrypted, decoded, and authenticated.
+            // args
+            //          [IN] name_cert: A namespace certificate pointer
+            // return
+            //          int: SUCCESS on success, else a negative error
+            int RecvNamespaceCertificate(const NamespaceCertificate* const name_cert);
+
+            // RecvAcl
+            // Handles receiving for an acl which has already be decrypted, decoded, and authenticated.
+            // args
+            //          [IN] acl: An acl certificate pointer
+            // return
+            //          int: SUCCESS on success, else a negative error
+            int RecvAcl(const AccessControlList* const acl);
+
+            // IncomingData
+            // Allows either an incoming connection or buffer of data to be enqueued for handling later
+            struct IncomingData
             {
-                UbipalService* us;
+                // If the data is coming TCP, this is a file desriptor for the socket on which the connection is coming
                 int conn_fd;
-                HandleConnectionArguments(UbipalService* _us, int _conn_fd) : us(_us), conn_fd(_conn_fd) {}
+
+                // If the data is UDP, we've already received it an placed it in this buffer. If it's TCP, this must be null
+                unsigned char* buffer;
+
+                // The length of the above buffer. If it's unused, this must be zero
+                unsigned int buffer_len;
+
+                // IncomingData
+                // Constructs an IncomingData struct
+                // args
+                //      [IN] _conn_fd: The connection file descriptor for incoming connections
+                //      [IN] _buffer: A buffer pointing to received data for incoming data.
+                //                      Must be null to treat this as an incoming connection and use conn_fd
+                //      [IN] _buffer_len: The length of the above buffer, if the buffer is non-null
+                IncomingData(int _conn_fd, unsigned char* _buffer, unsigned int _buffer_len)
+                    : conn_fd(_conn_fd), buffer(_buffer), buffer_len(_buffer_len) {}
             };
 
-            // HandleConnection
-            // Handle an incoming connection
+            // HandleIncomingConnection
+            // Handle an incoming connection and stores its data in the incoming_data struct
             // args
-            //          [IN] hc_args: a pointer to a HancleConnectionArguments struct which includes
-            //                  us: A pointer to this UbipalService
-            //                  conn_fd: the file descriptor of the connection to use
+            //          [IN/OUT] incoming_data: A struct to read the data from the connection file descriptor and
+            //                                  store data in the buffer and buffer length fields
+            // return
+            //          SUCCESS on success, negative error otherwise
+            int HandleIncomingConnection(IncomingData* const incoming_data) const;
+
+            // HandleMessage
+            // Handles the decryption and authentication of incoming message data and passes to the appropriate recv function
+            // args
+            //          [IN/OUT] incoming_data: Data going in (must be stored in incoming_data->buffer by now). If encrypted, it is decrypted
+            //                                  with the result placed back in incoming_data->buffer.
+            int HandleMessage(IncomingData* const incoming_data);
+
+            // ConsumeIncoming
+            // Consumes incoming data from incoming_messages queue with authentication and decryption
+            // args
+            //          [IN] arg: UbipalService* pointer to this
             // return
             //          void*: NULL
-            static void* HandleConnection(void* hc_args);
+            static void* ConsumeIncoming(void* arg);
 
             struct HandleSendMessageArguments
             {
@@ -404,6 +452,9 @@ namespace UbiPAL
             // stores information parsed from received certificates from other services
             std::unordered_map<std::string, NamespaceCertificate> untrusted_services;
 
+            // avoids race conditions on the above data structures
+            std::mutex services_mutex;
+
             // some data structure to hold ACLs
             // maps the public key string representation to any acls it has sent
             std::unordered_map<std::string, std::vector<AccessControlList>> external_acls;
@@ -436,13 +487,13 @@ namespace UbiPAL
             std::vector<pthread_t> recv_threads;
 
             // Incomming connections to be handled
-            std::queue<HandleConnectionArguments*> incoming_connections;
+            std::queue<IncomingData*> incoming_messages;
 
             // Mutex for incoming connections
-            std::mutex incoming_conn_mutex;
+            std::mutex incoming_msg_mutex;
 
             // Condition variable for incoming connections
-            std::condition_variable incoming_conn_cv;
+            std::condition_variable incoming_msg_cv;
 
             // The number of threads to use for receiving
             unsigned int num_recv_threads;
@@ -455,10 +506,6 @@ namespace UbiPAL
 
             // mutex for thread creation and message passing
             std::mutex threads_mutex;
-
-            // status for recv
-            // this allows a returned value without pointer exceptions
-            int recv_status;
 
             // maps message types to callbacks
             std::unordered_map<std::string, UbipalCallback> callback_map;
