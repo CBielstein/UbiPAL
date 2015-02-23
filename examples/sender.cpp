@@ -21,12 +21,6 @@ int main(int argc, char** argv)
     int status = UbiPAL::SUCCESS;
     std::string argument;
 
-    // Usage IO
-    if (argc != 2)
-    {
-        std::cout << "Incorrect usage: ./sender PORT" << std::endl;
-        return 0;
-    }
     std::cout << "Enter message to send." << std::endl;
 
     // Configure log
@@ -34,10 +28,10 @@ int main(int argc, char** argv)
     UbiPAL::Log::SetPrint(true);
 
     // Create service
-    UbiPAL::UbipalService us(nullptr, argv[1]);
+    UbiPAL::UbipalService us;
 
     // listen for advertised names
-    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::DONT_PUBLISH_NAME | UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
+    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
     if (status != UbiPAL::SUCCESS)
     {
         us.EndRecv();
@@ -49,22 +43,15 @@ int main(int argc, char** argv)
     std::vector<UbiPAL::NamespaceCertificate> services;
     while(std::getline(std::cin, argument))
     {
-        //std::cout << "Sending: " << argument << std::endl;
-        status = us.GetNames(UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED, services);
+        status = us.SendName(0, NULL);
         if (status != UbiPAL::SUCCESS)
         {
-            std::cout << "Failed to get service names: " << UbiPAL::GetErrorDescription(status) << std::endl;
-            return status;
+            std::cout << "Failed to broadcast name: " << UbiPAL::GetErrorDescription(status) << std::endl;
         }
 
+        status = us.GetNames(UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED, services);
         for (size_t i = 0; i < services.size(); ++i)
         {
-            status = us.SendName(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &services[i]);
-            if (status != UbiPAL::SUCCESS)
-            {
-                std::cout << "Failed to send certificate: " << UbiPAL::GetErrorDescription(status) << std::endl;
-            }
-
             status = us.SendMessage(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, services[i],
                                     std::string("PrintToScreen"), (unsigned char*)argument.c_str(), argument.size(), print_replies);
             if (status != UbiPAL::SUCCESS)

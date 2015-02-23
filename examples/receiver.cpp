@@ -36,29 +36,12 @@ int main(int argc, char** argv)
 {
     int status = UbiPAL::SUCCESS;
 
-    // user output
-    if (argc != 3)
-    {
-        std::cout << "Incorrect usage: ./receiver ADDRESS PORT" << std::endl;
-        std::cout << "Announces this services to a sender at address and port." << std::endl;
-        return 0;
-    }
-
     // log configuration
     UbiPAL::Log::SetFile("bin/examples/receiverlog.txt");
     UbiPAL::Log::SetPrint(true);
 
     // Create a UbiPAL service on the given port
     UbiPAL::UbipalService us;
-
-    // Announce name
-    status = us.SendName(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION,
-                         argv[1], argv[2]);
-    if (status != UbiPAL::SUCCESS)
-    {
-        std::cout << "Failed to send name: " << UbiPAL::GetErrorDescription(status) << std::endl;
-        return status;
-    }
 
     // Register a callback function for the given message type
     status = us.RegisterCallback(std::string("PrintToScreen"), printer);
@@ -69,7 +52,7 @@ int main(int argc, char** argv)
     }
 
     // Begin receiving (with some error checking for my sake)
-    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::DONT_PUBLISH_NAME | UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
+    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
     if (status != UbiPAL::SUCCESS)
     {
         std::cout << "Failed to start receiving: " << UbiPAL::GetErrorDescription(status) << std::endl;

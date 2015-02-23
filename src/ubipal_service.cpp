@@ -21,7 +21,6 @@
 // Networking
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 
@@ -97,6 +96,7 @@ namespace UbiPAL
         struct ifaddrs* ifap_itr = nullptr;
         struct sockaddr_in* sa = nullptr;
         char* addr = nullptr;
+        size_t end_subnet = 0;
 
         // Set default thread counts
         num_recv_threads = 5;
@@ -133,7 +133,8 @@ namespace UbiPAL
             goto exit;
         }
 
-        // open socket
+        //// open unicast socket
+
         // Code relies on examples from http://beej.us/guide/bgnet/output/html/multipage/clientserver.html#simpleserver
         //set hints
         memset(&hints, 0, sizeof(struct addrinfo));
@@ -161,21 +162,21 @@ namespace UbiPAL
         // iterate through results and bind to the first successful result
         for (itr = server_info; itr != nullptr; itr = itr->ai_next)
         {
-            sockfd = socket(itr->ai_family, itr->ai_socktype, itr->ai_protocol);
-            if (sockfd == -1)
+            unicast_fd = socket(itr->ai_family, itr->ai_socktype, itr->ai_protocol);
+            if (unicast_fd == -1)
             {
                 Log::Line(Log::DEBUG, "UbipalService::UbipalService: Failed to create a socket: %d, %s", errno, strerror(errno));
                 continue;
             }
 
-            returned_value = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+            returned_value = setsockopt(unicast_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
             if (returned_value == -1)
             {
                 Log::Line(Log::DEBUG, "UbipalService::UbipalService: Failed to set socket option SOL_SOCKET, SO_REUSEADDR, yes: %d, %s", errno, strerror(errno));
                 continue;
             }
 
-            returned_value = bind(sockfd, itr->ai_addr, itr->ai_addrlen);
+            returned_value = bind(unicast_fd, itr->ai_addr, itr->ai_addrlen);
             if (returned_value == -1)
             {
                 Log::Line(Log::DEBUG, "UbipalService::UbipalService: Failed to bind to a port: %d, %s", errno, strerror(errno));
@@ -188,12 +189,12 @@ namespace UbiPAL
         if (itr == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::UbipalService: All attempts to bind a socket have failed. This UbipalService was not initialized correctly.");
-            sockfd = -2;
+            unicast_fd = -2;
             goto exit;
         }
 
         addr_len = sizeof(struct sockaddr_in);
-        returned_value = getsockname(sockfd, (struct sockaddr*)&bound_sock, &addr_len);
+        returned_value = getsockname(unicast_fd, (struct sockaddr*)&bound_sock, &addr_len);
         if (returned_value == -1)
         {
             Log::Line(Log::EMERG, "UbipalService::UbipalService:: getsockname failed: %d, %s", returned_value, strerror(returned_value));
@@ -221,6 +222,74 @@ namespace UbiPAL
             }
         }
 
+        //// open broadcast socket
+
+        memset(&hints, 0, sizeof(struct addrinfo));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_flags = AI_PASSIVE;
+
+        // get broadcast address (x.x.x.255)
+        // this is preferred over 255.255.255.255 as some routers may not repeat the latter
+        end_subnet = address.rfind('.');
+        if (end_subnet == std::string::npos)
+        {
+            // if for some reason we can't find a period in our string, fall back to this
+            broadcast_address = "255.255.255.255";
+        }
+        else
+        {
+            broadcast_address = address.substr(0, end_subnet + 1);
+            broadcast_address += "255";
+        }
+
+        returned_value = getaddrinfo(broadcast_address.c_str(), UBIPAL_BROADCAST_PORT, &hints, &broadcast_info);
+        if (returned_value != 0)
+        {
+            Log::Line(Log::EMERG, "UbipalService::UbipalService: Unable to bind to broadcast address and port %s:%s", broadcast_address.c_str(), UBIPAL_BROADCAST_PORT);
+            return;
+        }
+
+        for (itr = broadcast_info; itr != nullptr; itr = itr->ai_next)
+        {
+            broadcast_fd = socket(itr->ai_family, itr->ai_socktype, itr->ai_protocol);
+            if (broadcast_fd == -1)
+            {
+                continue;
+            }
+
+            returned_value = setsockopt(broadcast_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+            if (returned_value == -1)
+            {
+                continue;
+            }
+
+            returned_value = bind(broadcast_fd, itr->ai_addr, itr->ai_addrlen);
+            if (returned_value == -1)
+            {
+                continue;
+            }
+
+            break;
+        }
+        if (itr == nullptr)
+        {
+            Log::Line(Log::EMERG, "UbipalService::UbipalService: Unable to bind to any port for broadcast_fd");
+            return;
+        }
+        else
+        {
+            broadcast_info = itr;
+        }
+
+        // enable broadcast
+        returned_value = setsockopt(broadcast_fd, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(int));
+        if (returned_value == -1)
+        {
+            Log::Line(Log::EMERG, "UbipalService::UbipalService: Unable to set SO_BROADCAST to true");
+            return;
+        }
+
         exit:
             freeifaddrs(ifap);
             freeaddrinfo(server_info);
@@ -232,8 +301,14 @@ namespace UbiPAL
         // free the private key
         RSA_free(private_key);
 
-        // close socket
-        close(sockfd);
+        // close unicast socket
+        close(unicast_fd);
+
+        // close broadcast socket
+        close(broadcast_fd);
+
+        // free broadcast_info
+        freeaddrinfo(broadcast_info);
     }
 
     int UbipalService::SaveService(const std::string& file_path)
@@ -301,7 +376,7 @@ namespace UbiPAL
                 receiving = true;
                 Log::Line(Log::INFO, "UbipalService::BeginRecv: Beginning receiving on port %s", port.c_str());
 
-                // spin up thread for receiving
+                // spin up threads for receiving
                 for (unsigned int i = 0; i < num_recv_threads; ++i)
                 {
                     returned_value = pthread_create(&new_thread, NULL, ConsumeIncoming, this);
@@ -316,18 +391,28 @@ namespace UbiPAL
         receiving_mutex.unlock();
 
         // if flag isn't specified, go ahead and broadcast the name
-        if ((flags & BeginRecvFlags::DONT_PUBLISH_NAME) != 0)
+        if ((flags & BeginRecvFlags::DONT_PUBLISH_NAME) == 0)
         {
-            // TODO
-            /*status = SendName(NULL);
+            status = SendName(0, NULL);
             if (status != SUCCESS)
             {
                 Log::Line(Log::EMERG, "UbipalService::BeginRecv: SendName(NULL) failed: %s", GetErrorDescription(status));
-                RETURN_STATUS(status);
-            }*/
+            }
         }
 
-        // TODO begin receiving broadcasts
+        // start broadcast receivers
+        threads_mutex.lock();
+
+        returned_value = pthread_create(&new_thread, NULL, RecvBroadcast, this);
+        if (returned_value != 0)
+        {
+            Log::Line(Log::EMERG, "UbipalService::BeginRecv: pthread_create failed: %d", returned_value);
+            threads_mutex.unlock();
+            return THREAD_FAILURE;
+        }
+
+        recv_threads.push_back(new_thread);
+        threads_mutex.unlock();
 
         // begin receiving unicasts. Spin a new thread if we're nonblocking
         if ((flags & BeginRecvFlags::NON_BLOCKING)!= 0)
@@ -376,8 +461,8 @@ namespace UbiPAL
 
         us = (UbipalService*)arg;
 
-        // listen on sockfd for 10 queued connections
-        returned_value = listen(us->sockfd, 10);
+        // listen on unicast_fd for 10 queued connections
+        returned_value = listen(us->unicast_fd, 10);
         if (returned_value != 0)
         {
             Log::Line(Log::EMERG, "UbipalService::RecvUnicast: listen failed: %d, %s", errno, strerror(errno));
@@ -387,7 +472,7 @@ namespace UbiPAL
         // this is the receiving loop
         while(us->receiving)
         {
-            connect_fd = accept(us->sockfd, NULL, NULL);
+            connect_fd = accept(us->unicast_fd, NULL, NULL);
             if (connect_fd == -1)
             {
                 // if there was an error, log it and give up on this connection, there are other connections in the sea
@@ -400,6 +485,52 @@ namespace UbiPAL
             incoming_data = new IncomingData(connect_fd, NULL, 0);
             us->incoming_messages.push(incoming_data);
             incoming_data = nullptr;
+            us->incoming_msg_mutex.unlock();
+            // signal a worker thread
+            us->incoming_msg_cv.notify_one();
+        }
+
+        return NULL;
+    }
+
+    void* UbipalService::RecvBroadcast(void* arg)
+    {
+        int returned_value = 0;
+        UbipalService* us = nullptr;
+        IncomingData* incoming_data = nullptr;
+        unsigned char* buf = nullptr;
+
+        if (arg == nullptr)
+        {
+            Log::Line(Log::WARN, "UbipalService::RecvBroadcast: null argument.");
+            return NULL;
+        }
+
+        us = (UbipalService*)arg;
+
+        // this is the receiving loop
+        while(us->receiving)
+        {
+            buf = (unsigned char*)malloc(MAX_MESSAGE_SIZE);
+            if (buf == nullptr)
+            {
+                Log::Line(Log::EMERG, "UbipalService::RecvBroadcast: malloc failure.");
+                return NULL;
+            }
+
+            returned_value = recvfrom(us->broadcast_fd, buf, MAX_MESSAGE_SIZE, 0, NULL, NULL);
+            if (returned_value < 0)
+            {
+                Log::Line(Log::WARN, "UbipalService::RecvBroadcast: recvfrom failed.");
+                continue;
+            }
+
+            // enqueue
+            us->incoming_msg_mutex.lock();
+            incoming_data = new IncomingData(0, buf, returned_value);
+            us->incoming_messages.push(incoming_data);
+            incoming_data = nullptr;
+            buf = nullptr;
             us->incoming_msg_mutex.unlock();
             // signal a worker thread
             us->incoming_msg_cv.notify_one();
@@ -950,6 +1081,41 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalService::BroadcastData(const unsigned char* const data, const uint32_t data_len)
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+
+        // send to all services we've heard from (handles firewalls and multiple subnets)
+        std::vector<NamespaceCertificate> services;
+        status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED, services);
+        if (status == SUCCESS)
+        {
+            for (unsigned int i = 0; i < services.size(); ++i)
+            {
+                status = SendData(services[i].address, services[i].port, data, data_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::DEBUG, "UbipalService::BroadcastData: Failed to SendData to a known service: %s", GetErrorDescription(status));
+                }
+            }
+        }
+        else
+        {
+            Log::Line(Log::DEBUG, "UbipalService::BroadcastData: GetNames failed: %s", GetErrorDescription(status));
+        }
+
+        // broadcast to all services on our subnet
+        returned_value = sendto(broadcast_fd, data, data_len, 0, broadcast_info->ai_addr, broadcast_info->ai_addrlen);
+        if (returned_value == -1)
+        {
+            Log::Line(Log::EMERG, "UbipalService::BroadcastData: sendto failed.");
+            return NETWORKING_FAILURE;
+        }
+
+        return SUCCESS;
+    }
+
     int UbipalService::SendData(const std::string& address, const std::string& port, const unsigned char* const data, const uint32_t data_len) const
     {
         FUNCTION_START;
@@ -1173,7 +1339,7 @@ namespace UbiPAL
     }
 
     UbipalService::HandleSendMessageArguments::HandleSendMessageArguments() : us(nullptr) {}
-    UbipalService::HandleSendMessageArguments::HandleSendMessageArguments(const UbipalService* const _us) : us(_us) {}
+    UbipalService::HandleSendMessageArguments::HandleSendMessageArguments(UbipalService* const _us) : us(_us) {}
 
     void* UbipalService::HandleSendMessage(void* args)
     {
@@ -1271,16 +1437,33 @@ namespace UbiPAL
             total_len = result_len;
         }
 
-        // send it!
-        status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, total_len);
-        if (status < 0)
+        // if there's not a single destination, broadcast!
+        if (sm_args->msg->to.empty())
         {
-            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Encode failed: %s", GetErrorDescription(status));
-            RETURN_STATUS(status);
+            status = sm_args->us->BroadcastData(bytes, total_len);
+            if (status < 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: SendData failed: %s", GetErrorDescription(status));
+                RETURN_STATUS(status);
+            }
+            else
+            {
+                status = SUCCESS;
+            }
         }
         else
         {
-            status = SUCCESS;
+            // else send it!
+            status = sm_args->us->SendData(sm_args->address, sm_args->port, bytes, total_len);
+            if (status < 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: SendData failed: %s", GetErrorDescription(status));
+                RETURN_STATUS(status);
+            }
+            else
+            {
+                status = SUCCESS;
+            }
         }
 
         exit:
@@ -1312,7 +1495,10 @@ namespace UbiPAL
         }
 
         msg = new NamespaceCertificate();
-        msg->to = send_to->id;
+        if (send_to != nullptr)
+        {
+            msg->to = send_to->id;
+        }
         msg->from = id;
         msg->id = id;
         msg->description = description;
@@ -1320,8 +1506,11 @@ namespace UbiPAL
         msg->port = port;
 
         sm_args = new HandleSendMessageArguments(this);
-        sm_args->address = send_to->address;
-        sm_args->port = send_to->port;
+        if (send_to != nullptr)
+        {
+            sm_args->address = send_to->address;
+            sm_args->port = send_to->port;
+        }
         sm_args->msg = msg;
         sm_args->flags = flags;
 
@@ -1375,15 +1564,23 @@ namespace UbiPAL
         }
 
         msg = new AccessControlList();
+
+        if (send_to != nullptr)
+        {
+            msg->to = send_to->id;
+        }
+
         msg->msg_id = acl.msg_id;
-        msg->to = send_to->id;
         msg->from = id;
         msg->rules = acl.rules;
         msg->id = acl.id;
 
         sm_args = new HandleSendMessageArguments(this);
-        sm_args->address = send_to->address;
-        sm_args->port = send_to->port;
+        if (send_to != nullptr)
+        {
+            sm_args->address = send_to->address;
+            sm_args->port = send_to->port;
+        }
         sm_args->msg = msg;
         sm_args->flags = flags;
 

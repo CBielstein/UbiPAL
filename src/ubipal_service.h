@@ -20,6 +20,12 @@
 // OpenSSL
 #include <openssl/rsa.h>
 
+// Networking
+#include <netdb.h>
+
+// chosen to be outside of the range of assigned ports
+#define UBIPAL_BROADCAST_PORT "50015"
+
 // Note: Any function marked XXX is yet to be implemented
 
 namespace UbiPAL
@@ -329,15 +335,34 @@ namespace UbiPAL
             //          [IN] port: the port to send to
             //          [IN] data: the bytes to send
             //          [IN] data_len: The number of bytes to send
+            // return
+            //          int: SUCCESS on success, negative error else
             int SendData(const std::string& address, const std::string& port, const unsigned char* const data, const uint32_t data_len) const;
 
+            // BroadcastData
+            // Broadcasts data to any listening parties
+            // args
+            //          [IN] data: the bytes to send
+            //          [IN] data_len: The number of bytes to send
+            // return
+            //          int: SUCCESS on success, negative error else
+            int BroadcastData(const unsigned char* const data, const uint32_t data_len);
+
             // RecvUnicast
-            // Receives messages bound only for this and enqueues them to be hanelded by a separate thread
+            // Receives messages bound only for this service and enqueues them to be hanleded by a separate thread
             // args
             //          [IN] arg: The UbipalService* on which to receive
             // return
             //          int: SUCCESS on successful stop, negative error code otherwise. Does not return until EndRecv is called
             static void* RecvUnicast(void* arg);
+
+            // RecvBroadcast
+            // Receives messages received as a broadcast and enqueues them to be handled by a separate thread
+            // args
+            //          [IN] arg: The UbipalService* on which to receive
+            // return
+            //          int: SUCCESS on successful stop, negative error code otherwise. Does not return until EndRecv is called
+            static void* RecvBroadcast(void* arg);
 
             // RecvMessage
             // Handles receiving for a message which has already be decrypted, decoded, and authenticated.
@@ -414,14 +439,14 @@ namespace UbiPAL
 
             struct HandleSendMessageArguments
             {
-                const UbipalService* us;
+                UbipalService* us;
                 std::string address;
                 std::string port;
                 BaseMessage* msg;
                 uint32_t flags;
 
                 HandleSendMessageArguments();
-                HandleSendMessageArguments(const UbipalService* const _us);
+                HandleSendMessageArguments(UbipalService* const _us);
             };
 
             // HandleSendMessage
@@ -474,8 +499,17 @@ namespace UbiPAL
             // the address on which we advertise our service
             std::string address;
 
-            // socket descriptor used to send and receive
-            int sockfd;
+            // the address to which we broadcast
+            std::string broadcast_address;
+
+            // holds address structure for broadcasting
+            struct addrinfo* broadcast_info;
+
+            // socket descriptor used to send and receive directly to and from other services
+            int unicast_fd;
+
+            // socket descriptor used to send and receive broadcast messages
+            int broadcast_fd;
 
             // ensure only one thread is receiving at a time
             bool receiving;

@@ -22,10 +22,10 @@ namespace UbiPAL
     {
         UbipalService us;
 
-        if (us.private_key == nullptr || us.sockfd <= 0 || us.port.empty() || us.address.empty() || us.receiving || us.id.empty())
+        if (us.private_key == nullptr || us.unicast_fd <= 0 || us.port.empty() || us.address.empty() || us.receiving || us.id.empty() || us.broadcast_fd == 0 || us.unicast_fd == 0)
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDefaultConstructor: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d, id = %s\n",
-                    us.private_key, us.sockfd, us.port.c_str(), us.address.c_str(), us.receiving, us.id.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDefaultConstructor: Constructor failed to initialize all fields: private_key = %p, unicast_fd = %d, port = %s, address = %s, receiving = %d, id = %s, broadcast_fd = %d, unicast_fd = %d\n",
+                    us.private_key, us.unicast_fd, us.port.c_str(), us.address.c_str(), us.receiving, us.id.c_str(), us.broadcast_fd, us.unicast_fd);
             return GENERAL_FAILURE;
         }
 
@@ -54,10 +54,10 @@ namespace UbiPAL
             goto exit;
         }
 
-        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty() || us->address.empty() || us->receiving || us->id.empty())
+        if (us->private_key == nullptr || us->unicast_fd <= 0 || us->port.empty() || us->address.empty() || us->receiving || us->id.empty())
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructor: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d, id= %s\n",
-                    us->private_key, us->sockfd, us->port.c_str(), us->address.c_str(), us->receiving, us->id.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructor: Constructor failed to initialize all fields: private_key = %p, unicast_fd = %d, port = %s, address = %s, receiving = %d, id= %s\n",
+                    us->private_key, us->unicast_fd, us->port.c_str(), us->address.c_str(), us->receiving, us->id.c_str());
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -103,10 +103,10 @@ namespace UbiPAL
             goto exit;
         }
 
-        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty() || us->address.empty() || us->receiving || us->id.empty())
+        if (us->private_key == nullptr || us->unicast_fd <= 0 || us->port.empty() || us->address.empty() || us->receiving || us->id.empty())
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNullNonnull: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d, id = %s\n",
-                    us->private_key, us->sockfd, us->port.c_str(), us->address.c_str(), us->receiving, us->id.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNullNonnull: Constructor failed to initialize all fields: private_key = %p, unicast_fd = %d, port = %s, address = %s, receiving = %d, id = %s\n",
+                    us->private_key, us->unicast_fd, us->port.c_str(), us->address.c_str(), us->receiving, us->id.c_str());
             status = GENERAL_FAILURE;
             goto exit;
         }
@@ -151,10 +151,10 @@ namespace UbiPAL
             goto exit;
         }
 
-        if (us->private_key == nullptr || us->sockfd <= 0 || us->port.empty() || us->address.empty() || us->receiving || us->id.empty())
+        if (us->private_key == nullptr || us->unicast_fd <= 0 || us->port.empty() || us->address.empty() || us->receiving || us->id.empty())
         {
-            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNonnullNull: Constructor failed to initialize all fields: private_key = %p, sockfd = %d, port = %s, address = %s, receiving = %d, id = %s\n",
-                    us->private_key, us->sockfd, us->port.c_str(), us->address.c_str(), us->receiving, us->id.c_str());
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestConstructorNonnullNull: Constructor failed to initialize all fields: private_key = %p, unicast_fd = %d, port = %s, address = %s, receiving = %d, id = %s\n",
+                    us->private_key, us->unicast_fd, us->port.c_str(), us->address.c_str(), us->receiving, us->id.c_str());
             status = GENERAL_FAILURE;
             goto exit;
         }
