@@ -50,6 +50,11 @@ int main(int argc, char** argv)
         }
 
         status = us.GetNames(UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED, services);
+        if (status != UbiPAL::SUCCESS)
+        {
+            std::cout << "GetNames failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            return status;
+        }
         for (size_t i = 0; i < services.size(); ++i)
         {
             status = us.SendMessage(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, services[i],

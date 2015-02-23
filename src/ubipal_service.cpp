@@ -691,6 +691,12 @@ namespace UbiPAL
             RETURN_STATUS(status)
         }
 
+        if (msg->from == id)
+        {
+            Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Dropped message from this service.");
+            RETURN_STATUS(status);
+        }
+
         // ensure this isn't directed to somebody else
         // it's to us or it's broadcast (to nobody)
         if (msg->to != id && !msg->to.empty())
