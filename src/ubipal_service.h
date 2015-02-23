@@ -153,13 +153,13 @@ namespace UbiPAL
             //          [IN] flags: flags, including:
             //                  NONBLOCKING: returns immediately, uses a different thread to send
             //                  NO_ENCRYPTION: does not encrypt communication.
-            //          [IN] to: The name to which to send
+            //          [IN] to: The name to which to send, broadcast if null
             //          [IN] message: the message to send
             //          [IN] arg: Any arguments to the message
             //          [IN] arg_len: The length of arg
             // return
             //          int: SUCCESS on success
-            int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+            int SendMessage(const uint32_t flags, const NamespaceCertificate* to, const std::string& message,
                             const unsigned char* const arg, const uint32_t arg_len);
 
             // SendMessage
@@ -168,14 +168,14 @@ namespace UbiPAL
             //          [IN] flags: flags, including:
             //                  NONBLOCKING: returns immediately, uses a different thread to send
             //                  NO_ENCRYPTION: does not encrypt communication.
-            //          [IN] to: The name to which to send
+            //          [IN] to: The name to which to send, broadcast if null
             //          [IN] message: the message to send
             //          [IN] arg: Any arguments to the message
             //          [IN] arg_len: The length of arg
             //          [IN] reply_callback: Function to call upon reply to this message
             // return
             //          int: SUCCESS on success
-            int SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+            int SendMessage(const uint32_t flags, const NamespaceCertificate* to, const std::string& message,
                             const unsigned char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback);
 
             // ReplyToMessage
@@ -259,8 +259,7 @@ namespace UbiPAL
             enum RevokeAclFlags
             {
                 NO_SENDING = 2 << 0,
-                BROADCAST = 2 << 1,
-                NO_ENCRYPT = 2 << 2,
+                NO_ENCRYPT = 2 << 1,
             };
 
             // RevokeAcl
@@ -328,6 +327,15 @@ namespace UbiPAL
                           std::vector<std::string>* acl_trail, std::vector<std::string>* conditions);
 
         private:
+            // init
+            // Runs common parts of the constructors
+            // args
+            //          [IN] _private_key: The private key to use. If null, a new one is generated
+            //          [IN] _port: The port to use. If Null, the OS assigns a port
+            // return
+            //          void
+            void init(const RSA* const _private_key, const char* const _port);
+
             // SendData
             // Actually does the act of sending data to an address. No formatting or anything is done.
             // args

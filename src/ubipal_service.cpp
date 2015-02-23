@@ -27,16 +27,21 @@
 // OpenSSL
 #include <openssl/err.h>
 
+#define FILE_READ_LENGTH 4096
+
 namespace UbiPAL
 {
-    UbipalService::UbipalService() : UbipalService(NULL, NULL) {}
+    UbipalService::UbipalService()
+    {
+        init(NULL, NULL);
+    }
 
     UbipalService::UbipalService(const std::string& file_path)
     {
         int status = SUCCESS;
         RSA* _private_key = nullptr;
         FILE* fd = nullptr;
-        char buf[1024];
+        char buf[FILE_READ_LENGTH];
         char* port = nullptr;
         std::string line;
 
@@ -47,7 +52,7 @@ namespace UbiPAL
             return;
         }
 
-        if (fgets(buf, 1024, fd) == nullptr)
+        if (fgets(buf, FILE_READ_LENGTH, fd) == nullptr)
         {
             Log::Line(Log::WARN, "UbipalService::UbipalService(const std::string& file_path): fgets failed");
             return;
@@ -65,7 +70,7 @@ namespace UbiPAL
             return;
         }
 
-        if (fgets(buf, 1024, fd) != nullptr)
+        if (fgets(buf, FILE_READ_LENGTH, fd) != nullptr)
         {
             if (buf[strlen(buf) - 1] == '\n')
             {
@@ -78,10 +83,16 @@ namespace UbiPAL
             port = NULL;
         }
 
-        UbipalService(_private_key, port);
+        init(_private_key, port);
+        RSA_free(_private_key);
     }
 
     UbipalService::UbipalService(const RSA* const _private_key, const char* const _port)
+    {
+        init(_private_key, _port);
+    }
+
+    void UbipalService::init(const RSA* const _private_key, const char* const _port)
     {
         int status = SUCCESS;
         int returned_value;
@@ -1256,16 +1267,16 @@ namespace UbiPAL
             return NAMESPACE_CERTIFICATE_NOT_FOUND;
         }
 
-        return SendMessage(flags, reply_to, message, arg, arg_len);
+        return SendMessage(flags, &reply_to, message, arg, arg_len);
     }
 
-    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate* to, const std::string& message,
                                    const unsigned char* const arg, const uint32_t arg_len)
     {
         return SendMessage(flags, to, message, arg, arg_len, NULL);
     }
 
-    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate& to, const std::string& message,
+    int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate* to, const std::string& message,
                                    const unsigned char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback)
     {
         FUNCTION_START;
@@ -1274,7 +1285,7 @@ namespace UbiPAL
         std::pair<std::unordered_map<std::string, UbipalReplyCallback>::iterator, bool> returned_pair;
 
         // check args
-        if (to.address.empty() || to.port.empty())
+        if ((to != nullptr) && (to->address.empty() || to->port.empty()))
         {
             Log::Line(Log::WARN, "UbipalService::SendMessage: to doesn't have sufficient information");
             RETURN_STATUS(INVALID_ARG);
@@ -1291,7 +1302,10 @@ namespace UbiPAL
         }
 
         msg = new Message(arg, arg_len);
-        msg->to = to.id;
+        if (to != nullptr)
+        {
+            msg->to = to->id;
+        }
         msg->from = id;
         msg->message = message;
 
@@ -1308,12 +1322,14 @@ namespace UbiPAL
 
             msgs_awaiting_reply.push_back(msg);
             reply_callback_mutex.unlock();
-
         }
 
         sm_args = new HandleSendMessageArguments(this);
-        sm_args->address = to.address;
-        sm_args->port = to.port;
+        if (to != nullptr)
+        {
+            sm_args->address = to->address;
+            sm_args->port = to->port;
+        }
         sm_args->msg = msg;
         sm_args->flags = flags;
         if (reply_callback != nullptr)
@@ -1724,13 +1740,20 @@ namespace UbiPAL
         // for each of the vectors of ACLs from service
         for (unsigned int i = 0; i < current_acls.size(); ++i)
         {
+            bool seen_before = false;
             // ensure this ACL hasn't been seen before, we don't want loops
             for (unsigned int k = 0; k < acl_trail.size(); ++k)
             {
                 if (acl_trail[k] == current_acls[i].msg_id)
                 {
-                    continue;
+                    seen_before = true;
+                    break;
                 }
+            }
+
+            if (seen_before)
+            {
+                continue;
             }
 
             // for each rules in the acl
@@ -1747,7 +1770,9 @@ namespace UbiPAL
                     if (first_can_say <= first_can && first_can_say != std::string::npos)
                     {
                         // push_back on vector to be considered later
-                        temp_consider.service_id = current_acls[i].id;
+                        int first_space = current_acls[i].rules[j].find(" ");
+                        std::string other_service = current_acls[i].rules[j].substr(0, first_space);
+                        temp_consider.service_id = other_service;
                         temp_consider.referenced_from_acl = current_acls[i].msg_id;
                         // TODO record the conditions needed
                         to_consider.push_back(temp_consider);
@@ -1799,7 +1824,6 @@ namespace UbiPAL
                     new_conditions.push_back(to_consider[i].conditions[j]);
                 }
 
-                // TODO push on to acl_trail and conditions
                 status = CheckAclsRecurse(message, sender, receiver, to_consider[i].service_id, acl_trail, conditions);
                 if (status == SUCCESS)
                 {
@@ -1879,25 +1903,16 @@ namespace UbiPAL
     int UbipalService::RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to)
     {
         // check flags
-        if ((flags & ~(RevokeAclFlags::NO_SENDING | RevokeAclFlags::BROADCAST | RevokeAclFlags::NO_ENCRYPT)) != 0)
+        if ((flags & ~(RevokeAclFlags::NO_SENDING | RevokeAclFlags::NO_ENCRYPT)) != 0)
         {
             return INVALID_ARG;
         }
 
         // convert to bool for ease of use later
         bool no_sending = false;
-        // bool broadcast = false;
         if ((flags & RevokeAclFlags::NO_SENDING) != 0)
         {
             no_sending = true;
-        }
-        if ((flags & RevokeAclFlags::BROADCAST) != 0)
-        {
-            if (no_sending == true)
-            {
-                return INVALID_ARG;
-            }
-        //    broadcast = true;
         }
 
         local_acls_mutex.lock();
@@ -1915,20 +1930,16 @@ namespace UbiPAL
 
         if (no_sending == false)
         {
-            // TODO broadcast network notifications
-            if (send_to != nullptr)
+            uint32_t send_message_flags = 0;
+            if ((flags & RevokeAclFlags::NO_ENCRYPT) != 0)
             {
-                uint32_t send_message_flags = 0;
-                if ((flags & RevokeAclFlags::NO_ENCRYPT) != 0)
-                {
-                    send_message_flags |= SendMessageFlags::NO_ENCRYPTION;
-                }
-                status = SendMessage(send_message_flags, *send_to, std::string("REVOKE"), (unsigned char*)acl.msg_id.c_str(), acl.msg_id.size());
-                if (status != SUCCESS)
-                {
-                    Log::Line(Log::WARN, "UbipalService::RevokeAcl: Failed to SendMessage: %s", GetErrorDescription(status));
-                    return status;
-                }
+                send_message_flags |= SendMessageFlags::NO_ENCRYPTION;
+            }
+            status = SendMessage(send_message_flags, send_to, std::string("REVOKE"), (unsigned char*)acl.msg_id.c_str(), acl.msg_id.size());
+            if (status != SUCCESS)
+            {
+                Log::Line(Log::WARN, "UbipalService::RevokeAcl: Failed to SendMessage: %s", GetErrorDescription(status));
+                return status;
             }
         }
 

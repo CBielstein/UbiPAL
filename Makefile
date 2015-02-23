@@ -51,7 +51,7 @@ endif
 dir_guard = @mkdir -p $(@D)
 
 .PHONY: all
-all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS) $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver
+all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS) $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id
 
 .PHONY: help
 help:
@@ -100,6 +100,27 @@ $(BINDIR)/$(EXDIR)/receiver: $(OBJECTS) $(BINDIR)/$(EXDIR)/receiver.o
 
 .PHONY: receiver
 receiver: $(BINDIR)/$(EXDIR)/receiver
+
+$(BINDIR)/$(EXDIR)/create_service: $(OBJECTS) $(BINDIR)/$(EXDIR)/create_service.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/create_service.o -o $(BINDIR)/$(EXDIR)/create_service $(LIBS)
+
+.PHONY: create_service
+receiver: $(BINDIR)/$(EXDIR)/create_service
+
+$(BINDIR)/$(EXDIR)/delegator: $(OBJECTS) $(BINDIR)/$(EXDIR)/delegator.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/delegator.o -o $(BINDIR)/$(EXDIR)/delegator $(LIBS)
+
+.PHONY: delegator
+receiver: $(BINDIR)/$(EXDIR)/delegator
+
+$(BINDIR)/$(EXDIR)/print_id: $(OBJECTS) $(BINDIR)/$(EXDIR)/print_id.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/print_id.o -o $(BINDIR)/$(EXDIR)/print_id $(LIBS)
+
+.PHONY: print_id
+receiver: $(BINDIR)/$(EXDIR)/print_id
 
 .PHONY: clean
 clean:

@@ -1299,6 +1299,7 @@ namespace UbiPAL
 
         exit:
             RSA_free(key);
+            RSA_free(result_key);
             return status;
     }
 
