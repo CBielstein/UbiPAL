@@ -1054,11 +1054,12 @@ namespace UbiPAL
             }
 
             external_acls_mutex.unlock();
+
             return status;
         }
 
         // check against ACLs
-        status = CheckAcls(message->message, message->from, message->to, NULL, NULL);
+        status = CheckAcls(*message, NULL, NULL);
         if (status == NOT_IN_ACLS)
         {
             ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
@@ -1073,6 +1074,11 @@ namespace UbiPAL
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
             return status;
         }
+        else if (status == WAIT_ON_ACLS)
+        {
+            Log::Line(Log::DEBUG, "UbipalService::RecvMessage: Waiting on conditions.");
+            return status;
+        }
         else if (status != SUCCESS)
         {
             Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
@@ -1080,18 +1086,10 @@ namespace UbiPAL
             return status;
         }
 
-        // find function to call
-        found = callback_map.find(message->message);
-        if (found == callback_map.end())
-        {
-            Log::Line(Log::WARN, "UbipalService::RecvMessage: Does not have the appropriate callback.");
-            return GENERAL_FAILURE;
-        }
-
-        status = found->second(this, *message);
+        status = MessageConditionPassed(*message);
         if (status != SUCCESS)
         {
-            Log::Line(Log::WARN, "UbipalService::RecvMessage: Callback returned %d, %s", status, GetErrorDescription(status));
+            Log::Line(Log::WARN, "UbipalService::REcvMessage: MessageConditionPassed failed: %s", GetErrorDescription(status));
             return status;
         }
 
@@ -1680,8 +1678,7 @@ namespace UbiPAL
         return SUCCESS;
     }
 
-    int UbipalService::CheckAcls(const std::string& message, const std::string& sender, const std::string& receiver,
-                                 std::vector<std::string>* acl_trail, std::vector<std::string>* conditions)
+    int UbipalService::CheckAcls(const Message& message, std::vector<std::string>* acl_trail, std::vector<std::string>* conditions)
     {
         local_acls_mutex.lock();
         external_acls_mutex.lock();
@@ -1699,7 +1696,7 @@ namespace UbiPAL
             conditions = &conditions_new;
         }
 
-        status = CheckAclsRecurse(message, sender, receiver, receiver, *acl_trail, *conditions);
+        status = CheckAclsRecurse(message, message.to, *acl_trail, *conditions);
 
         external_acls_mutex.unlock();
         local_acls_mutex.unlock();
@@ -1707,8 +1704,7 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::CheckAclsRecurse(const std::string& message, const std::string& sender, const std::string& receiver, const std::string& current,
-                                        std::vector<std::string>& acl_trail, std::vector<std::string>& conditions)
+    int UbipalService::CheckAclsRecurse(const Message& message, const std::string& current, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions)
     {
         int status = SUCCESS;
         size_t first_can = 0;
@@ -1760,7 +1756,7 @@ namespace UbiPAL
             for (unsigned int j = 0; j < current_acls[i].rules.size(); ++j)
             {
                 // if message is mentioned in rule
-                if (current_acls[i].rules[j].find(message) != std::string::npos)
+                if (current_acls[i].rules[j].find(message.message) != std::string::npos)
                 {
                     // verbs are either can, can say, or is
                     first_can = current_acls[i].rules[j].find("can");
@@ -1774,15 +1770,20 @@ namespace UbiPAL
                         std::string other_service = current_acls[i].rules[j].substr(0, first_space);
                         temp_consider.service_id = other_service;
                         temp_consider.referenced_from_acl = current_acls[i].msg_id;
-                        // TODO record the conditions needed
+                        status = GetConditionsFromRule(current_acls[i].rules[j], temp_consider.conditions);
+                        if (status != SUCCESS)
+                        {
+                            Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: GetConditionsFromRule failed %s", GetErrorDescription(status));
+                            continue;
+                        }
                         to_consider.push_back(temp_consider);
                     }
                     // if rules first verb is "can"
                     else if (first_can != std::string::npos && first_can_say == std::string::npos)
                     {
                         // check if this rule is talking about the sender and the receiver, if not continue;
-                        if ((current_acls[i].rules[j].compare(0, sender.size(), sender) != 0) ||
-                            current_acls[i].rules[j].find(receiver) == std::string::npos)
+                        if ((current_acls[i].rules[j].compare(0, message.from.size(), message.from) != 0) ||
+                            current_acls[i].rules[j].find(message.to) == std::string::npos)
                         {
                             continue;
                         }
@@ -1790,7 +1791,12 @@ namespace UbiPAL
                         {
                             temp_consider.service_id = current;
                             temp_consider.referenced_from_acl = current_acls[i].msg_id;
-                            // TODO record the conditions needed
+                            status = GetConditionsFromRule(current_acls[i].rules[j], temp_consider.conditions);
+                            if (status != SUCCESS)
+                            {
+                                Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: GetConditionsFromRule failed %s", GetErrorDescription(status));
+                                continue;
+                            }
                             to_consider.insert(to_consider.begin(), temp_consider);
                         }
                     }
@@ -1809,8 +1815,20 @@ namespace UbiPAL
             // if to_consider[i].id is current, then just check conditions
             if (to_consider[i].service_id == current)
             {
-                // TODO CHECK CONDITIONS
-                return SUCCESS;
+                if (to_consider[i].conditions.size() == 0)
+                {
+                    return SUCCESS;
+                }
+                else
+                {
+                    status = StartConditionChecks(message, to_consider[i].conditions);
+                    if (status != SUCCESS)
+                    {
+                        Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: StartConditionChecks failed: %s", GetErrorDescription(status));
+                        return status;
+                    }
+                    return WAIT_ON_ACLS;
+                }
             }
             // else recurse
             else
@@ -1824,7 +1842,7 @@ namespace UbiPAL
                     new_conditions.push_back(to_consider[i].conditions[j]);
                 }
 
-                status = CheckAclsRecurse(message, sender, receiver, to_consider[i].service_id, acl_trail, conditions);
+                status = CheckAclsRecurse(message, to_consider[i].service_id, acl_trail, conditions);
                 if (status == SUCCESS)
                 {
                     acl_trail = new_acl_trail;
@@ -1839,6 +1857,151 @@ namespace UbiPAL
         }
 
         return NOT_IN_ACLS;
+    }
+
+    int UbipalService::StartConditionChecks(const Message& message, const std::vector<std::string>& conditions)
+    {
+        int status = SUCCESS;
+
+        ConditionCheck new_cond_check;
+        new_cond_check.message = message;
+        new_cond_check.conditions = conditions;
+
+        awaiting_conditions.push_back(new_cond_check);
+
+        std::vector<NamespaceCertificate> services;
+        status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED, services);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        size_t start = 0;
+        size_t end = 0;
+        std::string dest;
+        for (unsigned int i = 0; i < conditions.size(); ++i)
+        {
+            start = 0;
+            end = conditions[i].find(" ");
+            dest = conditions[i].substr(start, end - start);
+            for (unsigned int j = 0; j < services.size(); ++j)
+            {
+                if (services[j].id == dest)
+                {
+                    start = conditions[i].find(" ", end + 1);
+                    if (start == std::string::npos)
+                    {
+                        Log::Line(Log::WARN, "UbipalService::StartConditionChecks: Bad rule syntax.");
+                        break;
+                    }
+                    std::string cond_msg = conditions[i].substr(start + 1);
+                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], cond_msg, NULL, 0, ConditionReplyCallback);
+                    if (status != SUCCESS)
+                    {
+                        Log::Line(Log::WARN, "UbipalService::StartConditionChecks: SendMessage failed: %s", GetErrorDescription(status));
+                        return status;
+                    }
+                    break;
+                }
+            }
+        }
+
+        return status;
+    }
+
+    int UbipalService::ConditionReplyCallback(UbipalService* us, Message original_message, Message reply_message)
+    {
+        int status = SUCCESS;
+        if (us == nullptr)
+        {
+            return NULL_ARG;
+        }
+
+        for (unsigned int i = 0; i < us->awaiting_conditions.size(); ++i)
+        {
+            for (unsigned int j = 0; j < us->awaiting_conditions[i].conditions.size(); ++j)
+            {
+                if (strncmp(reply_message.from.c_str(), us->awaiting_conditions[i].conditions[j].c_str(), reply_message.from.size()) == 0)
+                {
+                    if (us->awaiting_conditions[i].conditions[j].find(original_message.message) != std::string::npos)
+                    {
+                        us->awaiting_conditions[i].conditions.erase(us->awaiting_conditions[i].conditions.begin() + j);
+                        --j;
+                        continue;
+                    }
+                }
+            }
+
+            if (us->awaiting_conditions[i].conditions.size() == 0)
+            {
+                status = us->MessageConditionPassed(us->awaiting_conditions[i].message);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::CondtionReplyCallback: MessageConditionsPassed failed: %s", GetErrorDescription(status));
+                    status = SUCCESS;
+                }
+                us->awaiting_conditions.erase(us->awaiting_conditions.begin() + i);
+                --i;
+            }
+        }
+
+        return status;
+    }
+
+    int UbipalService::MessageConditionPassed(const Message& message)
+    {
+        int status = SUCCESS;
+        std::unordered_map<std::string, UbipalCallback>::iterator found;
+
+        // find function to call
+        found = callback_map.find(message.message);
+        if (found == callback_map.end())
+        {
+            Log::Line(Log::WARN, "UbipalService::MessageConditionPassed: Does not have the appropriate callback.");
+            return GENERAL_FAILURE;
+        }
+
+        status = found->second(this, message);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::WARN, "UbipalService::MessageConditionPassed: Callback returned %d, %s", status, GetErrorDescription(status));
+            return status;
+        }
+        return status;
+    }
+
+    int UbipalService::GetConditionsFromRule(const std::string& rule, std::vector<std::string>& conditions)
+    {
+        int status = SUCCESS;
+        size_t begin = 0;
+        size_t end = 0;
+
+        begin = rule.find(" if ");
+        if (begin == std::string::npos)
+        {
+            return status;
+        }
+
+        begin += strlen(" if ");
+        std::string cond_string = rule.substr(begin);
+        if (cond_string.size() == 0)
+        {
+            return status;
+        }
+
+        begin = 0;
+        while (begin < cond_string.size())
+        {
+            end = cond_string.find(",", begin);
+            conditions.push_back(cond_string.substr(begin, end));
+            if (end == std::string::npos)
+            {
+                break;
+            }
+            begin = end + strlen(", ");
+        }
+
+        return status;
     }
 
     int UbipalService::CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)

@@ -316,17 +316,23 @@ namespace UbiPAL
             // Verifies that the sender can send message based on receiver's ACLs
             // args
             //          [IN] message: message in question
-            //          [IN] sender: the service that sent/will send the message
-            //          [IN] receiver: the destination of the message
             //          [OUT] acl_trail: if not null, the set of ACLs used to validate this message
             //          [OUT] conditions: if not null, a set of conditions which must hold
             // returns
             //          int: SUCCESS if authorized, NOT_IN_ACLS if the current ACLs don't allow it, FAILED_CONDITIONS if conditions didn't hold
             //               else an error code
-            int CheckAcls(const std::string& message, const std::string& sender, const std::string& receiver,
-                          std::vector<std::string>* acl_trail, std::vector<std::string>* conditions);
+            int CheckAcls(const Message& message, std::vector<std::string>* acl_trail, std::vector<std::string>* conditions);
 
         private:
+
+            // MessageConditionPassed
+            // Called when all message conditions have been met and message is ready to be delivered.
+            // args
+            //          [IN] message: The message to deliver.
+            // return
+            //          int: SUCCESS on success
+            int MessageConditionPassed(const Message& message);
+
             // init
             // Runs common parts of the constructors
             // args
@@ -576,20 +582,58 @@ namespace UbiPAL
                 std::string referenced_from_acl;
             };
 
+            // GetConditionsFromRule
+            // Takes a string rule and parses it to find the conditions in string form
+            // args
+            //          [IN] rule: The string of the entire rule
+            //          [OUT] conditions: The vector of conditions
+            // returns
+            //          int: SUCCESS on success
+            int GetConditionsFromRule(const std::string& rule, std::vector<std::string>& conditions);
+
             // CheckAclsRecurse
             // Recurseive call to verify that the sender can send message based on receiver's ACLs
             // args
             //          [IN] message: message in question
-            //          [IN] sender: the service that sent/will send the message
-            //          [IN] receiver: the destination of the message
             //          [IN] current: the current service being evaluated
             //          [IN/OUT] acl_trail: the set of ACLs used to validate this message
             //          [IN/OUT] conditions: a set of conditions which must hold
             // returns
             //          int: SUCCESS if authorized, NOT_IN_ACLS if the current ACLs don't allow it, FAILED_CONDITIONS if conditions didn't hold
             //               else an error code
-            int CheckAclsRecurse(const std::string& message, const std::string& sender, const std::string& receiver, const std::string& current,
-                                 std::vector<std::string>& acl_trail, std::vector<std::string>& conditions);
+            int CheckAclsRecurse(const Message& message, const std::string& current, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions);
+
+            // ConditionsCheck
+            // A structure used to track condition confirmations
+            struct ConditionCheck
+            {
+                Message message;
+                std::vector<std::string> conditions;
+            };
+
+            // Holds messages awaiting condition checks
+            std::vector<ConditionCheck> awaiting_conditions;
+
+            // ConditionReplyCallback
+            // Walks through the awaiting_conditions structure and removes any dependencies on the confirmed message
+            // For ANY message with a matching condition
+            // args
+            //          [IN] us: This service
+            //          [IN] original_message: Message sent to service for confirmation
+            //          [IN] reply_message: The message with either a confirmation or denies
+            // returns
+            //          int: SUCCESS on success, negative error code on error
+            static int ConditionReplyCallback(UbipalService* us, Message original_message, Message reply_message);
+
+            // StartConditionChecks
+            // Begins the process of checking for conditions by saving the message and conditions
+            // as well as sending the confirmation messages
+            // args
+            //          [IN] message: The message in question
+            //          [IN] conditions: conditions which must be met
+            // returns
+            //          int: SUCCESS on success, negative error code on error
+            int StartConditionChecks(const Message& message, const std::vector<std::string>& conditions);
     };
 }
 

@@ -28,10 +28,16 @@ int main(int argc, char** argv)
     rules.push_back(rule);
     UbiPAL::AccessControlList acl_all;
 
+    std::vector<std::string> confirm_rules;
+    std::string delegator = "CE7EFE13CCE736C6B5172F7B5C496F6AAF918F4CD49E42763B54B8A8DA52CBBDFBFEDAAC5FC5F191CA2B1BAD2AF99BC59F9ECE6605D6A5318CD60FB57B7E482E7D8B1A201FCB24900A06A71CE69A30DEC70E450F14B512DFADC2C67FB545855E47D321357E20466ABAE6C5423D13A1DFD1E06A37AE52872E0E9F4321C5F2B999-03";
+    std::string confirm_rule = sender + " can send message PrintToScreen to " + receiver + " if " + delegator + " confirms PLEASE_CONFIRM";
+    confirm_rules.push_back(confirm_rule);
+
     std::cout << "Commands: " << std::endl
                               << "    a: Allow sender to send to receiver." << std::endl
                               << "    b: Block sender a from sending to receiver." << std::endl
-                              << "    s: Send namespace certificate." << std::endl;
+                              << "    s: Send namespace certificate." << std::endl
+                              << "    c: Allow with confirmation by confirmer." <<std::endl;
 
     char command;
     while(1)
@@ -70,6 +76,22 @@ int main(int argc, char** argv)
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << UbiPAL::GetErrorDescription(status) << std::endl;
+                }
+                break;
+            case 'c':
+                std::cout << "Requires confirm." << std::endl;
+                status = us.CreateAcl("all", confirm_rules, acl_all);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    return status;
+                }
+
+                status = us.SendAcl(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, acl_all, NULL);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "Failed to broadcast acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
                 }
                 break;
             case 'q': return status;

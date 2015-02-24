@@ -51,7 +51,7 @@ endif
 dir_guard = @mkdir -p $(@D)
 
 .PHONY: all
-all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS) $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id
+all: $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS) $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer
 
 .PHONY: help
 help:
@@ -121,6 +121,13 @@ $(BINDIR)/$(EXDIR)/print_id: $(OBJECTS) $(BINDIR)/$(EXDIR)/print_id.o
 
 .PHONY: print_id
 receiver: $(BINDIR)/$(EXDIR)/print_id
+
+$(BINDIR)/$(EXDIR)/confirmer: $(OBJECTS) $(BINDIR)/$(EXDIR)/confirmer.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/confirmer.o -o $(BINDIR)/$(EXDIR)/confirmer $(LIBS)
+
+.PHONY: confirmer
+receiver: $(BINDIR)/$(EXDIR)/confirmer
 
 .PHONY: clean
 clean:

@@ -38,7 +38,7 @@ int main(int argc, char** argv)
 
     // log configuration
     UbiPAL::Log::SetFile("bin/examples/receiverlog.txt");
-    UbiPAL::Log::SetPrint(true);
+    UbiPAL::Log::SetPrint(false);
 
     // Create a UbiPAL service on the given port
     UbiPAL::UbipalService us("examples/receiver.txt");

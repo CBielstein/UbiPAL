@@ -359,6 +359,38 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalServiceTests::UbipalServiceTestConditionParse()
+    {
+        int status = SUCCESS;
+        std::vector<std::string> conds;
+        UbipalService us;
+
+        std::string rule = "alice can send OPEN to bob_door if bob_house confirms IS_PRESENT(bob)";
+        status = us.GetConditionsFromRule(rule, conds);
+        if (conds.size() != 1)
+        {
+            return GENERAL_FAILURE;
+        }
+        if (conds[0] != std::string("bob_house confirms IS_PRESENT(bob)"))
+        {
+            return GENERAL_FAILURE;
+        }
+
+        conds.clear();
+        rule += ", bob_clock confirms TIME_IS(12:00)";
+        status = us.GetConditionsFromRule(rule, conds);
+        if (conds.size() != 2)
+        {
+            return GENERAL_FAILURE;
+        }
+        if (conds[0] != std::string("bob_house confirms IS_PRESENT(bob)") || conds[1] != std::string("bob_clock confirms TIME_IS(12:00)"))
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return status;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -383,5 +415,7 @@ namespace UbiPAL
                                  "UbipalServiceTestRegisterCallbackUpdate", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestSaveReadFile, SUCCESS,
                                  "UbipalServiceTestSaveReadFile", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestConditionParse, SUCCESS,
+                                 "UbipalServiceTestConditionParse", module_count, module_fails);
     }
 }

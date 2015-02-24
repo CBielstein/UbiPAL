@@ -32,6 +32,7 @@ namespace UbiPAL
             case NOT_IN_ACLS: return "NOT_IN_ACLS: Access to sending a message could not be granted because the ACLs on hand do not allow it.";
             case FAILED_CONDITIONS: return "FAILED_CONDITIONS: Access to sending a message could not be granted because the conditions did not hold.";
             case NOT_FOUND: return "NOT_FOUND: The requested object was not found.";
+            case WAIT_ON_ACLS: return "WAIT_ON_ACLS: The message must wait on ACL checks to complete before being delivered.";
             default: return "Error code does not have description.";
         }
     }
