@@ -33,6 +33,7 @@ namespace UbiPAL
             case FAILED_CONDITIONS: return "FAILED_CONDITIONS: Access to sending a message could not be granted because the conditions did not hold.";
             case NOT_FOUND: return "NOT_FOUND: The requested object was not found.";
             case WAIT_ON_ACLS: return "WAIT_ON_ACLS: The message must wait on ACL checks to complete before being delivered.";
+            case TIMEOUT_CONDITIONS: return "TIMEOUT_CONDITION: The requested message timed out during condition checks.";
             default: return "Error code does not have description.";
         }
     }

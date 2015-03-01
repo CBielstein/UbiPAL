@@ -11,17 +11,23 @@
 #include "../src/log.h"
 
 bool allow;
+bool reply;
 
 int confirmer(UbiPAL::UbipalService* us, UbiPAL::Message message)
 {
-    if (allow)
+    if (allow && reply)
     {
         std::cout << "confirming." << std::endl;
         us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"CONFIRM", strlen("CONFIRM"));
     }
+    else if (reply)
+    {
+        std::cout << "denying." << std::endl;
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"DENY", strlen("DENY"));
+    }
     else
     {
-        std::cout << "not confirming." << std::endl;
+        std::cout << "ignoring." << std::endl;
     }
     return UbiPAL::SUCCESS;
 }
@@ -31,6 +37,7 @@ int main(int argc, char** argv)
     int status = UbiPAL::SUCCESS;
 
     allow = false;
+    reply = true;
 
     // log configuration
     UbiPAL::Log::SetFile("bin/examples/confirmerlog.txt");
@@ -69,7 +76,8 @@ int main(int argc, char** argv)
 std::cout << "Commands: " << std::endl
                               << "    a: Allow sender to send to receiver." << std::endl
                               << "    b: Block sender a from sending to receiver." << std::endl
-                              << "    s: Send namespace certificate." << std::endl;
+                              << "    s: Send namespace certificate." << std::endl
+                              << "    n: No reply. Allow timeout to occur." << std::endl;
 
     char command;
     while(1)
@@ -80,10 +88,12 @@ std::cout << "Commands: " << std::endl
             case 'a':
                 std::cout << "Allowing." << std::endl;
                 allow = true;
+                reply = true;
                 break;
             case 'b':
                 std::cout << "Blocking." << std::endl;
                 allow = false;
+                reply = true;
                 break;
             case 's':
                 std::cout << "Sending namespace cert." << std::endl;
@@ -94,6 +104,10 @@ std::cout << "Commands: " << std::endl
                 }
                 break;
             case 'q': return status;
+            case 'i':
+               reply = false;
+                std::cout << "Ignore!" << std::endl;
+                break;
             default: continue;
         }
     }

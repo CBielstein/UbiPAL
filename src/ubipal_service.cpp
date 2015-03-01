@@ -23,6 +23,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <sys/time.h>
 
 // OpenSSL
 #include <openssl/err.h>
@@ -44,6 +45,8 @@ namespace UbiPAL
         char buf[FILE_READ_LENGTH];
         char* port = nullptr;
         std::string line;
+
+        condition_timeout_length = 500;
 
         fd = fopen(file_path.c_str(), "r");
         if (fd == nullptr)
@@ -386,20 +389,9 @@ namespace UbiPAL
             {
                 receiving = true;
                 Log::Line(Log::INFO, "UbipalService::BeginRecv: Beginning receiving on port %s", port.c_str());
-
-                // spin up threads for receiving
-                for (unsigned int i = 0; i < num_recv_threads; ++i)
-                {
-                    returned_value = pthread_create(&new_thread, NULL, ConsumeIncoming, this);
-                    if (returned_value != 0)
-                    {
-                        Log::Line(Log::EMERG, "UbipalService::BeginRecv: A call to pthread_create failed: %d", returned_value);
-                    }
-
-                    recv_threads.push_back(new_thread);
-                }
             }
         receiving_mutex.unlock();
+
 
         // if flag isn't specified, go ahead and broadcast the name
         if ((flags & BeginRecvFlags::DONT_PUBLISH_NAME) == 0)
@@ -411,9 +403,10 @@ namespace UbiPAL
             }
         }
 
-        // start broadcast receivers
+        // start threads
         threads_mutex.lock();
 
+        // start broadcast receiver
         returned_value = pthread_create(&new_thread, NULL, RecvBroadcast, this);
         if (returned_value != 0)
         {
@@ -423,6 +416,27 @@ namespace UbiPAL
         }
 
         recv_threads.push_back(new_thread);
+
+        // spin up threads for receiving
+        for (unsigned int i = 0; i < num_recv_threads; ++i)
+        {
+            returned_value = pthread_create(&new_thread, NULL, ConsumeIncoming, this);
+            if (returned_value != 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::BeginRecv: A call to pthread_create failed: %d", returned_value);
+            }
+
+            recv_threads.push_back(new_thread);
+        }
+
+        // start condition timeout thread
+        returned_value = pthread_create(&conditions_timeout_thread, NULL, ConditionTimeout, this);
+        if (returned_value != 0)
+        {
+            threads_mutex.unlock();
+            return THREAD_FAILURE;
+        }
+
         threads_mutex.unlock();
 
         // begin receiving unicasts. Spin a new thread if we're nonblocking
@@ -972,14 +986,14 @@ namespace UbiPAL
                     return GENERAL_FAILURE;
                 }
 
-                Message original_message;
+                Message* original_message = nullptr;
                 bool found_original_message = false;
                 for (unsigned int i = 0; i < msgs_awaiting_reply.size(); ++i)
                 {
                     if (msgs_awaiting_reply[i]->msg_id == replying_id)
                     {
-                        original_message = *(msgs_awaiting_reply[i]);
-                        free(msgs_awaiting_reply[i]);
+                        original_message = msgs_awaiting_reply[i];
+                        delete msgs_awaiting_reply[i];
                         msgs_awaiting_reply.erase(msgs_awaiting_reply.begin() + i);
                         found_original_message = true;
                         break;
@@ -994,7 +1008,7 @@ namespace UbiPAL
                 }
 
                 reply_callback_mutex.unlock();
-                status = callback_func(this, original_message, *message);
+                status = callback_func(this, original_message, message);
                 return status;
             }
             else
@@ -1489,9 +1503,9 @@ namespace UbiPAL
         exit:
             if ((sm_args->flags & SendMessageFlags::MESSAGE_AWAIT_REPLY) == 0)
             {
-                free(sm_args->msg);
+                delete sm_args->msg;
             }
-            free(sm_args);
+            delete sm_args;
             free(bytes);
             return nullptr;
     }
@@ -1556,8 +1570,8 @@ namespace UbiPAL
         exit:
             if (status != SUCCESS)
             {
-                free(msg);
-                free(sm_args);
+                delete msg;
+                delete sm_args;
             }
             FUNCTION_END;
     }
@@ -1626,8 +1640,8 @@ namespace UbiPAL
         exit:
             if (status != SUCCESS)
             {
-                free(msg);
-                free(sm_args);
+                delete msg;
+                delete sm_args;
             }
             FUNCTION_END;
     }
@@ -1810,18 +1824,21 @@ namespace UbiPAL
         }
 
         // call this recursively for each in the consideration vector
+        std::vector<std::string> all_conditions;
         for (unsigned int i = 0; i < to_consider.size(); ++i)
         {
             // if to_consider[i].id is current, then just check conditions
             if (to_consider[i].service_id == current)
             {
-                if (to_consider[i].conditions.size() == 0)
+                all_conditions.insert(all_conditions.end(), conditions.begin(), conditions.end());
+                all_conditions.insert(all_conditions.end(), to_consider[i].conditions.begin(), to_consider[i].conditions.end());
+                if (all_conditions.size() == 0)
                 {
                     return SUCCESS;
                 }
                 else
                 {
-                    status = StartConditionChecks(message, to_consider[i].conditions);
+                    status = StartConditionChecks(message, all_conditions);
                     if (status != SUCCESS)
                     {
                         Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: StartConditionChecks failed: %s", GetErrorDescription(status));
@@ -1842,7 +1859,7 @@ namespace UbiPAL
                     new_conditions.push_back(to_consider[i].conditions[j]);
                 }
 
-                status = CheckAclsRecurse(message, to_consider[i].service_id, acl_trail, conditions);
+                status = CheckAclsRecurse(message, to_consider[i].service_id, new_acl_trail, new_conditions);
                 if (status == SUCCESS)
                 {
                     acl_trail = new_acl_trail;
@@ -1863,11 +1880,15 @@ namespace UbiPAL
     {
         int status = SUCCESS;
 
+        awaiting_conditions_mutex.lock();
+
         ConditionCheck new_cond_check;
         new_cond_check.message = message;
         new_cond_check.conditions = conditions;
-
+        new_cond_check.time = GetTimeMilliseconds();
         awaiting_conditions.push_back(new_cond_check);
+
+        awaiting_conditions_mutex.unlock();
 
         std::vector<NamespaceCertificate> services;
         status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED, services);
@@ -1909,7 +1930,7 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::ConditionReplyCallback(UbipalService* us, Message original_message, Message reply_message)
+    int UbipalService::ConditionReplyCallback(UbipalService* us, const Message* original_message, const Message* reply_message)
     {
         int status = SUCCESS;
         if (us == nullptr)
@@ -1917,19 +1938,44 @@ namespace UbiPAL
             return NULL_ARG;
         }
 
+        us->awaiting_conditions_mutex.lock();
+
+        bool denied = false;
         for (unsigned int i = 0; i < us->awaiting_conditions.size(); ++i)
         {
             for (unsigned int j = 0; j < us->awaiting_conditions[i].conditions.size(); ++j)
             {
-                if (strncmp(reply_message.from.c_str(), us->awaiting_conditions[i].conditions[j].c_str(), reply_message.from.size()) == 0)
+                if (strncmp(reply_message->from.c_str(), us->awaiting_conditions[i].conditions[j].c_str(), reply_message->from.size()) == 0)
                 {
-                    if (us->awaiting_conditions[i].conditions[j].find(original_message.message) != std::string::npos)
+                    if (us->awaiting_conditions[i].conditions[j].find(original_message->message) != std::string::npos)
                     {
-                        us->awaiting_conditions[i].conditions.erase(us->awaiting_conditions[i].conditions.begin() + j);
-                        --j;
-                        continue;
+                        if (memcmp(reply_message->argument, "CONFIRM", strlen("CONFIRM")) == 0)
+                        {
+                            us->awaiting_conditions[i].conditions.erase(us->awaiting_conditions[i].conditions.begin() + j);
+                            --j;
+                            continue;
+                        }
+                        else
+                        {
+                            denied = true;
+                            break;
+                        }
                     }
                 }
+            }
+
+            if (denied)
+            {
+                status = us->MessageConditionFailed(us->awaiting_conditions[i].message);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::CondtionReplyCallback: MessageConditionsFailed failed: %s", GetErrorDescription(status));
+                    status = SUCCESS;
+                }
+                us->awaiting_conditions.erase(us->awaiting_conditions.begin() + i);
+                --i;
+                denied = false;
+                continue;
             }
 
             if (us->awaiting_conditions[i].conditions.size() == 0)
@@ -1945,6 +1991,7 @@ namespace UbiPAL
             }
         }
 
+        us->awaiting_conditions_mutex.unlock();
         return status;
     }
 
@@ -1970,6 +2017,35 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalService::MessageConditionFailed(const Message& message)
+    {
+        int status = SUCCESS;
+
+        // send failure
+        status = ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::WARN, "UbipalService::MessageConditionFailed: ReplyToMessage failed %s", GetErrorDescription(status));
+            return status;
+        }
+
+        return status;
+    }
+
+    int UbipalService::MessageConditionTimeout(const Message& message)
+    {
+        int status = SUCCESS;
+
+        // send failure
+        status = ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"TIMEOUT_CONDITIONS", strlen("TIMEOUT_CONDITIONS") + 1);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::WARN, "UbipalService::MessageConditionTimeout: ReplyToMessage failed %s", GetErrorDescription(status));
+            return status;
+        }
+
+        return status;
+    }
     int UbipalService::GetConditionsFromRule(const std::string& rule, std::vector<std::string>& conditions)
     {
         int status = SUCCESS;
@@ -2107,5 +2183,57 @@ namespace UbiPAL
         }
 
         return status;
+    }
+
+    void* UbipalService::ConditionTimeout(void* arg)
+    {
+        if (arg == nullptr)
+        {
+            return NULL;
+        }
+
+        int status = SUCCESS;
+        UbipalService* us = (UbipalService*)arg;
+        uint32_t time = 0;
+
+        while(us->receiving)
+        {
+            sched_yield();
+            usleep(us->condition_timeout_length * 1000);
+            time = GetTimeMilliseconds();
+
+            us->awaiting_conditions_mutex.lock();
+            for (unsigned int i = 0; i < us->awaiting_conditions.size(); ++i)
+            {
+                if (us->awaiting_conditions[i].time + us->condition_timeout_length < time)
+                {
+                    // this message timed out
+                    status = us->MessageConditionTimeout(us->awaiting_conditions[i].message);
+                    if (status != SUCCESS)
+                    {
+                        Log::Line(Log::WARN, "UbipalService::ConditionTimeout: MessageConditionTimeout failed. %s", GetErrorDescription(status));
+                        continue;
+                    }
+
+                    us->awaiting_conditions.erase(us->awaiting_conditions.begin() + i);
+                    --i;
+                }
+            }
+            us->awaiting_conditions_mutex.unlock();
+        }
+
+        return NULL;
+    }
+
+    uint32_t UbipalService::GetTimeMilliseconds()
+    {
+        struct timeval time;
+        int returned_value = gettimeofday(&time, NULL);
+        if (returned_value == -1)
+        {
+            return 0;
+        }
+
+        return (time.tv_sec * 1000) + (time.tv_usec / 1000);
     }
 }

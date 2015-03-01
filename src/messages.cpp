@@ -514,6 +514,8 @@ namespace UbiPAL
     {
         if (arg == nullptr || arg_size == 0)
         {
+            argument = nullptr;
+            arg_len = 0;
             return;
         }
 

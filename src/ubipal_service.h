@@ -37,7 +37,7 @@ namespace UbiPAL
     typedef int(*UbipalCallback)(UbipalService* us, Message message);
 
     // A callback for received replies.
-    typedef int(*UbipalReplyCallback)(UbipalService* us, Message original_message, Message reply_message);
+    typedef int(*UbipalReplyCallback)(UbipalService* us, const Message* original_message, const Message* reply_message);
 
     // UbipalService
     // Representation of a service in the UbiPAL namespace
@@ -333,6 +333,22 @@ namespace UbiPAL
             //          int: SUCCESS on success
             int MessageConditionPassed(const Message& message);
 
+            // MessageConditionFailed
+            // Called when a message conditition failed. Informs the requesting service.
+            // args
+            //          [IN] message: The message which failed conditions.
+            // return
+            //          int: SUCCESS on success
+            int MessageConditionFailed(const Message& message);
+
+            // MessageConditionTimeout
+            // Called when a message conditition failed. Informs the requesting service.
+            // args
+            //          [IN] message: The message which timeout conditions.
+            // return
+            //          int: SUCCESS on success
+            int MessageConditionTimeout(const Message& message);
+
             // init
             // Runs common parts of the constructors
             // args
@@ -609,10 +625,35 @@ namespace UbiPAL
             {
                 Message message;
                 std::vector<std::string> conditions;
+                uint32_t time;
             };
 
             // Holds messages awaiting condition checks
             std::vector<ConditionCheck> awaiting_conditions;
+
+            // avoids race conditionson the above data structure
+            std::mutex awaiting_conditions_mutex;
+
+            // holds the thread for checking condition timeouts
+            pthread_t conditions_timeout_thread;
+
+            // The length of condition check timeout in milliseconds
+            uint32_t condition_timeout_length;
+
+            // GetTimeMilliseconds
+            // Returns the current service (systeM) time in milliseconds since the epoch
+            // returns
+            //          int: The current time in milliseconds
+            static uint32_t GetTimeMilliseconds();
+
+            // ConditionTimeout
+            // Checks condition timeout with timeout of condition_timeout_length. Any conditions which time out are removed from the list
+            // and their requesting services are notified.
+            // args
+            //          [IN] arg: UbipaService* this
+            // return
+            //          NULL
+            static void* ConditionTimeout(void* arg);
 
             // ConditionReplyCallback
             // Walks through the awaiting_conditions structure and removes any dependencies on the confirmed message
@@ -623,7 +664,7 @@ namespace UbiPAL
             //          [IN] reply_message: The message with either a confirmation or denies
             // returns
             //          int: SUCCESS on success, negative error code on error
-            static int ConditionReplyCallback(UbipalService* us, Message original_message, Message reply_message);
+            static int ConditionReplyCallback(UbipalService* us, const Message* original_message, const Message* reply_message);
 
             // StartConditionChecks
             // Begins the process of checking for conditions by saving the message and conditions

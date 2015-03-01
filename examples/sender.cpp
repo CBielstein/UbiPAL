@@ -11,9 +11,9 @@
 #include "../src/log.h"
 
 
-int print_replies(UbiPAL::UbipalService* us, UbiPAL::Message original_message, UbiPAL::Message reply_message)
+int print_replies(UbiPAL::UbipalService* us, const UbiPAL::Message* original_message, const UbiPAL::Message* reply_message)
 {
-    std::cout << "Reply: " <<  reply_message.argument << std::endl;
+    std::cout << "Reply: " <<  reply_message->argument << std::endl;
     return UbiPAL::SUCCESS;
 }
 
