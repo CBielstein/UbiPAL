@@ -276,8 +276,27 @@ namespace UbiPAL
             int RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
             // XXX
-            // looks up a name advertising the desired message
-            int FindNameForMessage(const std::string& message, NamespaceCertificate*& name);
+            // EvaluateRules
+            // Checks to see if the given rule holds based on ACLs we've heard. Will evaluate conditions as necessary.
+            // example:
+            //          FOO can send message BAR to BAZ
+            // args
+            //          [IN] the statement to evaluate
+            // return
+            //          int: 0 implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, or TIMEOUT_CONDITIONS, else a negative error code
+            int EvaluateStatement(const std::string& statement);
+
+            // XXX
+            // FindNameForStatements
+            // Checks to see if there is a name that matches the given statements
+            // args
+            //          [IN] statements: The statements to evaluate. "NAME" is used as the wildcard in these rules.
+            //                  Examples: "NAME can send message OPEN to FOO", "FOO say NAME is a BAR", "NAME can say FOO can send message BAR to BAZ"
+            //                  This would find a service which can send OPEN to FOO, FOO says is a BAR, and can delegate sending BAR to BAZ.
+            //          [OUT] result_name: The resulting name. For now, this selects the first name which matches the criteria.
+            // return
+            //          int: 0 imples SUCCESS, NOT_IN_ACLS, FAILED_CONDITIONS_or TIMEOUT_CONDITIONS if it fails, else negative error code
+            int FindNameForStatements(const std::vector<std::string>& statements, NamespaceCertificate& result_name)
 
             enum GetNamesFlags
             {
