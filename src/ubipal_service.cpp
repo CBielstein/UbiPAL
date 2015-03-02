@@ -1073,7 +1073,7 @@ namespace UbiPAL
         }
 
         // check against ACLs
-        status = CheckAcls(*message, NULL, NULL);
+        //status = CheckAcls(*message, NULL, NULL);
         if (status == NOT_IN_ACLS)
         {
             ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
@@ -1692,35 +1692,153 @@ namespace UbiPAL
         return SUCCESS;
     }
 
-    int UbipalService::CheckAcls(const Message& message, std::vector<std::string>* acl_trail, std::vector<std::string>* conditions)
+    int UbipalService::EvaluateStatement(const std::string& statement)
     {
         local_acls_mutex.lock();
         external_acls_mutex.lock();
 
         int status = SUCCESS;
-        std::vector<std::string> acl_trail_new;
-        std::vector<std::string> conditions_new;
+        int returned_value = 0;
+        std::vector<std::string> acl_trail;
+        std::vector<std::string> conditions;
+        Statement statement_struct;
 
-        if (acl_trail == nullptr)
+        // parse type of statement
+        if (statement.find(" CAN SAY ") != std::string::npos)
         {
-            acl_trail = &acl_trail_new;
         }
-        if (conditions == nullptr)
+        else if (statement.find(" CAN SEND ") != std::string::npos)
         {
-            conditions = &conditions_new;
+        }
+        else if (statement.find(" IS A ") != std::string::npos)
+        {
+        }
+        else if (statement.find(" IS ") != std::string::npos)
+        {
+        }
+        else if (statement.find("CurrentTime() ") != std::string::npos)
+        {
+            if (statement.find(" < ") != std::string::npos)
+            {
+                size_t num_start = statement.find(" < ") + strlen(" < ");
+                std::string num_string = statement.substr(num_start);
+                int hours = 0;
+                int minutes = 0;
+                returned_value = std::sscanf(num_string.c_str(), "%d:%d", &hours, &minutes);
+                if (returned_value != 2)
+                {
+                    RETURN_STATUS(INVALID_SYNTAX);
+                }
+                time_t timet = time(NULL);
+                struct tm* time_struct = localtime(&timet);
+                if (time_struct == nullptr)
+                {
+                    RETURN_STATUS(GENERAL_FAILURE);
+                }
+
+                if (time_struct->tm_hour < hours || (time_struct->tm_hour == hours && time_struct->tm_min < minutes))
+                {
+                    RETURN_STATUS(SUCCESS);
+                }
+                else
+                {
+                    RETURN_STATUS(FAILED_EVALUATION);
+                }
+            }
+            else if (statement.find(" > ") != std::string::npos)
+            {
+                size_t num_start = statement.find(" > ") + strlen(" > ");
+                std::string num_string = statement.substr(num_start);
+                int hours = 0;
+                int minutes = 0;
+                returned_value = std::sscanf(num_string.c_str(), "%d:%d", &hours, &minutes);
+                if (returned_value != 2)
+                {
+                    RETURN_STATUS(INVALID_SYNTAX);
+                }
+                time_t timet = time(NULL);
+                struct tm* time_struct = localtime(&timet);
+                if (time_struct == nullptr)
+                {
+                    RETURN_STATUS(GENERAL_FAILURE);
+                }
+
+                if (time_struct->tm_hour > hours || (time_struct->tm_hour == hours && time_struct->tm_min > minutes))
+                {
+                    RETURN_STATUS(SUCCESS);
+                }
+                else
+                {
+                    RETURN_STATUS(FAILED_EVALUATION);
+                }
+            }
+            else
+            {
+                RETURN_STATUS(INVALID_SYNTAX);
+            }
+        }
+        else if (statement.find("CurrentDate() ") != std::string::npos)
+        {
+            if (statement.find(" < ") != std::string::npos)
+            {
+                size_t num_start = statement.find(" < ") + strlen(" < ");
+                uint32_t date = atoi(statement.substr(num_start).c_str());
+                struct timeval tv;
+                returned_value = gettimeofday(&tv, NULL);
+                if (returned_value == -1)
+                {
+                    RETURN_STATUS(GENERAL_FAILURE);
+                }
+                if (tv.tv_sec < date)
+                {
+                    RETURN_STATUS(SUCCESS);
+                }
+                else
+                {
+                    RETURN_STATUS(FAILED_EVALUATION);
+                }
+            }
+            else if (statement.find(" > ") != std::string::npos)
+            {
+                size_t num_start = statement.find(" > ") + strlen(" > ");
+                uint32_t date = atoi(statement.substr(num_start).c_str());
+                struct timeval tv;
+                returned_value = gettimeofday(&tv, NULL);
+                if (returned_value == -1)
+                {
+                    RETURN_STATUS(GENERAL_FAILURE);
+                }
+                if (tv.tv_sec > date)
+                {
+                    RETURN_STATUS(SUCCESS);
+                }
+                else
+                {
+                    RETURN_STATUS(FAILED_EVALUATION);
+                }
+            }
+            else
+            {
+                RETURN_STATUS(INVALID_SYNTAX);
+            }
+        }
+        else
+        {
+            RETURN_STATUS(INVALID_SYNTAX);
         }
 
-        status = CheckAclsRecurse(message, message.to, *acl_trail, *conditions);
+        //status = EvaluateStatementRecurse(statement_struct, statement_struct.root, acl_trail, conditions);
 
-        external_acls_mutex.unlock();
-        local_acls_mutex.unlock();
-
-        return status;
+        exit:
+            external_acls_mutex.unlock();
+            local_acls_mutex.unlock();
+            return status;
     }
 
-    int UbipalService::CheckAclsRecurse(const Message& message, const std::string& current, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions)
+    int UbipalService::EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions)
     {
         int status = SUCCESS;
+        /*
         size_t first_can = 0;
         size_t first_can_say = 0;
         std::vector<std::string> new_acl_trail;
@@ -1872,8 +1990,9 @@ namespace UbiPAL
                 }
             }
         }
-
         return NOT_IN_ACLS;
+        */
+        return status;
     }
 
     int UbipalService::StartConditionChecks(const Message& message, const std::vector<std::string>& conditions)

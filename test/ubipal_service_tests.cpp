@@ -391,6 +391,83 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalServiceTests::UbipalServiceTestParseTimeDate()
+    {
+        int status = SUCCESS;
+        UbipalService us;
+
+        std::string future_time = "23:59";
+        std::string future_date = "99999999999999999999";
+        std::string past_time = "00:01";
+        std::string past_date = "01";
+
+        // Check time future pass
+        status = us.EvaluateStatement("CurrentTime() < " + future_time);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "Failed time future pass");
+            return status;
+        }
+
+        // Check time future fail
+        status = us.EvaluateStatement("CurrentTime() > " + future_time);
+        if (status != FAILED_EVALUATION)
+        {
+            fprintf(stderr, "Failed time future fail");
+            return status;
+        }
+
+        // Check time past pass
+        status = us.EvaluateStatement("CurrentTime() > " + past_time);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "Failed time past pass");
+            return status;
+        }
+
+        // Check time past fail
+        status = us.EvaluateStatement("CurrentTime() < " + past_time);
+        if (status != FAILED_EVALUATION)
+        {
+            fprintf(stderr, "Failed time past fail");
+            return status;
+        }
+
+        // Check date future pass
+        status = us.EvaluateStatement("CurrentDate() < " + future_date);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "Failed date future pass");
+            return status;
+        }
+
+        // Check date future fail
+        status = us.EvaluateStatement("CurrentDate() > " + future_date);
+        if (status != FAILED_EVALUATION)
+        {
+            fprintf(stderr, "Failed date future fail");
+            return status;
+        }
+
+        // Check time past pass
+        status = us.EvaluateStatement("CurrentDate() > " + past_date);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "Failed date past pass");
+            return status;
+        }
+
+        // Check date past fail
+        status = us.EvaluateStatement("CurrentDate() < " + past_date);
+        if (status != FAILED_EVALUATION)
+        {
+            fprintf(stderr, "Failed date past fail");
+            return status;
+        }
+
+        return SUCCESS;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -417,5 +494,7 @@ namespace UbiPAL
                                  "UbipalServiceTestSaveReadFile", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestConditionParse, SUCCESS,
                                  "UbipalServiceTestConditionParse", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseTimeDate, SUCCESS,
+                                 "UbipalServiceTestParseTimeDate", module_count, module_fails);
     }
 }

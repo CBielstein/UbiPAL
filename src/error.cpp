@@ -34,6 +34,8 @@ namespace UbiPAL
             case NOT_FOUND: return "NOT_FOUND: The requested object was not found.";
             case WAIT_ON_ACLS: return "WAIT_ON_ACLS: The message must wait on ACL checks to complete before being delivered.";
             case TIMEOUT_CONDITIONS: return "TIMEOUT_CONDITION: The requested message timed out during condition checks.";
+            case INVALID_SYNTAX: return "INVALID_SYNTAX: The syntax of a given UbiPAL statement is invalid.";
+            case FAILED_EVALUATION: return "FAILED_EVALUATION: The given statement failed evaulation.";
             default: return "Error code does not have description.";
         }
     }

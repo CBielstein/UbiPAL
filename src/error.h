@@ -35,6 +35,8 @@ namespace UbiPAL
         NOT_FOUND = -20,
         WAIT_ON_ACLS = -21,
         TIMEOUT_CONDITIONS = -22,
+        INVALID_SYNTAX = -23,
+        FAILED_EVALUATION = -24,
     };
 
     // get_error_description

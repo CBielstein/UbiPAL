@@ -275,16 +275,72 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error code if not
             int RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
+            // The types of UbiPAL statements which are exist.
+            enum StatementType
+            {
+                IS_A,
+                IS,
+                CAN_SEND_MESSAGE,
+                CAN_SAY,
+                CURRENT_TIME,
+                CURRENT_DATE,
+            };
+
+            // STATEMENT
+            //          - NAME says NAME CONNECTIVE NAME
+            //          - NAME says NAME CONNECTIVE NAME CONNECTIVE NAME
+            //          - NAME says CurrentTime() COMPARISON INTEGER
+            //          - NAME says NAME CONNECTIVE STATEMENT
+            //
+            // CONNECTIVE
+            //          - {is a, is, can send message, to}
+            //
+            // COMPARISON
+            //          - { <, > }
+            //
+            // Examples: (a, b, c for variables)
+            // a says b is a c
+            // a says b is c
+            // a says b can send message c to d
+            // CurrentTime() a b // CurrentTime() > 9:00, CurrentTime() < 17:00
+            // CurrentDate() a b // CurrentDate() < UNIX_TIME (seconds since epoch)
+            // a says b can say STATEMENT
+            struct Statement
+            {
+                std::string root;
+                StatementType type;
+                std::string name1;
+                std::string connective;
+                std::string name2;
+                std::string connective2;
+                std::string name3;
+                std::string statement;
+                std::string comparison;
+                std::string integer;
+            };
+
             // XXX
-            // EvaluateRules
+            // EvaluateStatement
             // Checks to see if the given rule holds based on ACLs we've heard. Will evaluate conditions as necessary.
             // example:
             //          FOO can send message BAR to BAZ
             // args
             //          [IN] the statement to evaluate
             // return
-            //          int: 0 implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, or TIMEOUT_CONDITIONS, else a negative error code
+            //          int: SUCCESS implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
             int EvaluateStatement(const std::string& statement);
+
+            // XXX
+            // EvaluateStatementRecurse
+            // Recursive call for EvaluateStatement.
+            // args
+            //          [IN] statement: The parsed statement in a struct form. Parsed by EvaluateStatement
+            //          [IN] current_service: The current service ID for evaluation
+            //          [IN/OUT] acl_trail: The trail of acls we've gone through to this point to avoid loops
+            //          [IN/OUT] conditions: The collections of conditions to this point
+            // return
+            //          int: SUCCESS means the rule holds, else reutnrs NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
+            int EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions);
 
             // XXX
             // FindNameForStatements
@@ -296,7 +352,7 @@ namespace UbiPAL
             //          [OUT] result_name: The resulting name. For now, this selects the first name which matches the criteria.
             // return
             //          int: 0 imples SUCCESS, NOT_IN_ACLS, FAILED_CONDITIONS_or TIMEOUT_CONDITIONS if it fails, else negative error code
-            int FindNameForStatements(const std::vector<std::string>& statements, NamespaceCertificate& result_name)
+            int FindNameForStatements(const std::vector<std::string>& statements, NamespaceCertificate& result_name);
 
             enum GetNamesFlags
             {
@@ -330,17 +386,6 @@ namespace UbiPAL
             // return
             //          string: ID of this service
             inline std::string GetId() { return id; }
-
-            // CheckAcls
-            // Verifies that the sender can send message based on receiver's ACLs
-            // args
-            //          [IN] message: message in question
-            //          [OUT] acl_trail: if not null, the set of ACLs used to validate this message
-            //          [OUT] conditions: if not null, a set of conditions which must hold
-            // returns
-            //          int: SUCCESS if authorized, NOT_IN_ACLS if the current ACLs don't allow it, FAILED_CONDITIONS if conditions didn't hold
-            //               else an error code
-            int CheckAcls(const Message& message, std::vector<std::string>* acl_trail, std::vector<std::string>* conditions);
 
         private:
 
@@ -625,18 +670,6 @@ namespace UbiPAL
             // returns
             //          int: SUCCESS on success
             int GetConditionsFromRule(const std::string& rule, std::vector<std::string>& conditions);
-
-            // CheckAclsRecurse
-            // Recurseive call to verify that the sender can send message based on receiver's ACLs
-            // args
-            //          [IN] message: message in question
-            //          [IN] current: the current service being evaluated
-            //          [IN/OUT] acl_trail: the set of ACLs used to validate this message
-            //          [IN/OUT] conditions: a set of conditions which must hold
-            // returns
-            //          int: SUCCESS if authorized, NOT_IN_ACLS if the current ACLs don't allow it, FAILED_CONDITIONS if conditions didn't hold
-            //               else an error code
-            int CheckAclsRecurse(const Message& message, const std::string& current, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions);
 
             // ConditionsCheck
             // A structure used to track condition confirmations
