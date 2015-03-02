@@ -2,7 +2,7 @@
 // print_id.cpp
 // Prints the id of a given UbiPAL service from a file
 
-#include "../src/ubipal_service.h"
+#include <ubipal/ubipal_service.h>
 #include <iostream>
 
 int main(int argc, char** argv)

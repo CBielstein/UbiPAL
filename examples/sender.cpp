@@ -6,9 +6,9 @@
 #include <iostream>
 
 // UbiPAL
-#include "../src/ubipal_service.h"
-#include "../src/error.h"
-#include "../src/log.h"
+#include <ubipal/ubipal_service.h>
+#include <ubipal/error.h>
+#include <ubipal/log.h>
 
 
 int print_replies(UbiPAL::UbipalService* us, const UbiPAL::Message* original_message, const UbiPAL::Message* reply_message)

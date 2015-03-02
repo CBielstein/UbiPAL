@@ -2,7 +2,7 @@
 // create_service.cpp
 // Creates a UbiPAL service and writes it to the given file path
 
-#include "../src/ubipal_service.h"
+#include <ubipal/ubipal_service.h>
 #include <iostream>
 
 int main(int argc, char** argv)
