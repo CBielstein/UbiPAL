@@ -36,7 +36,7 @@ TESTFLAGS =
 # If DEBUG=1 in build command, allow debugging
 # else, optimize
 ifeq ($(DEBUG), 1)
-    CFLAGS += -g -O0
+    CFLAGS += -ggdb -O0
 else
     CFLAGS += -O2
 endif
@@ -53,12 +53,15 @@ endif
 dir_guard = @mkdir -p $(@D)
 lib_dir_guard = @mkdir -p $(INCLUDE_DIR)/ubipal
 
-lib: $(OBJECTS)
+$(BINDIR)/libubipal.so.1.0: $(OBJECTS)
 	$(dir_guard)
-	$(CXX) -shared -fPIC -Wl,-soname,libubipal.so.1 -o bin/libubipal.so.1.0 $(OBJECTS)
+	$(CXX) -shared -fPIC -Wl,-soname,libubipal.so.1 -o $(BINDIR)/libubipal.so.1.0 $(OBJECTS) $(LIBS)
+
+.PHONY: lib
+lib: $(BINDIR)/libubipal.so.1.0
 
 .PHONY: install
-install: lib
+install: lib uninstall
 	$(lib_dir_guard)
 	cp $(HEADERS) $(INCLUDE_DIR)/ubipal
 	mv bin/libubipal.so.1.0 $(LIBRARY_DIR)
@@ -66,7 +69,7 @@ install: lib
 	ln -sf $(LIBRARY_DIR)/libubipal.so.1.0 $(LIBRARY_DIR)/libubipal.so
 
 .PHONY: all
-all: lib $(OBJECTS) $(TEST_OBJECTS) $(EXAMPLE_OBJECTS) $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer
+all: lib examples $(BINDIR)/run_tests
 
 .PHONY: help
 help:
@@ -105,44 +108,47 @@ $(BINDIR)/run_tests: $(OBJECTS) $(TEST_OBJECTS)
 test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
-$(BINDIR)/$(EXDIR)/sender: $(OBJECTS) $(BINDIR)/$(EXDIR)/sender.o
+.PHONY: examples
+examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer
+
+$(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/sender.o -o $(BINDIR)/$(EXDIR)/sender $(LIBS) -lubipal
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sender.o -o $(BINDIR)/$(EXDIR)/sender $(LIBS) -lubipal
 
 .PHONY: sender
 sender: $(BINDIR)/$(EXDIR)/sender
 
-$(BINDIR)/$(EXDIR)/receiver: $(OBJECTS) $(BINDIR)/$(EXDIR)/receiver.o
+$(BINDIR)/$(EXDIR)/receiver: $(BINDIR)/$(EXDIR)/receiver.o
 	$(dir_guard)
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/receiver.o -o $(BINDIR)/$(EXDIR)/receiver $(LIBS) -lubipal
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/receiver.o -o $(BINDIR)/$(EXDIR)/receiver $(LIBS) -lubipal
 
 .PHONY: receiver
 receiver: $(BINDIR)/$(EXDIR)/receiver
 
-$(BINDIR)/$(EXDIR)/create_service: $(OBJECTS) $(BINDIR)/$(EXDIR)/create_service.o
+$(BINDIR)/$(EXDIR)/create_service: $(BINDIR)/$(EXDIR)/create_service.o
 	$(dir_guard)
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/create_service.o -o $(BINDIR)/$(EXDIR)/create_service $(LIBS) -lubipal
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/create_service.o -o $(BINDIR)/$(EXDIR)/create_service $(LIBS) -lubipal
 
 .PHONY: create_service
 receiver: $(BINDIR)/$(EXDIR)/create_service
 
-$(BINDIR)/$(EXDIR)/delegator: $(OBJECTS) $(BINDIR)/$(EXDIR)/delegator.o
+$(BINDIR)/$(EXDIR)/delegator: $(BINDIR)/$(EXDIR)/delegator.o
 	$(dir_guard)
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/delegator.o -o $(BINDIR)/$(EXDIR)/delegator $(LIBS) -lubipal
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/delegator.o -o $(BINDIR)/$(EXDIR)/delegator $(LIBS) -lubipal
 
 .PHONY: delegator
 receiver: $(BINDIR)/$(EXDIR)/delegator
 
-$(BINDIR)/$(EXDIR)/print_id: $(OBJECTS) $(BINDIR)/$(EXDIR)/print_id.o
+$(BINDIR)/$(EXDIR)/print_id: $(BINDIR)/$(EXDIR)/print_id.o
 	$(dir_guard)
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/print_id.o -o $(BINDIR)/$(EXDIR)/print_id $(LIBS) -lubipal
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/print_id.o -o $(BINDIR)/$(EXDIR)/print_id $(LIBS) -lubipal
 
 .PHONY: print_id
 receiver: $(BINDIR)/$(EXDIR)/print_id
 
-$(BINDIR)/$(EXDIR)/confirmer: $(OBJECTS) $(BINDIR)/$(EXDIR)/confirmer.o
+$(BINDIR)/$(EXDIR)/confirmer: $(BINDIR)/$(EXDIR)/confirmer.o
 	$(dir_guard)
-	$(CXX) $(LDFLAGS) $(OBJECTS) $(BINDIR)/$(EXDIR)/confirmer.o -o $(BINDIR)/$(EXDIR)/confirmer $(LIBS) -lubipal
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/confirmer.o -o $(BINDIR)/$(EXDIR)/confirmer $(LIBS) -lubipal
 
 .PHONY: confirmer
 receiver: $(BINDIR)/$(EXDIR)/confirmer

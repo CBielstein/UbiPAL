@@ -361,7 +361,7 @@ namespace UbiPAL
 
     int UbipalServiceTests::UbipalServiceTestConditionParse()
     {
-        int status = SUCCESS;
+        /*int status = SUCCESS;
         std::vector<std::string> conds;
         UbipalService us;
 
@@ -388,11 +388,13 @@ namespace UbiPAL
             return GENERAL_FAILURE;
         }
 
-        return status;
+        return status;*/
+        return NOT_IMPLEMENTED;
     }
 
     int UbipalServiceTests::UbipalServiceTestParseTimeDate()
     {
+        /*
         int status = SUCCESS;
         UbipalService us;
 
@@ -465,7 +467,8 @@ namespace UbiPAL
             return status;
         }
 
-        return SUCCESS;
+        return SUCCESS;*/
+        return NOT_IMPLEMENTED;
     }
 
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)

@@ -165,6 +165,7 @@ namespace UbiPAL
         Message(const unsigned char* const arg, const uint32_t arg_size);
         Message(const Message& other);
         ~Message() override;
+        Message& operator=(const Message& rhs);
 
         virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
         virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;

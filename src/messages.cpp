@@ -556,6 +556,26 @@ namespace UbiPAL
         free(argument);
     }
 
+    Message& Message::operator=(const Message& rhs)
+    {
+        type = rhs.type;
+        to = rhs.to;
+        from = rhs.from;
+        msg_id = rhs.msg_id;
+        message = rhs.message;
+        arg_len = rhs.arg_len;
+
+        argument = (unsigned char*) malloc(arg_len);
+        if (argument == nullptr)
+        {
+            Log::Line(Log::EMERG, "Message::operator=(const Message&): malloc failed!");
+            return *this;;
+        }
+
+        memcpy(argument, rhs.argument, arg_len);
+        return *this;
+    }
+
     NamespaceCertificate::NamespaceCertificate()
         : BaseMessage()
     {

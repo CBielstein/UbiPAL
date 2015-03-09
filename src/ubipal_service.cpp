@@ -465,9 +465,35 @@ namespace UbiPAL
 
     int UbipalService::EndRecv()
     {
+        int returned_value = 0;
         receiving_mutex.lock();
             receiving = false;
         receiving_mutex.unlock();
+
+        for (unsigned int i = 0; i < recv_threads.size(); ++i)
+        {
+            returned_value = pthread_join(recv_threads[i], NULL);
+            if (returned_value != 0)
+            {
+                Log::Line(Log::WARN, "UbipalService::EndRecv(): pthread_join returned %d for recv_threads[%d]", returned_value, i);
+            }
+        }
+
+        for (unsigned int i = 0; i < send_threads.size(); ++i)
+        {
+            returned_value = pthread_join(send_threads[i], NULL);
+            if (returned_value != 0)
+            {
+                Log::Line(Log::WARN, "UbipalService::EndRecv(): pthread_join returned %d for send_threads[%d]", returned_value, i);
+            }
+        }
+
+        returned_value = pthread_join(conditions_timeout_thread, NULL);
+        if (returned_value != 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::EndRecv(): pthread_join returned %d for conditions_timeout_thread", returned_value);
+        }
+
         return SUCCESS;
     }
 
@@ -1073,7 +1099,7 @@ namespace UbiPAL
         }
 
         // check against ACLs
-        //status = CheckAcls(*message, NULL, NULL);
+        status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + message->message + " TO " + id, message);
         if (status == NOT_IN_ACLS)
         {
             ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
@@ -1088,7 +1114,7 @@ namespace UbiPAL
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
             return status;
         }
-        else if (status == WAIT_ON_ACLS)
+        else if (status == WAIT_ON_CONDITIONS)
         {
             Log::Line(Log::DEBUG, "UbipalService::RecvMessage: Waiting on conditions.");
             return status;
@@ -1692,132 +1718,254 @@ namespace UbiPAL
         return SUCCESS;
     }
 
-    int UbipalService::EvaluateStatement(const std::string& statement)
+    int UbipalService::EvaluateStatement(const std::string& statement, const Message* message)
     {
         local_acls_mutex.lock();
         external_acls_mutex.lock();
 
         int status = SUCCESS;
-        int returned_value = 0;
         std::vector<std::string> acl_trail;
-        std::vector<std::string> conditions;
+        std::vector<Statement> conditions;
         Statement statement_struct;
+
+        status = ParseStatement(statement, statement_struct);
+        if (status != SUCCESS)
+        {
+            RETURN_STATUS(status);
+        }
+
+        status = EvaluateStatementRecurse(statement_struct, statement_struct.root, acl_trail, conditions, message);
+        if (status != SUCCESS)
+        {
+            RETURN_STATUS(status);
+        }
+
+        exit:
+            external_acls_mutex.unlock();
+            local_acls_mutex.unlock();
+            return status;
+    }
+
+    int UbipalService::ParseStatement(const std::string& statement, Statement& statement_struct)
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+
+        // default all fields
+        statement_struct.root = std::string();
+        statement_struct.type = INVALID;
+        statement_struct.name1 = std::string();
+        statement_struct.name2 = std::string();
+        statement_struct.name3 = std::string();
+        statement_struct.comparison = std::string();
+        statement_struct.num1 = 0;
+        statement_struct.num2 = 0;
+        statement_struct.statement = nullptr;
 
         // parse type of statement
         if (statement.find(" CAN SAY ") != std::string::npos)
         {
+            statement_struct.type = CAN_SAY;
+            size_t connective = statement.find(" CAN SAY ");
+            size_t connective_end = connective + strlen(" CAN SAY ");
+            statement_struct.statement = new Statement; // TODO this is a memory leak
+            if (statement_struct.statement == nullptr)
+            {
+                RETURN_STATUS(MALLOC_FAILURE);
+            }
+            size_t start = statement.rfind(" ", connective - 1);
+
+            if (start != std::string::npos)
+            {
+                statement_struct.name1 = statement.substr(start, connective - start);
+            }
+            else
+            {
+                statement_struct.name1 = statement.substr(0, connective);
+            }
+
+            status = ParseStatement(statement.substr(connective_end), *statement_struct.statement);
+            if (status != SUCCESS)
+            {
+                RETURN_STATUS(status)
+            }
         }
-        else if (statement.find(" CAN SEND ") != std::string::npos)
+        else if (statement.find(" CAN SEND MESSAGE ") != std::string::npos)
         {
+            statement_struct.type = CAN_SEND_MESSAGE;
+
+            // find connective
+            size_t connective = statement.find(" CAN SEND MESSAGE ");
+            size_t connective_end = connective + strlen(" CAN SEND MESSAGE ");
+
+            // find sending service
+            size_t start = statement.rfind(" ", connective - 1);
+            if (start != std::string::npos)
+            {
+                statement_struct.name1 = statement.substr(start, connective - start);
+            }
+            else
+            {
+                statement_struct.name1 = statement.substr(0, connective);
+            }
+
+            // find message type
+            size_t end = statement.find(" ", connective_end);
+            statement_struct.name2 = statement.substr(connective_end, end - connective_end);
+
+            // find receiving service
+            start = end + strlen(" TO ");
+            size_t alt_end = statement.find(",", start);
+            end = statement.find(" ", start);
+
+            if (alt_end < end)
+            {
+                statement_struct.name3 = statement.substr(start, alt_end - start);
+            }
+            else if (end != std::string::npos)
+            {
+                statement_struct.name3 = statement.substr(start, end - start);
+            }
+            else
+            {
+                statement_struct.name3 = statement.substr(start);
+            }
         }
         else if (statement.find(" IS A ") != std::string::npos)
         {
+            statement_struct.type = IS_A;
+
+            size_t connective = statement.find(" IS A ");
+            size_t connective_end = connective + strlen(" IS A ");
+
+            // first name
+            size_t start = statement.rfind(" ", connective - 1);
+            if (start != std::string::npos)
+            {
+                statement_struct.name1 = statement.substr(start, connective - start);
+            }
+            else
+            {
+                statement_struct.name1 = statement.substr(0, connective);
+            }
+
+            // second name
+            size_t end = statement.find(" ", connective_end);
+            if (end != std::string::npos)
+            {
+                statement_struct.name2 = statement.substr(connective_end, end - connective_end);
+            }
+            else
+            {
+                statement_struct.name2 = statement.substr(connective_end);
+            }
         }
         else if (statement.find(" IS ") != std::string::npos)
         {
+            statement_struct.type = IS;
+
+            size_t connective = statement.find(" IS ");
+            size_t connective_end = connective + strlen(" IS ");
+
+            // find name
+            size_t start = statement.rfind(" ", connective - 1);
+            if (start != std::string::npos)
+            {
+                statement_struct.name1 = statement.substr(start, connective - start);
+            }
+            else
+            {
+                statement_struct.name1 = statement.substr(0, connective);
+            }
+
+            // find name2
+            size_t end = statement.find(" ", connective_end);
+            if (end != std::string::npos)
+            {
+                statement_struct.name2 = statement.substr(connective_end, end - connective_end);
+            }
+            else
+            {
+                statement_struct.name2 = statement.substr(connective_end);
+            }
+
+            statement_struct.name3 = std::string();
+        }
+        else if (statement.find(" CONFIRMS ") != std::string::npos)
+        {
+            statement_struct.type = CONFIRMS;
+
+            size_t connective = statement.find(" CONFIRMS ");
+            size_t connective_end = connective + strlen(" CONFIRMS ");
+
+            // find name
+            size_t start = statement.rfind(" ", connective - 1);
+            if (start != std::string::npos)
+            {
+                statement_struct.name1 = statement.substr(start, connective - start);
+            }
+            else
+            {
+                statement_struct.name1 = statement.substr(0, connective);
+            }
+
+            // find name2
+            size_t end = statement.find(" ", connective_end);
+            if (end != std::string::npos)
+            {
+                statement_struct.name2 = statement.substr(connective_end, end - connective_end);
+            }
+            else
+            {
+                statement_struct.name2 = statement.substr(connective_end);
+            }
         }
         else if (statement.find("CurrentTime() ") != std::string::npos)
         {
+            statement_struct.type = CURRENT_TIME;
             if (statement.find(" < ") != std::string::npos)
             {
-                size_t num_start = statement.find(" < ") + strlen(" < ");
-                std::string num_string = statement.substr(num_start);
-                int hours = 0;
-                int minutes = 0;
-                returned_value = std::sscanf(num_string.c_str(), "%d:%d", &hours, &minutes);
-                if (returned_value != 2)
-                {
-                    RETURN_STATUS(INVALID_SYNTAX);
-                }
-                time_t timet = time(NULL);
-                struct tm* time_struct = localtime(&timet);
-                if (time_struct == nullptr)
-                {
-                    RETURN_STATUS(GENERAL_FAILURE);
-                }
-
-                if (time_struct->tm_hour < hours || (time_struct->tm_hour == hours && time_struct->tm_min < minutes))
-                {
-                    RETURN_STATUS(SUCCESS);
-                }
-                else
-                {
-                    RETURN_STATUS(FAILED_EVALUATION);
-                }
+                statement_struct.comparison = "<";
             }
             else if (statement.find(" > ") != std::string::npos)
             {
-                size_t num_start = statement.find(" > ") + strlen(" > ");
-                std::string num_string = statement.substr(num_start);
-                int hours = 0;
-                int minutes = 0;
-                returned_value = std::sscanf(num_string.c_str(), "%d:%d", &hours, &minutes);
-                if (returned_value != 2)
-                {
-                    RETURN_STATUS(INVALID_SYNTAX);
-                }
-                time_t timet = time(NULL);
-                struct tm* time_struct = localtime(&timet);
-                if (time_struct == nullptr)
-                {
-                    RETURN_STATUS(GENERAL_FAILURE);
-                }
-
-                if (time_struct->tm_hour > hours || (time_struct->tm_hour == hours && time_struct->tm_min > minutes))
-                {
-                    RETURN_STATUS(SUCCESS);
-                }
-                else
-                {
-                    RETURN_STATUS(FAILED_EVALUATION);
-                }
+                statement_struct.comparison = ">";
             }
             else
+            {
+                RETURN_STATUS(INVALID_SYNTAX);
+            }
+
+
+            size_t num_start = statement.find(" " + statement_struct.comparison + " ") + strlen(" < ");
+            std::string num_string = statement.substr(num_start);
+            returned_value = std::sscanf(num_string.c_str(), "%u:%u", &statement_struct.num1, &statement_struct.num2);
+            if (returned_value != 2)
             {
                 RETURN_STATUS(INVALID_SYNTAX);
             }
         }
         else if (statement.find("CurrentDate() ") != std::string::npos)
         {
+            statement_struct.type = CURRENT_DATE;
             if (statement.find(" < ") != std::string::npos)
             {
-                size_t num_start = statement.find(" < ") + strlen(" < ");
-                uint32_t date = atoi(statement.substr(num_start).c_str());
-                struct timeval tv;
-                returned_value = gettimeofday(&tv, NULL);
-                if (returned_value == -1)
-                {
-                    RETURN_STATUS(GENERAL_FAILURE);
-                }
-                if (tv.tv_sec < date)
-                {
-                    RETURN_STATUS(SUCCESS);
-                }
-                else
-                {
-                    RETURN_STATUS(FAILED_EVALUATION);
-                }
+                statement_struct.comparison = "<";
             }
             else if (statement.find(" > ") != std::string::npos)
             {
-                size_t num_start = statement.find(" > ") + strlen(" > ");
-                uint32_t date = atoi(statement.substr(num_start).c_str());
-                struct timeval tv;
-                returned_value = gettimeofday(&tv, NULL);
-                if (returned_value == -1)
-                {
-                    RETURN_STATUS(GENERAL_FAILURE);
-                }
-                if (tv.tv_sec > date)
-                {
-                    RETURN_STATUS(SUCCESS);
-                }
-                else
-                {
-                    RETURN_STATUS(FAILED_EVALUATION);
-                }
+                statement_struct.comparison = ">";
             }
             else
+            {
+                RETURN_STATUS(INVALID_SYNTAX);
+            }
+
+
+            size_t num_start = statement.find(" " + statement_struct.comparison + " ") + strlen(" < ");
+            std::string num_string = statement.substr(num_start);
+            returned_value = std::sscanf(num_string.c_str(), "%u", &statement_struct.num1);
+            if (returned_value != 1)
             {
                 RETURN_STATUS(INVALID_SYNTAX);
             }
@@ -1827,34 +1975,100 @@ namespace UbiPAL
             RETURN_STATUS(INVALID_SYNTAX);
         }
 
-        //status = EvaluateStatementRecurse(statement_struct, statement_struct.root, acl_trail, conditions);
+        // scope variable end to avoid jump errors when going to exit
+        {
+            size_t end = statement.find(" SAYS ");
+            if (end != std::string::npos)
+            {
+                statement_struct.root = statement.substr(0, end);
+            }
+            else
+            {
+                statement_struct.root = id;
+            }
+        }
 
         exit:
-            external_acls_mutex.unlock();
-            local_acls_mutex.unlock();
             return status;
     }
 
-    int UbipalService::EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions)
+    int UbipalService::EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<Statement>& conditions, const Message* message)
     {
         int status = SUCCESS;
-        /*
-        size_t first_can = 0;
-        size_t first_can_say = 0;
-        std::vector<std::string> new_acl_trail;
-        std::vector<std::string> new_conditions;
+        int returned_value = 0;
+
         std::vector<ConsiderService> to_consider;
         ConsiderService temp_consider;
         std::vector<AccessControlList> current_acls;
         std::unordered_map<std::string, std::vector<AccessControlList>>::iterator external_acls_itr;
+        std::vector<Statement> rule_conditions;
+        std::vector<std::string> new_acl_trail;
+        std::vector<Statement> new_conditions;
 
-        if (current == id)
+        // some statement types need not look at the ACLs, handle those immediately
+        if (statement.type == CURRENT_TIME)
+        {
+            time_t timet = time(NULL);
+            struct tm* time_struct = localtime(&timet);
+            if (time_struct == nullptr)
+            {
+                return GENERAL_FAILURE;
+            }
+            bool passed_eval = false;
+
+            if (statement.comparison == "<")
+            {
+                passed_eval = (((unsigned int)time_struct->tm_hour) < statement.num1 || (((unsigned int)time_struct->tm_hour) == statement.num1 && ((unsigned int)time_struct->tm_min) < statement.num2));
+            }
+            else if (statement.comparison == ">")
+            {
+                passed_eval = (((unsigned int)time_struct->tm_hour) > statement.num1 || (((unsigned int)time_struct->tm_hour) == statement.num1 && ((unsigned int)time_struct->tm_min) > statement.num2));
+            }
+            else
+            {
+                return INVALID_SYNTAX;
+            }
+
+            return passed_eval ? SUCCESS : FAILED_EVALUATION;
+        }
+        else if (statement.type == CURRENT_DATE)
+        {
+            struct timeval tv;
+            returned_value = gettimeofday(&tv, NULL);
+            if (returned_value == -1)
+            {
+                return GENERAL_FAILURE;
+            }
+            bool passed_eval = false;
+
+            if (statement.comparison == "<")
+            {
+                passed_eval = (tv.tv_sec < statement.num1);
+            }
+            else if (statement.comparison == ">")
+            {
+                passed_eval = (tv.tv_sec > statement.num1);
+            }
+            else
+            {
+                return INVALID_SYNTAX;
+            }
+
+            return passed_eval ? SUCCESS : FAILED_EVALUATION;
+        }
+        else if (statement.type == CONFIRMS)
+        {
+            return WAIT_ON_CONDITIONS;
+        }
+
+        // if we're considering this service, use our local ACLs, else use what we've heard
+        if (current_service == id)
         {
             current_acls = local_acls;
         }
         else
         {
-            external_acls_itr = external_acls.find(current);
+            external_acls_itr = external_acls.find(current_service);
             if (external_acls_itr == external_acls.end())
             {
                 return NOT_IN_ACLS;
@@ -1885,53 +2099,132 @@ namespace UbiPAL
             }
 
             // for each rules in the acl
+            Statement parsed_rule;
             for (unsigned int j = 0; j < current_acls[i].rules.size(); ++j)
             {
-                // if message is mentioned in rule
-                if (current_acls[i].rules[j].find(message.message) != std::string::npos)
+                status = ParseStatement(current_acls[i].rules[j], parsed_rule);
+                if (status != SUCCESS)
                 {
-                    // verbs are either can, can say, or is
-                    first_can = current_acls[i].rules[j].find("can");
-                    first_can_say = current_acls[i].rules[j].find("can say");
+                    continue;
+                }
+                status = GetConditionsFromRule(current_acls[i].rules[j], rule_conditions);
 
-                    // if rule first verb is "can say"
-                    if (first_can_say <= first_can && first_can_say != std::string::npos)
+                // compare rules
+                if (statement.type != parsed_rule.type)
+                {
+                    if (parsed_rule.type != CAN_SAY || parsed_rule.statement == nullptr || parsed_rule.statement->type != statement.type)
                     {
-                        // push_back on vector to be considered later
-                        int first_space = current_acls[i].rules[j].find(" ");
-                        std::string other_service = current_acls[i].rules[j].substr(0, first_space);
-                        temp_consider.service_id = other_service;
-                        temp_consider.referenced_from_acl = current_acls[i].msg_id;
-                        status = GetConditionsFromRule(current_acls[i].rules[j], temp_consider.conditions);
-                        if (status != SUCCESS)
-                        {
-                            Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: GetConditionsFromRule failed %s", GetErrorDescription(status));
-                            continue;
-                        }
-                        to_consider.push_back(temp_consider);
+                        continue;
                     }
-                    // if rules first verb is "can"
-                    else if (first_can != std::string::npos && first_can_say == std::string::npos)
+                }
+
+                // check for any mismathes
+                if ((statement.name1 != parsed_rule.name1) && (parsed_rule.statement == nullptr || parsed_rule.statement->name1 != statement.name1))
+                {
+                    // all variables are length 1
+                    if ((parsed_rule.name1.size() != 1 && parsed_rule.type != CAN_SAY)
+                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name1.size() != 1))
                     {
-                        // check if this rule is talking about the sender and the receiver, if not continue;
-                        if ((current_acls[i].rules[j].compare(0, message.from.size(), message.from) != 0) ||
-                            current_acls[i].rules[j].find(message.to) == std::string::npos)
+                        continue;
+                    }
+
+                    // do any necessary replacement in the conditions
+                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                    {
+                        if (rule_conditions[i].name1 == parsed_rule.name1
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name1))
                         {
-                            continue;
+                            rule_conditions[i].name1 = statement.name1;
                         }
-                        else
+                        if (rule_conditions[i].name2 == parsed_rule.name1
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name2))
                         {
-                            temp_consider.service_id = current;
-                            temp_consider.referenced_from_acl = current_acls[i].msg_id;
-                            status = GetConditionsFromRule(current_acls[i].rules[j], temp_consider.conditions);
-                            if (status != SUCCESS)
-                            {
-                                Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: GetConditionsFromRule failed %s", GetErrorDescription(status));
-                                continue;
-                            }
-                            to_consider.insert(to_consider.begin(), temp_consider);
+                            rule_conditions[i].name2 = statement.name1;
+                        }
+                        if (rule_conditions[i].name3 == parsed_rule.name1
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name3))
+                        {
+                            rule_conditions[i].name3 = statement.name1;
                         }
                     }
+                }
+                if ((statement.name2 != parsed_rule.name2) && (parsed_rule.statement == nullptr || parsed_rule.statement->name2 != statement.name2))
+                {
+                    // all variables are length 1
+                    if ((parsed_rule.name2.size() != 1 && parsed_rule.type != CAN_SAY)
+                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name2.size() != 1))
+                    {
+                        continue;
+                    }
+
+                    // do any necessary replacement in the conditions
+                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                    {
+                        if (rule_conditions[i].name1 == parsed_rule.name2
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name1))
+                        {
+                            rule_conditions[i].name1 = statement.name2;
+                        }
+                        if (rule_conditions[i].name2 == parsed_rule.name2
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name2))
+                        {
+                            rule_conditions[i].name2 = statement.name2;
+                        }
+                        if (rule_conditions[i].name3 == parsed_rule.name2
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name3))
+                        {
+                            rule_conditions[i].name3 = statement.name2;
+                        }
+                    }
+                }
+                if ((statement.name3 != parsed_rule.name3) && (parsed_rule.statement == nullptr || parsed_rule.statement->name3 != statement.name3))
+                {
+                    // all variables are length 1
+                    if ((parsed_rule.name3.size() != 1 && parsed_rule.type != CAN_SAY)
+                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name3.size() != 1))
+                    {
+                        continue;
+                    }
+
+                    // do any necessary replacement in the conditions
+                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                    {
+                        if (rule_conditions[i].name1 == parsed_rule.name3
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name1))
+                        {
+                            rule_conditions[i].name1 = statement.name3;
+                        }
+                        if (rule_conditions[i].name2 == parsed_rule.name3
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name2))
+                        {
+                            rule_conditions[i].name2 = statement.name3;
+                        }
+                        if (rule_conditions[i].name3 == parsed_rule.name3
+                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name3))
+                        {
+                            rule_conditions[i].name3 = statement.name3;
+                        }
+                    }
+                }
+
+                if (parsed_rule.type == CAN_SAY)
+                {
+                    temp_consider.service_id = parsed_rule.name1;
+                }
+                else
+                {
+                    temp_consider.service_id = current_service;
+                }
+                temp_consider.referenced_from_acl = current_acls[i].msg_id;
+                temp_consider.conditions = rule_conditions;
+
+                if (parsed_rule.type == CAN_SAY)
+                {
+                    to_consider.push_back(temp_consider);
+                }
+                else
+                {
+                    to_consider.insert(to_consider.begin(), temp_consider);
                 }
             }
         }
@@ -1942,27 +2235,55 @@ namespace UbiPAL
         }
 
         // call this recursively for each in the consideration vector
-        std::vector<std::string> all_conditions;
+        std::vector<Statement> all_conditions;
         for (unsigned int i = 0; i < to_consider.size(); ++i)
         {
             // if to_consider[i].id is current, then just check conditions
-            if (to_consider[i].service_id == current)
+            if (to_consider[i].service_id == current_service)
             {
                 all_conditions.insert(all_conditions.end(), conditions.begin(), conditions.end());
                 all_conditions.insert(all_conditions.end(), to_consider[i].conditions.begin(), to_consider[i].conditions.end());
+
+                // Remove any non-confirms conditions
+                bool did_fail_conds = false;
+                for (unsigned int j = 0; j < all_conditions.size(); ++j)
+                {
+                    if (all_conditions[j].type != CONFIRMS)
+                    {
+                        std::vector<std::string> cond_acl_trail;
+                        std::vector<Statement> cond_conds;
+                        status = EvaluateStatementRecurse(all_conditions[j], current_service, cond_acl_trail, cond_conds, NULL);
+                        if (status == SUCCESS)
+                        {
+                            all_conditions.erase(all_conditions.begin() + i);
+                            --i;
+                        }
+                        else
+                        {
+                            did_fail_conds = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (did_fail_conds)
+                {
+                    continue;
+                }
+
                 if (all_conditions.size() == 0)
                 {
                     return SUCCESS;
                 }
                 else
                 {
-                    status = StartConditionChecks(message, all_conditions);
+                    status = StartConfirmChecks(*message, all_conditions);
                     if (status != SUCCESS)
                     {
-                        Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: StartConditionChecks failed: %s", GetErrorDescription(status));
+                        Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: StartConfirmChecks failed: %s", GetErrorDescription(status));
                         return status;
                     }
-                    return WAIT_ON_ACLS;
+                    return WAIT_ON_CONDITIONS;
                 }
             }
             // else recurse
@@ -1977,7 +2298,7 @@ namespace UbiPAL
                     new_conditions.push_back(to_consider[i].conditions[j]);
                 }
 
-                status = CheckAclsRecurse(message, to_consider[i].service_id, new_acl_trail, new_conditions);
+                status = EvaluateStatementRecurse(statement, to_consider[i].service_id, new_acl_trail, new_conditions, message);
                 if (status == SUCCESS)
                 {
                     acl_trail = new_acl_trail;
@@ -1990,12 +2311,10 @@ namespace UbiPAL
                 }
             }
         }
-        return NOT_IN_ACLS;
-        */
         return status;
     }
 
-    int UbipalService::StartConditionChecks(const Message& message, const std::vector<std::string>& conditions)
+    int UbipalService::StartConfirmChecks(const Message& message, const std::vector<Statement>& conditions)
     {
         int status = SUCCESS;
 
@@ -2016,29 +2335,16 @@ namespace UbiPAL
             return status;
         }
 
-        size_t start = 0;
-        size_t end = 0;
-        std::string dest;
         for (unsigned int i = 0; i < conditions.size(); ++i)
         {
-            start = 0;
-            end = conditions[i].find(" ");
-            dest = conditions[i].substr(start, end - start);
             for (unsigned int j = 0; j < services.size(); ++j)
             {
-                if (services[j].id == dest)
+                if (services[j].id == conditions[i].name1)
                 {
-                    start = conditions[i].find(" ", end + 1);
-                    if (start == std::string::npos)
-                    {
-                        Log::Line(Log::WARN, "UbipalService::StartConditionChecks: Bad rule syntax.");
-                        break;
-                    }
-                    std::string cond_msg = conditions[i].substr(start + 1);
-                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], cond_msg, NULL, 0, ConditionReplyCallback);
+                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
-                        Log::Line(Log::WARN, "UbipalService::StartConditionChecks: SendMessage failed: %s", GetErrorDescription(status));
+                        Log::Line(Log::WARN, "UbipalService::StartConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
                         return status;
                     }
                     break;
@@ -2052,7 +2358,7 @@ namespace UbiPAL
     int UbipalService::ConditionReplyCallback(UbipalService* us, const Message* original_message, const Message* reply_message)
     {
         int status = SUCCESS;
-        if (us == nullptr)
+        if (us == nullptr || original_message == nullptr || reply_message == nullptr)
         {
             return NULL_ARG;
         }
@@ -2064,11 +2370,11 @@ namespace UbiPAL
         {
             for (unsigned int j = 0; j < us->awaiting_conditions[i].conditions.size(); ++j)
             {
-                if (strncmp(reply_message->from.c_str(), us->awaiting_conditions[i].conditions[j].c_str(), reply_message->from.size()) == 0)
+                if (reply_message->from == us->awaiting_conditions[i].conditions[j].name1)
                 {
-                    if (us->awaiting_conditions[i].conditions[j].find(original_message->message) != std::string::npos)
+                    if (original_message->message == us->awaiting_conditions[i].conditions[j].name2)
                     {
-                        if (memcmp(reply_message->argument, "CONFIRM", strlen("CONFIRM")) == 0)
+                        if (reply_message->arg_len >= strlen("CONFIRM") && memcmp(reply_message->argument, "CONFIRM", strlen("CONFIRM")) == 0)
                         {
                             us->awaiting_conditions[i].conditions.erase(us->awaiting_conditions[i].conditions.begin() + j);
                             --j;
@@ -2165,11 +2471,16 @@ namespace UbiPAL
 
         return status;
     }
-    int UbipalService::GetConditionsFromRule(const std::string& rule, std::vector<std::string>& conditions)
+
+    int UbipalService::GetConditionsFromRule(const std::string& rule, std::vector<Statement>& conditions)
     {
         int status = SUCCESS;
         size_t begin = 0;
         size_t end = 0;
+        Statement temp_statement;
+        std::string temp_string;
+
+        conditions.clear();
 
         begin = rule.find(" if ");
         if (begin == std::string::npos)
@@ -2188,7 +2499,12 @@ namespace UbiPAL
         while (begin < cond_string.size())
         {
             end = cond_string.find(",", begin);
-            conditions.push_back(cond_string.substr(begin, end));
+            temp_string = cond_string.substr(begin, end);
+            status = ParseStatement(temp_string, temp_statement);
+            if (status == SUCCESS)
+            {
+                conditions.push_back(temp_statement);
+            }
             if (end == std::string::npos)
             {
                 break;

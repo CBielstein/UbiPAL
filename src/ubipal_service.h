@@ -275,6 +275,7 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error code if not
             int RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
+            // StatementType
             // The types of UbiPAL statements which are exist.
             enum StatementType
             {
@@ -284,13 +285,19 @@ namespace UbiPAL
                 CAN_SAY,
                 CURRENT_TIME,
                 CURRENT_DATE,
+                CONFIRMS,
+                INVALID,
             };
 
+            // Statement
+            // A struct to hold a parsed UbiPAL statement
             // STATEMENT
             //          - NAME says NAME CONNECTIVE NAME
             //          - NAME says NAME CONNECTIVE NAME CONNECTIVE NAME
-            //          - NAME says CurrentTime() COMPARISON INTEGER
+            //          - CurrentTime() COMPARISON INTEGER
+            //          - CurrentDate() COMPARISON INTEGER
             //          - NAME says NAME CONNECTIVE STATEMENT
+            //          - NAME confirms NAME
             //
             // CONNECTIVE
             //          - {is a, is, can send message, to}
@@ -305,18 +312,18 @@ namespace UbiPAL
             // CurrentTime() a b // CurrentTime() > 9:00, CurrentTime() < 17:00
             // CurrentDate() a b // CurrentDate() < UNIX_TIME (seconds since epoch)
             // a says b can say STATEMENT
+            // a confirms b
             struct Statement
             {
                 std::string root;
                 StatementType type;
                 std::string name1;
-                std::string connective;
                 std::string name2;
-                std::string connective2;
                 std::string name3;
-                std::string statement;
                 std::string comparison;
-                std::string integer;
+                uint32_t num1;
+                uint32_t num2;
+                Statement* statement;
             };
 
             // XXX
@@ -325,10 +332,11 @@ namespace UbiPAL
             // example:
             //          FOO can send message BAR to BAZ
             // args
-            //          [IN] the statement to evaluate
+            //          [IN] statement: the statement to evaluate
+            //          [IN] message: Optional, a message to deliver if the statement passes condition checks
             // return
             //          int: SUCCESS implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
-            int EvaluateStatement(const std::string& statement);
+            int EvaluateStatement(const std::string& statement, const Message* message);
 
             // XXX
             // EvaluateStatementRecurse
@@ -338,9 +346,19 @@ namespace UbiPAL
             //          [IN] current_service: The current service ID for evaluation
             //          [IN/OUT] acl_trail: The trail of acls we've gone through to this point to avoid loops
             //          [IN/OUT] conditions: The collections of conditions to this point
+            //          [IN] message: Optional, a messag eto deliver if the statement passes condition checks
             // return
             //          int: SUCCESS means the rule holds, else reutnrs NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
-            int EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<std::string>& conditions);
+            int EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<Statement>& conditions, const Message* message);
+
+            // ParseStatement
+            // Parses statement in to a Statement struct for comparison with other parsed rules.
+            // args
+            //          [IN] statement: The UbiPAL statement to parse.
+            //          [OUT] statement_struct: The resulting statement struct.
+            // return
+            //          int: SUCCESS on success, otherwise a negative error.
+            int ParseStatement(const std::string& statement, Statement& statement_struct);
 
             // XXX
             // FindNameForStatements
@@ -658,25 +676,25 @@ namespace UbiPAL
             struct ConsiderService
             {
                 std::string service_id;
-                std::vector<std::string> conditions;
+                std::vector<Statement> conditions;
                 std::string referenced_from_acl;
             };
 
             // GetConditionsFromRule
-            // Takes a string rule and parses it to find the conditions in string form
+            // Takes a string rule and parses it to find the conditions in Statement form
             // args
             //          [IN] rule: The string of the entire rule
-            //          [OUT] conditions: The vector of conditions
+            //          [OUT] conditions: The vector of Statements of parsed conditions
             // returns
             //          int: SUCCESS on success
-            int GetConditionsFromRule(const std::string& rule, std::vector<std::string>& conditions);
+            int GetConditionsFromRule(const std::string& rule, std::vector<Statement>& conditions);
 
             // ConditionsCheck
             // A structure used to track condition confirmations
             struct ConditionCheck
             {
                 Message message;
-                std::vector<std::string> conditions;
+                std::vector<Statement> conditions;
                 uint32_t time;
             };
 
@@ -718,7 +736,7 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error code on error
             static int ConditionReplyCallback(UbipalService* us, const Message* original_message, const Message* reply_message);
 
-            // StartConditionChecks
+            // StartConfirmChecks
             // Begins the process of checking for conditions by saving the message and conditions
             // as well as sending the confirmation messages
             // args
@@ -726,7 +744,7 @@ namespace UbiPAL
             //          [IN] conditions: conditions which must be met
             // returns
             //          int: SUCCESS on success, negative error code on error
-            int StartConditionChecks(const Message& message, const std::vector<std::string>& conditions);
+            int StartConfirmChecks(const Message& message, const std::vector<Statement>& conditions);
     };
 }
 

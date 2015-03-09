@@ -33,10 +33,11 @@ namespace UbiPAL
         NOT_IN_ACLS = -18,
         FAILED_CONDITIONS = -19,
         NOT_FOUND = -20,
-        WAIT_ON_ACLS = -21,
+        WAIT_ON_CONDITIONS = -21,
         TIMEOUT_CONDITIONS = -22,
         INVALID_SYNTAX = -23,
         FAILED_EVALUATION = -24,
+        NOT_IMPLEMENTED = -25,
     };
 
     // get_error_description

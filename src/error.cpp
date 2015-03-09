@@ -32,10 +32,11 @@ namespace UbiPAL
             case NOT_IN_ACLS: return "NOT_IN_ACLS: Access to sending a message could not be granted because the ACLs on hand do not allow it.";
             case FAILED_CONDITIONS: return "FAILED_CONDITIONS: Access to sending a message could not be granted because the conditions did not hold.";
             case NOT_FOUND: return "NOT_FOUND: The requested object was not found.";
-            case WAIT_ON_ACLS: return "WAIT_ON_ACLS: The message must wait on ACL checks to complete before being delivered.";
+            case WAIT_ON_CONDITIONS: return "WAITIN_ON_CONDITIONS: The evaluation must wait on conditions checks to complete before being completed.";
             case TIMEOUT_CONDITIONS: return "TIMEOUT_CONDITION: The requested message timed out during condition checks.";
             case INVALID_SYNTAX: return "INVALID_SYNTAX: The syntax of a given UbiPAL statement is invalid.";
             case FAILED_EVALUATION: return "FAILED_EVALUATION: The given statement failed evaulation.";
+            case NOT_IMPLEMENTED: return "NOT_IMPLEMENTED: The attempted functionality is not yet implemented.";
             default: return "Error code does not have description.";
         }
     }

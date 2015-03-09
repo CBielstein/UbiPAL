@@ -65,8 +65,9 @@ int main(int argc, char** argv)
     std::vector<std::string> rules;
     const std::string delegator = "CE7EFE13CCE736C6B5172F7B5C496F6AAF918F4CD49E42763B54B8A8DA52CBBDFBFEDAAC5FC5F191CA2B1BAD2AF99BC59F9ECE6605D6A5318CD60FB57B7E482E7D8B1A201FCB24900A06A71CE69A30DEC70E450F14B512DFADC2C67FB545855E47D321357E20466ABAE6C5423D13A1DFD1E06A37AE52872E0E9F4321C5F2B999-03";
     const std::string sender = "B1C1D8A15798E755CF33A8A2E5FD73E6B591A0357E0B5676A9637E75748123392C3D3BD408287FDDFC3640A6C2B8FA33675DB18AD07BE77FB93F46AC8884A7D00CD7FAAD45DD9869CF4ACE4D2293CB0308ACBDB3BDCC6E86515E64936C1E8EF3FD92F326A0525ACB3BC2A6C6734E558A9FA529394C2D96602F60F0FCDEB7DE95-03";
-    const std::string allow_rule = sender + " can send message PrintToScreen to " + us.GetId();
-    const std::string delegate_rule = delegator + " can say x can send message PrintToScreen to y";
+    const std::string allow_rule = "x CAN SEND MESSAGE PrintToScreen TO " + us.GetId() + ", if x IS sender";
+    const std::string is_rule = sender + " IS sender";
+    const std::string delegate_rule = delegator + " CAN SAY x CAN SEND MESSAGE PrintToScreen TO " + us.GetId();
     UbiPAL::AccessControlList acl;
 
     std::cout << "Commands: " << std::endl << "    a: allows sender to send PrintToScreen messages." << std::endl
@@ -83,6 +84,7 @@ int main(int argc, char** argv)
                 std::cout << "Allowing." << std::endl;
                 rules.clear();
                 rules.push_back(allow_rule);
+                rules.push_back(is_rule);
                 status = us.CreateAcl("all", rules, acl);
                 if (status != UbiPAL::SUCCESS)
                 {
