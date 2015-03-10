@@ -28,6 +28,7 @@ TESTDEPS = $(TEST_OBJECTS:.o=.d)
 
 # gather example source files
 EXAMPLE_SOURCES = $(wildcard $(EXDIR)/*.cpp)
+EXAMPLE_SOURCES += $(wildcard $(EXDIR)/sinewave/*.cpp)
 EXAMPLE_OBJECTS = $(addprefix $(BINDIR)/, $(EXAMPLE_SOURCES:.cpp=.o))
 EXDEPS = $(EXAMPLE_OBJECTS:.o=.d)
 
@@ -109,7 +110,15 @@ test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
 .PHONY: examples
-examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer
+examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display
+
+$(BINDIR)/$(EXDIR)/sinewave/producer: $(BINDIR)/$(EXDIR)/sinewave/producer.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/producer.o -o $(BINDIR)/$(EXDIR)/sinewave/producer $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/sinewave/display: $(BINDIR)/$(EXDIR)/sinewave/display.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/display.o -o $(BINDIR)/$(EXDIR)/sinewave/display $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)
