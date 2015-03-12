@@ -2671,4 +2671,67 @@ namespace UbiPAL
 
         return (time.tv_sec * 1000) + (time.tv_usec / 1000);
     }
+
+
+    int UbipalService::GetCertificateForName(const std::string& name, NamespaceCertificate& certificate)
+    {
+        int status = SUCCESS;
+
+        std::vector<NamespaceCertificate> all_certificates;
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, all_certificates);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        for (unsigned int i = 0; i < all_certificates.size(); ++i)
+        {
+            if (all_certificates[i].id == name)
+            {
+                certificate = all_certificates[i];
+                return SUCCESS;
+            }
+        }
+
+        return status;
+    }
+
+    int UbipalService::FindNamesForStatements(const std::vector<std::string>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names)
+    {
+        int status = SUCCESS;
+        std::vector<Statement> parsed_statements;
+        Statement parsed;
+        for (unsigned int i = 0; i < statements.size(); ++i)
+        {
+            status = ParseStatement(statements[i], parsed);
+            if (status != SUCCESS)
+            {
+                continue;
+            }
+            parsed_statements.push_back(parsed);
+        }
+
+        status = FindNamesForStatements(parsed_statements, names);
+        return status;
+    }
+
+    int UbipalService::FindNamesForStatements(const std::vector<Statement>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names)
+    {
+        int status = SUCCESS;
+
+        // create a set for each variable name
+        std::vector<std::tuple<char, std::set<std::string>>> possible_answers;
+
+        // TODO for each statement, find the service names which can replace the variable
+            // TODO if it's the first round, set the possible_answers set to equal the found set
+            // TODO if it's not the first round, intersect with the corresponding set in possible_answers
+
+
+        // return those
+        for (unsigned int i = 0; i < possible_answers.size(); ++i)
+        {
+            names.push_back(possible_answers[i]);
+        }
+        return status;
+    }
 }

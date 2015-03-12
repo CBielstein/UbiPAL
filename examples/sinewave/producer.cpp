@@ -15,7 +15,6 @@
 #include <vector>  //std::vector
 
 #define UNENCRYPTED UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION
-// X CAN SAY Y CAN SEND MESSAGE SINE TO Z if Z IS me, Y is delegator
 
 int ReplySine(UbiPAL::UbipalService* us, UbiPAL::Message message)
 {

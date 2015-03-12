@@ -110,7 +110,11 @@ test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
 .PHONY: examples
-examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display
+examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display $(BINDIR)/$(EXDIR)/sinewave/delegator
+
+$(BINDIR)/$(EXDIR)/sinewave/delegator: $(BINDIR)/$(EXDIR)/sinewave/delegator.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/delegator.o -o $(BINDIR)/$(EXDIR)/sinewave/delegator $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sinewave/producer: $(BINDIR)/$(EXDIR)/sinewave/producer.o
 	$(dir_guard)

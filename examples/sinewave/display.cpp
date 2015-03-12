@@ -1,6 +1,6 @@
 // Cameron Bielstein, 3/9/15
-// producer.cpp
-// This is the producer for the sine wave example. A sine wave is produced and sent to any service requesting the reading.
+// display.cpp
+// This is the display for the sine wave example. A sine wave is produced and sent to any service requesting the reading.
 // Readings are delegated to the gateway.
 
 #include <ubipal/ubipal_service.h>

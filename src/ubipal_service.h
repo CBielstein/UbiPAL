@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <queue>
 #include <condition_variable>
+#include <set>
 
 // OpenSSL
 #include <openssl/rsa.h>
@@ -326,7 +327,6 @@ namespace UbiPAL
                 Statement* statement;
             };
 
-            // XXX
             // EvaluateStatement
             // Checks to see if the given rule holds based on ACLs we've heard. Will evaluate conditions as necessary.
             // example:
@@ -338,7 +338,6 @@ namespace UbiPAL
             //          int: SUCCESS implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
             int EvaluateStatement(const std::string& statement, const Message* message);
 
-            // XXX
             // EvaluateStatementRecurse
             // Recursive call for EvaluateStatement.
             // args
@@ -361,16 +360,23 @@ namespace UbiPAL
             int ParseStatement(const std::string& statement, Statement& statement_struct);
 
             // XXX
-            // FindNameForStatements
-            // Checks to see if there is a name that matches the given statements
+            // FindNamesForStatements
+            // Checks to see if there is a name that matches the given statements. Does not consider time-related statements or confirmations. Thoe are left for request-time checks.
             // args
-            //          [IN] statements: The statements to evaluate. "NAME" is used as the wildcard in these rules.
-            //                  Examples: "NAME can send message OPEN to FOO", "FOO say NAME is a BAR", "NAME can say FOO can send message BAR to BAZ"
-            //                  This would find a service which can send OPEN to FOO, FOO says is a BAR, and can delegate sending BAR to BAZ.
-            //          [OUT] result_name: The resulting name. For now, this selects the first name which matches the criteria.
+            //          [IN] statements: The statements to evaluate. Variables are single letter long name.
+            //          [OUT] result_statements: A vector of statements which hold under the currently heard rules.
             // return
-            //          int: 0 imples SUCCESS, NOT_IN_ACLS, FAILED_CONDITIONS_or TIMEOUT_CONDITIONS if it fails, else negative error code
-            int FindNameForStatements(const std::vector<std::string>& statements, NamespaceCertificate& result_name);
+            //          int: SUCCESS, else negative error code
+            int FindNamesForStatements(const std::vector<std::string>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names);
+            int FindNamesForStatements(const std::vector<Statement>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names);
+
+            // GetCertificateForName
+            // Returns the certificate for a given name
+            // args
+            //          [IN] name: The name to match to a certificate
+            // return
+            //          int SUCCESS if found, NOT_FOUND if not
+            int GetCertificateForName(const std::string& name, NamespaceCertificate& certificate);
 
             enum GetNamesFlags
             {
