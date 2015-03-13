@@ -1677,7 +1677,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         // check flags
-        if ((flags & ~(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED)) != 0)
+        if ((flags & ~(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_SELF)) != 0)
         {
             Log::Line(Log::WARN, "UbipalService::GetNames: passed invalid flag");
             return INVALID_ARG;
@@ -1685,6 +1685,18 @@ namespace UbiPAL
 
         // empty vector
         names.clear();
+
+        // add me if flaged
+        if ((flags & GetNamesFlags::INCLUDE_SELF) != 0)
+        {
+            NamespaceCertificate self_nc;
+            self_nc.from = id;
+            self_nc.id = id;
+            self_nc.description = description;
+            self_nc.address = address;
+            self_nc.port = port;
+            names.push_back(self_nc);
+        }
 
         // add untrusted, if flagged
         services_mutex.lock();
@@ -2743,6 +2755,10 @@ namespace UbiPAL
             // for each variable, add it to the appropriate
             for (const Statement* itr = &statements[i]; itr != nullptr; itr = itr->statement)
             {
+                if (itr->root.size() == 1)
+                {
+                    grouped_statements[itr->root].insert(statements[i]);
+                }
                 if (itr->name1.size() == 1)
                 {
                     grouped_statements[itr->name1].insert(statements[i]);
@@ -2758,11 +2774,9 @@ namespace UbiPAL
             }
         }
 
-        // TODO for each statement, find the service names which can replace the variable
-            // TODO if it's the first round, set the possible_answers set to equal the found set
-            // TODO if it's not the first round, intersect with the corresponding set in possible_answers
+        // get all names we've heard of
         std::vector<NamespaceCertificate> all_certificates;
-        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, all_certificates);
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_SELF, all_certificates);
         if (status != SUCCESS)
         {
             Log::Line(Log::WARN, "UbipalService::GetNamesForStatements: GetNames failed: %d", GetErrorDescription(status));
@@ -2773,9 +2787,48 @@ namespace UbiPAL
         {
             for (std::set<Statement>::iterator stmnts = itr->second.begin(); stmnts != itr->second.end(); ++stmnts)
             {
+                std::set<std::string> successful_names;
                 for (unsigned int i = 0; i < all_certificates.size(); ++i)
                 {
-                    //for (Statement* smnt =
+                    Statement temp_statement = *stmnts;
+                    for (Statement* statement_itr = &temp_statement; statement_itr != nullptr; statement_itr = statement_itr->statement)
+                    {
+                        // for each field, if it equals the variable in this set, replace it with the certificate id, else leave it
+                        statement_itr->root = (statement_itr->root == itr->first) ? all_certificates[i].id : statement_itr->root;
+                        statement_itr->name1 = (statement_itr->name1 == itr->first) ? all_certificates[i].id : statement_itr->name1;
+                        statement_itr->name2 = (statement_itr->name2 == itr->first) ? all_certificates[i].id : statement_itr->name2;
+                        statement_itr->name3 = (statement_itr->name3 == itr->first) ? all_certificates[i].id : statement_itr->name3;
+                    }
+
+                    // replacements are done, try to evaluate
+                    std::vector<std::string> acl_trail;
+                    std::vector<Statement> conditions;
+                    status = EvaluateStatementRecurse(temp_statement, temp_statement.root, acl_trail, conditions, NULL);
+                    if (status == SUCCESS)
+                    {
+                        successful_names.insert(all_certificates[i].id);
+                    }
+                }
+
+                // if it's the first round, copy the set
+                if (stmnts == itr->second.begin())
+                {
+                    possible_answers[itr->first] = successful_names;
+                }
+                else
+                {
+                    // else, remove any name not in succesful_names
+                    for (std::set<std::string>::iterator remove_itr = possible_answers[itr->first].end(); remove_itr != possible_answers[itr->first].begin(); --remove_itr)
+                    {
+                        if (successful_names.count(*remove_itr) != 1)
+                        {
+                            possible_answers[itr->first].erase(remove_itr);
+                        }
+                    }
+                }
+                if (possible_answers[itr->first].size() == 0)
+                {
+                    return GENERAL_FAILURE;
                 }
             }
         }

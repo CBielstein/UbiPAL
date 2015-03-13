@@ -317,7 +317,7 @@ namespace UbiPAL
             //          [IN] statements: The statements to evaluate. Variables are single letter long name.
             //          [OUT] result_statements: A vector of statements which hold under the currently heard rules.
             // return
-            //          int: SUCCESS, else negative error code
+            //          int: SUCCESS if a potential mapping could be found, else negative error code
             int FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names);
             int FindNamesForStatements(const std::vector<Statement>& statements, std::map<std::string, std::set<std::string>>& names);
 
@@ -332,7 +332,8 @@ namespace UbiPAL
             enum GetNamesFlags
             {
                 INCLUDE_UNTRUSTED = 2 << 0,
-                INCLUDE_TRUSTED = 2 << 1
+                INCLUDE_TRUSTED = 2 << 1,
+                INCLUDE_SELF = 2 << 2,
             };
 
             // GetNames
@@ -342,6 +343,7 @@ namespace UbiPAL
             //          [IN] flags: flags, including
             //                  INCLUDE_UNTRUSTED: includes untrusted names
             //                  INCLUDE_TRUSTED: includes trusted names
+            //                  INCLUDE_SELF: includes this service's certificate in the resultant vector
             //          [IN/OUT] names: A vector of resultant names
             // return
             //          int: SUCCESS on success, negative error otherwise
