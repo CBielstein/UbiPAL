@@ -7,6 +7,7 @@
 
 // Ubipal
 #include "messages.h"
+#include "statement.h"
 
 // Standard
 #include <vector>
@@ -17,6 +18,7 @@
 #include <queue>
 #include <condition_variable>
 #include <set>
+#include <map>
 
 // OpenSSL
 #include <openssl/rsa.h>
@@ -276,57 +278,6 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error code if not
             int RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
-            // StatementType
-            // The types of UbiPAL statements which are exist.
-            enum StatementType
-            {
-                IS_A,
-                IS,
-                CAN_SEND_MESSAGE,
-                CAN_SAY,
-                CURRENT_TIME,
-                CURRENT_DATE,
-                CONFIRMS,
-                INVALID,
-            };
-
-            // Statement
-            // A struct to hold a parsed UbiPAL statement
-            // STATEMENT
-            //          - NAME says NAME CONNECTIVE NAME
-            //          - NAME says NAME CONNECTIVE NAME CONNECTIVE NAME
-            //          - CurrentTime() COMPARISON INTEGER
-            //          - CurrentDate() COMPARISON INTEGER
-            //          - NAME says NAME CONNECTIVE STATEMENT
-            //          - NAME confirms NAME
-            //
-            // CONNECTIVE
-            //          - {is a, is, can send message, to}
-            //
-            // COMPARISON
-            //          - { <, > }
-            //
-            // Examples: (a, b, c for variables)
-            // a says b is a c
-            // a says b is c
-            // a says b can send message c to d
-            // CurrentTime() a b // CurrentTime() > 9:00, CurrentTime() < 17:00
-            // CurrentDate() a b // CurrentDate() < UNIX_TIME (seconds since epoch)
-            // a says b can say STATEMENT
-            // a confirms b
-            struct Statement
-            {
-                std::string root;
-                StatementType type;
-                std::string name1;
-                std::string name2;
-                std::string name3;
-                std::string comparison;
-                uint32_t num1;
-                uint32_t num2;
-                Statement* statement;
-            };
-
             // EvaluateStatement
             // Checks to see if the given rule holds based on ACLs we've heard. Will evaluate conditions as necessary.
             // example:
@@ -367,8 +318,8 @@ namespace UbiPAL
             //          [OUT] result_statements: A vector of statements which hold under the currently heard rules.
             // return
             //          int: SUCCESS, else negative error code
-            int FindNamesForStatements(const std::vector<std::string>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names);
-            int FindNamesForStatements(const std::vector<Statement>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names);
+            int FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names);
+            int FindNamesForStatements(const std::vector<Statement>& statements, std::map<std::string, std::set<std::string>>& names);
 
             // GetCertificateForName
             // Returns the certificate for a given name

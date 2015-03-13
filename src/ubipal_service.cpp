@@ -1753,7 +1753,7 @@ namespace UbiPAL
 
         // default all fields
         statement_struct.root = std::string();
-        statement_struct.type = INVALID;
+        statement_struct.type = Statement::Type::INVALID;
         statement_struct.name1 = std::string();
         statement_struct.name2 = std::string();
         statement_struct.name3 = std::string();
@@ -1765,7 +1765,7 @@ namespace UbiPAL
         // parse type of statement
         if (statement.find(" CAN SAY ") != std::string::npos)
         {
-            statement_struct.type = CAN_SAY;
+            statement_struct.type = Statement::Type::CAN_SAY;
             size_t connective = statement.find(" CAN SAY ");
             size_t connective_end = connective + strlen(" CAN SAY ");
             statement_struct.statement = new Statement; // TODO this is a memory leak
@@ -1792,7 +1792,7 @@ namespace UbiPAL
         }
         else if (statement.find(" CAN SEND MESSAGE ") != std::string::npos)
         {
-            statement_struct.type = CAN_SEND_MESSAGE;
+            statement_struct.type = Statement::Type::CAN_SEND_MESSAGE;
 
             // find connective
             size_t connective = statement.find(" CAN SEND MESSAGE ");
@@ -1833,7 +1833,7 @@ namespace UbiPAL
         }
         else if (statement.find(" IS A ") != std::string::npos)
         {
-            statement_struct.type = IS_A;
+            statement_struct.type = Statement::Type::IS_A;
 
             size_t connective = statement.find(" IS A ");
             size_t connective_end = connective + strlen(" IS A ");
@@ -1862,7 +1862,7 @@ namespace UbiPAL
         }
         else if (statement.find(" IS ") != std::string::npos)
         {
-            statement_struct.type = IS;
+            statement_struct.type = Statement::Type::IS;
 
             size_t connective = statement.find(" IS ");
             size_t connective_end = connective + strlen(" IS ");
@@ -1893,7 +1893,7 @@ namespace UbiPAL
         }
         else if (statement.find(" CONFIRMS ") != std::string::npos)
         {
-            statement_struct.type = CONFIRMS;
+            statement_struct.type = Statement::Type::CONFIRMS;
 
             size_t connective = statement.find(" CONFIRMS ");
             size_t connective_end = connective + strlen(" CONFIRMS ");
@@ -1922,7 +1922,7 @@ namespace UbiPAL
         }
         else if (statement.find("CurrentTime() ") != std::string::npos)
         {
-            statement_struct.type = CURRENT_TIME;
+            statement_struct.type = Statement::Type::CURRENT_TIME;
             if (statement.find(" < ") != std::string::npos)
             {
                 statement_struct.comparison = "<";
@@ -1947,7 +1947,7 @@ namespace UbiPAL
         }
         else if (statement.find("CurrentDate() ") != std::string::npos)
         {
-            statement_struct.type = CURRENT_DATE;
+            statement_struct.type = Statement::Type::CURRENT_DATE;
             if (statement.find(" < ") != std::string::npos)
             {
                 statement_struct.comparison = "<";
@@ -2006,7 +2006,7 @@ namespace UbiPAL
         std::vector<Statement> new_conditions;
 
         // some statement types need not look at the ACLs, handle those immediately
-        if (statement.type == CURRENT_TIME)
+        if (statement.type == Statement::Type::CURRENT_TIME)
         {
             time_t timet = time(NULL);
             struct tm* time_struct = localtime(&timet);
@@ -2031,7 +2031,7 @@ namespace UbiPAL
 
             return passed_eval ? SUCCESS : FAILED_EVALUATION;
         }
-        else if (statement.type == CURRENT_DATE)
+        else if (statement.type == Statement::Type::CURRENT_DATE)
         {
             struct timeval tv;
             returned_value = gettimeofday(&tv, NULL);
@@ -2056,7 +2056,7 @@ namespace UbiPAL
 
             return passed_eval ? SUCCESS : FAILED_EVALUATION;
         }
-        else if (statement.type == CONFIRMS)
+        else if (statement.type == Statement::Type::CONFIRMS)
         {
             return WAIT_ON_CONDITIONS;
         }
@@ -2112,18 +2112,22 @@ namespace UbiPAL
                 // compare rules
                 if (statement.type != parsed_rule.type)
                 {
-                    if (parsed_rule.type != CAN_SAY || parsed_rule.statement == nullptr || parsed_rule.statement->type != statement.type)
+                    if (parsed_rule.type != Statement::Type::CAN_SAY
+                        || parsed_rule.statement == nullptr
+                        || parsed_rule.statement->type != statement.type)
                     {
                         continue;
                     }
                 }
 
                 // check for any mismathes
-                if ((statement.name1 != parsed_rule.name1) && (parsed_rule.statement == nullptr || parsed_rule.statement->name1 != statement.name1))
+                if ((statement.name1 != parsed_rule.name1) &&
+                    (parsed_rule.statement == nullptr || parsed_rule.statement->name1 != statement.name1))
                 {
                     // all variables are length 1
-                    if ((parsed_rule.name1.size() != 1 && parsed_rule.type != CAN_SAY)
-                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name1.size() != 1))
+                    if ((parsed_rule.name1.size() != 1 && parsed_rule.type != Statement::Type::CAN_SAY)
+                         || (parsed_rule.type == Statement::Type::CAN_SAY && parsed_rule.statement != nullptr
+                         && parsed_rule.statement->name1.size() != 1))
                     {
                         continue;
                     }
@@ -2151,8 +2155,9 @@ namespace UbiPAL
                 if ((statement.name2 != parsed_rule.name2) && (parsed_rule.statement == nullptr || parsed_rule.statement->name2 != statement.name2))
                 {
                     // all variables are length 1
-                    if ((parsed_rule.name2.size() != 1 && parsed_rule.type != CAN_SAY)
-                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name2.size() != 1))
+                    if ((parsed_rule.name2.size() != 1 && parsed_rule.type != Statement::Type::CAN_SAY)
+                         || (parsed_rule.type == Statement::Type::CAN_SAY && parsed_rule.statement != nullptr
+                         && parsed_rule.statement->name2.size() != 1))
                     {
                         continue;
                     }
@@ -2180,8 +2185,9 @@ namespace UbiPAL
                 if ((statement.name3 != parsed_rule.name3) && (parsed_rule.statement == nullptr || parsed_rule.statement->name3 != statement.name3))
                 {
                     // all variables are length 1
-                    if ((parsed_rule.name3.size() != 1 && parsed_rule.type != CAN_SAY)
-                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name3.size() != 1))
+                    if ((parsed_rule.name3.size() != 1 && parsed_rule.type != Statement::Type::CAN_SAY)
+                         || (parsed_rule.type == Statement::Type::CAN_SAY && parsed_rule.statement != nullptr
+                         && parsed_rule.statement->name3.size() != 1))
                     {
                         continue;
                     }
@@ -2207,7 +2213,7 @@ namespace UbiPAL
                     }
                 }
 
-                if (parsed_rule.type == CAN_SAY)
+                if (parsed_rule.type == Statement::Type::CAN_SAY)
                 {
                     temp_consider.service_id = parsed_rule.name1;
                 }
@@ -2218,7 +2224,7 @@ namespace UbiPAL
                 temp_consider.referenced_from_acl = current_acls[i].msg_id;
                 temp_consider.conditions = rule_conditions;
 
-                if (parsed_rule.type == CAN_SAY)
+                if (parsed_rule.type == Statement::Type::CAN_SAY)
                 {
                     to_consider.push_back(temp_consider);
                 }
@@ -2248,7 +2254,7 @@ namespace UbiPAL
                 bool did_fail_conds = false;
                 for (unsigned int j = 0; j < all_conditions.size(); ++j)
                 {
-                    if (all_conditions[j].type != CONFIRMS)
+                    if (all_conditions[j].type != Statement::Type::CONFIRMS)
                     {
                         std::vector<std::string> cond_acl_trail;
                         std::vector<Statement> cond_conds;
@@ -2696,7 +2702,7 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::FindNamesForStatements(const std::vector<std::string>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names)
+    int UbipalService::FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names)
     {
         int status = SUCCESS;
         std::vector<Statement> parsed_statements;
@@ -2715,23 +2721,67 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::FindNamesForStatements(const std::vector<Statement>& statements, std::vector<std::tuple<char, std::set<std::string>>>& names)
+    int UbipalService::FindNamesForStatements(const std::vector<Statement>& statements, std::map<std::string, std::set<std::string>>& names)
     {
         int status = SUCCESS;
 
         // create a set for each variable name
-        std::vector<std::tuple<char, std::set<std::string>>> possible_answers;
+        std::map<std::string, std::set<std::string>> possible_answers;
+
+        // organize each
+        std::map<std::string, std::set<Statement>> grouped_statements;
+
+        // group statements by which variables they reference
+        for (unsigned int i = 0; i < statements.size(); ++i)
+        {
+            if (statements[i].type == Statement::Type::CURRENT_TIME || statements[i].type == Statement::Type::CURRENT_DATE ||
+                statements[i].type == Statement::Type::CONFIRMS || statements[i].type == Statement::Type::INVALID)
+            {
+                continue;
+            }
+
+            // for each variable, add it to the appropriate
+            for (const Statement* itr = &statements[i]; itr != nullptr; itr = itr->statement)
+            {
+                if (itr->name1.size() == 1)
+                {
+                    grouped_statements[itr->name1].insert(statements[i]);
+                }
+                if (itr->name2.size() == 1)
+                {
+                    grouped_statements[itr->name2].insert(statements[i]);
+                }
+                if (itr->name3.size() == 1)
+                {
+                    grouped_statements[itr->name3].insert(statements[i]);
+                }
+            }
+        }
 
         // TODO for each statement, find the service names which can replace the variable
             // TODO if it's the first round, set the possible_answers set to equal the found set
             // TODO if it's not the first round, intersect with the corresponding set in possible_answers
-
-
-        // return those
-        for (unsigned int i = 0; i < possible_answers.size(); ++i)
+        std::vector<NamespaceCertificate> all_certificates;
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, all_certificates);
+        if (status != SUCCESS)
         {
-            names.push_back(possible_answers[i]);
+            Log::Line(Log::WARN, "UbipalService::GetNamesForStatements: GetNames failed: %d", GetErrorDescription(status));
+            return status;
         }
+
+        for (std::map<std::string, std::set<Statement>>::iterator itr = grouped_statements.begin(); itr != grouped_statements.end(); ++itr)
+        {
+            for (std::set<Statement>::iterator stmnts = itr->second.begin(); stmnts != itr->second.end(); ++stmnts)
+            {
+                for (unsigned int i = 0; i < all_certificates.size(); ++i)
+                {
+                    //for (Statement* smnt =
+                }
+            }
+        }
+
+
+        names = possible_answers;
         return status;
     }
 }
