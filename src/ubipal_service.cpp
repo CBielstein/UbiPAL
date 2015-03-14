@@ -1989,6 +1989,7 @@ namespace UbiPAL
 
         // scope variable end to avoid jump errors when going to exit
         {
+            // find the root of the authority for this (if the rule starts with FOO SAYS)
             size_t end = statement.find(" SAYS ");
             if (end != std::string::npos)
             {
@@ -1996,7 +1997,15 @@ namespace UbiPAL
             }
             else
             {
-                statement_struct.root = id;
+                // if it doesn't, if we're talking about a CAN_SEND_MESSAGE type, set the base to the receiving service if it isn't a variable
+                if (statement_struct.type == Statement::Type::CAN_SEND_MESSAGE && statement_struct.name3.size() != 1)
+                {
+                    statement_struct.root = statement_struct.name3;
+                }
+                else
+                {
+                    statement_struct.root = id;
+                }
             }
         }
 
@@ -2783,11 +2792,12 @@ namespace UbiPAL
             return status;
         }
 
+        std::set<std::string> successful_names;
         for (std::map<std::string, std::set<Statement>>::iterator itr = grouped_statements.begin(); itr != grouped_statements.end(); ++itr)
         {
             for (std::set<Statement>::iterator stmnts = itr->second.begin(); stmnts != itr->second.end(); ++stmnts)
             {
-                std::set<std::string> successful_names;
+                successful_names.clear();
                 for (unsigned int i = 0; i < all_certificates.size(); ++i)
                 {
                     Statement temp_statement = *stmnts;
@@ -2818,23 +2828,26 @@ namespace UbiPAL
                 else
                 {
                     // else, remove any name not in succesful_names
-                    for (std::set<std::string>::iterator remove_itr = possible_answers[itr->first].end(); remove_itr != possible_answers[itr->first].begin(); --remove_itr)
+                    std::set<std::string> new_possible_answers;
+                    for (std::set<std::string>::iterator add_itr = possible_answers[itr->first].begin(); add_itr != possible_answers[itr->first].end(); ++add_itr)
                     {
-                        if (successful_names.count(*remove_itr) != 1)
+                        if (successful_names.count(*add_itr) == 1)
                         {
-                            possible_answers[itr->first].erase(remove_itr);
+                            new_possible_answers.insert(*add_itr);
                         }
                     }
+
+                    possible_answers[itr->first] = new_possible_answers;
                 }
                 if (possible_answers[itr->first].size() == 0)
                 {
-                    return GENERAL_FAILURE;
+                    return NOT_IN_ACLS;
                 }
             }
         }
 
 
         names = possible_answers;
-        return status;
+        return SUCCESS;
     }
 }

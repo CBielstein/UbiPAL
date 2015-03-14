@@ -29,8 +29,6 @@
 // chosen to be outside of the range of assigned ports
 #define UBIPAL_BROADCAST_PORT "50015"
 
-// Note: Any function marked XXX is yet to be implemented
-
 namespace UbiPAL
 {
     // forward declaration for the callbacks
@@ -310,7 +308,6 @@ namespace UbiPAL
             //          int: SUCCESS on success, otherwise a negative error.
             int ParseStatement(const std::string& statement, Statement& statement_struct);
 
-            // XXX
             // FindNamesForStatements
             // Checks to see if there is a name that matches the given statements. Does not consider time-related statements or confirmations. Thoe are left for request-time checks.
             // args
