@@ -2723,6 +2723,13 @@ namespace UbiPAL
         return status;
     }
 
+    int UbipalService::FindNamesForStatements(const std::string& statement, std::map<std::string, std::set<std::string>>& names)
+    {
+        std::vector<std::string> statements_vector;
+        statements_vector.push_back(statement);
+        return FindNamesForStatements(statements_vector, names);
+    }
+
     int UbipalService::FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names)
     {
         int status = SUCCESS;
@@ -2788,7 +2795,7 @@ namespace UbiPAL
         status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_SELF, all_certificates);
         if (status != SUCCESS)
         {
-            Log::Line(Log::WARN, "UbipalService::GetNamesForStatements: GetNames failed: %d", GetErrorDescription(status));
+            Log::Line(Log::WARN, "UbipalService::FindNamesForStatements: GetNames failed: %d", GetErrorDescription(status));
             return status;
         }
 
@@ -2804,10 +2811,15 @@ namespace UbiPAL
                     for (Statement* statement_itr = &temp_statement; statement_itr != nullptr; statement_itr = statement_itr->statement)
                     {
                         // for each field, if it equals the variable in this set, replace it with the certificate id, else leave it
-                        statement_itr->root = (statement_itr->root == itr->first) ? all_certificates[i].id : statement_itr->root;
+                        // if we're sending to a variable, we care about the permissions at the receiver, so fix the root
+                        if (statement_itr->root == itr->first || (statement_itr->type == Statement::Type::CAN_SEND_MESSAGE && statement_itr->name3 == itr->first))
+                        {
+                            statement_itr->root = all_certificates[i].id;
+                        }
                         statement_itr->name1 = (statement_itr->name1 == itr->first) ? all_certificates[i].id : statement_itr->name1;
                         statement_itr->name2 = (statement_itr->name2 == itr->first) ? all_certificates[i].id : statement_itr->name2;
                         statement_itr->name3 = (statement_itr->name3 == itr->first) ? all_certificates[i].id : statement_itr->name3;
+
                     }
 
                     // replacements are done, try to evaluate

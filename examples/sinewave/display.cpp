@@ -12,11 +12,10 @@
 #include <fstream> // file io
 #include <string>  //std::string
 #include <vector>  //std::vector
+#include <set>     //std::set
+#include <map>     //std::map
 
 #define UNENCRYPTED UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION
-#define ALL_NAMES UbiPAL::UbipalService::GetNamesFlags::INCLUDE_UNTRUSTED | UbiPAL::UbipalService::GetNamesFlags::INCLUDE_TRUSTED
-
-const std::string PRODUCER_NAME = "B385F85CC9A3EE3AFE3764C71263E904C61A389B7B0E273F9BC8AD43A7310C23FEF95FA558C4BF1FB2E1D93327B6DA5540F793D8EF02972568E9B7AD16F42C84BF50354305DFC6459C30475E6C07BBFD481FAF2AAC8E658FE9BEC788B2ED1074E08760CDE128DD8506A37AF2B69036711A4714CBEDAD1A0FBFFC8A33FC467A19-03";
 
 int PrintSine(UbiPAL::UbipalService* us, const UbiPAL::Message* original_message, const UbiPAL::Message* message)
 {
@@ -83,32 +82,53 @@ int main ()
     time_t update_sine = std::clock() + CLOCKS_PER_SEC;
     while (true)
     {
+        // on each interval
         if (std::clock() > update_sine)
         {
-            std::vector<UbiPAL::NamespaceCertificate> names;
-            status = us.GetNames(ALL_NAMES, names);
+            // look for any service to which we can send SINE
+            std::map<std::string, std::set<std::string>> names;
+            status = us.FindNamesForStatements(us.GetId() + " CAN SEND MESSAGE SINE TO X", names);
             if (status != UbiPAL::SUCCESS)
             {
-                std::cout << "GetNames failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                std::cout << "FineNamesForStatements failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                update_sine = std::clock() + CLOCKS_PER_SEC;
+                continue;
+            }
+            if (names["X"].size() == 0)
+            {
+                std::cout << "Found no names to send to." << std::endl;
+                update_sine = std::clock() + CLOCKS_PER_SEC;
+                continue;
             }
 
-            for (unsigned int i = 0; i < names.size(); ++i)
+            // for each service
+            for (std::set<std::string>::iterator itr = names["X"].begin(); itr != names["X"].end(); ++itr)
             {
-                if (PRODUCER_NAME == names[i].id)
+                // look up the namespace certificate
+                UbiPAL::NamespaceCertificate nc;
+                status = us.GetCertificateForName(*itr, nc);
+                if (status != UbiPAL::SUCCESS)
                 {
-                    status = us.SendMessage(UNENCRYPTED, &names[i], "SINE", NULL, 0, PrintSine);
-                    if (status != UbiPAL::SUCCESS)
-                    {
-                        std::cout << "SendMessage failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
-                    }
-                    break;
+                    std::cout << "GetCertificateForName failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
+                }
+
+                // then send to that name
+                status = us.SendMessage(UNENCRYPTED, &nc, "SINE", NULL, 0, PrintSine);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "SendMessage to " << *itr << " failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
                 }
             }
 
             update_sine = std::clock() + CLOCKS_PER_SEC;
         }
+
+        // on each interval
         if (std::clock() > name_resend)
         {
+            // resend the name certificate to allow for replies
             status = us.SendName(UNENCRYPTED, NULL);
             if (status != UbiPAL::SUCCESS)
             {

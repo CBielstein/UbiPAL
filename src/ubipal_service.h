@@ -315,6 +315,7 @@ namespace UbiPAL
             //          [OUT] result_statements: A vector of statements which hold under the currently heard rules.
             // return
             //          int: SUCCESS if a potential mapping could be found, else negative error code
+            int FindNamesForStatements(const std::string& statement, std::map<std::string, std::set<std::string>>& names);
             int FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names);
             int FindNamesForStatements(const std::vector<Statement>& statements, std::map<std::string, std::set<std::string>>& names);
 

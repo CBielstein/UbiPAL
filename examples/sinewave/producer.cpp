@@ -87,9 +87,14 @@ int main ()
                 std::cout << "Failed to broadcast name: " << UbiPAL::GetErrorDescription(status) << std::endl;
             }
 
+            status = us.SendAcl(UNENCRYPTED, delegate, NULL);
+            if (status != UbiPAL::SUCCESS)
+            {
+                std::cout << "Failed to broadcast ACL: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            }
+
             timeout = std::clock() + 10 * CLOCKS_PER_SEC;
         }
         sched_yield();
     }
-
 }
