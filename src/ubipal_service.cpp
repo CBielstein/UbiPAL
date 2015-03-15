@@ -1948,7 +1948,6 @@ namespace UbiPAL
                 RETURN_STATUS(INVALID_SYNTAX);
             }
 
-
             size_t num_start = statement.find(" " + statement_struct.comparison + " ") + strlen(" < ");
             std::string num_string = statement.substr(num_start);
             returned_value = std::sscanf(num_string.c_str(), "%u:%u", &statement_struct.num1, &statement_struct.num2);
@@ -2141,97 +2140,93 @@ namespace UbiPAL
                     }
                 }
 
-                // check for any mismathes
-                if ((statement.name1 != parsed_rule.name1) &&
-                    (parsed_rule.statement == nullptr || parsed_rule.statement->name1 != statement.name1))
+                bool skip = false;
+                for (Statement* itr = &parsed_rule; itr != nullptr; itr = itr->statement)
                 {
-                    // all variables are length 1
-                    if ((parsed_rule.name1.size() != 1 && parsed_rule.type != Statement::Type::CAN_SAY)
-                         || (parsed_rule.type == Statement::Type::CAN_SAY && parsed_rule.statement != nullptr
-                         && parsed_rule.statement->name1.size() != 1))
+                    // check for any mismatches
+                    if ((statement.name1 != itr->name1))
                     {
-                        continue;
-                    }
+                        // all variables are length 1
+                        if (itr->name1.size() != 1 && itr->type != Statement::Type::CAN_SAY)
+                        {
+                            skip = true;
+                            break;
+                        }
 
-                    // do any necessary replacement in the conditions
-                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                        // do any necessary replacement in the conditions
+                        for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                        {
+                            if (rule_conditions[i].name1 == itr->name1)
+                            {
+                                rule_conditions[i].name1 = statement.name1;
+                            }
+                            if (rule_conditions[i].name2 == itr->name1)
+                            {
+                                rule_conditions[i].name2 = statement.name1;
+                            }
+                            if (rule_conditions[i].name3 == itr->name1)
+                            {
+                                rule_conditions[i].name3 = statement.name1;
+                            }
+                        }
+                    }
+                    if (statement.name2 != itr->name2)
                     {
-                        if (rule_conditions[i].name1 == parsed_rule.name1
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name1))
+                        // all variables are length 1
+                        if (itr->name2.size() != 1 && itr->type != Statement::Type::CAN_SAY)
                         {
-                            rule_conditions[i].name1 = statement.name1;
+                            skip = true;
+                            break;
                         }
-                        if (rule_conditions[i].name2 == parsed_rule.name1
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name2))
+
+                        // do any necessary replacement in the conditions
+                        for (unsigned int i = 0; i < rule_conditions.size(); ++i)
                         {
-                            rule_conditions[i].name2 = statement.name1;
+                            if (rule_conditions[i].name1 == itr->name2)
+                            {
+                                rule_conditions[i].name1 = statement.name2;
+                            }
+                            if (rule_conditions[i].name2 == itr->name2)
+                            {
+                                rule_conditions[i].name2 = statement.name2;
+                            }
+                            if (rule_conditions[i].name3 == itr->name2)
+                            {
+                                rule_conditions[i].name3 = statement.name2;
+                            }
                         }
-                        if (rule_conditions[i].name3 == parsed_rule.name1
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name3))
+                    }
+                    if (statement.name3 != parsed_rule.name3)
+                    {
+                        // all variables are length 1
+                        if (itr->name3.size() != 1 && itr->type != Statement::Type::CAN_SAY)
                         {
-                            rule_conditions[i].name3 = statement.name1;
+                            skip = true;
+                            break;
+                        }
+
+                        // do any necessary replacement in the conditions
+                        for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                        {
+                            if (rule_conditions[i].name1 == itr->name3)
+                            {
+                                rule_conditions[i].name1 = statement.name3;
+                            }
+                            if (rule_conditions[i].name2 == itr->name3)
+                            {
+                                rule_conditions[i].name2 = statement.name3;
+                            }
+                            if (rule_conditions[i].name3 == itr->name3)
+                            {
+                                rule_conditions[i].name3 = statement.name3;
+                            }
                         }
                     }
                 }
-                if ((statement.name2 != parsed_rule.name2) && (parsed_rule.statement == nullptr || parsed_rule.statement->name2 != statement.name2))
-                {
-                    // all variables are length 1
-                    if ((parsed_rule.name2.size() != 1 && parsed_rule.type != Statement::Type::CAN_SAY)
-                         || (parsed_rule.type == Statement::Type::CAN_SAY && parsed_rule.statement != nullptr
-                         && parsed_rule.statement->name2.size() != 1))
-                    {
-                        continue;
-                    }
 
-                    // do any necessary replacement in the conditions
-                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
-                    {
-                        if (rule_conditions[i].name1 == parsed_rule.name2
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name1))
-                        {
-                            rule_conditions[i].name1 = statement.name2;
-                        }
-                        if (rule_conditions[i].name2 == parsed_rule.name2
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name2))
-                        {
-                            rule_conditions[i].name2 = statement.name2;
-                        }
-                        if (rule_conditions[i].name3 == parsed_rule.name2
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name3))
-                        {
-                            rule_conditions[i].name3 = statement.name2;
-                        }
-                    }
-                }
-                if ((statement.name3 != parsed_rule.name3) && (parsed_rule.statement == nullptr || parsed_rule.statement->name3 != statement.name3))
+                if (skip == true)
                 {
-                    // all variables are length 1
-                    if ((parsed_rule.name3.size() != 1 && parsed_rule.type != Statement::Type::CAN_SAY)
-                         || (parsed_rule.type == Statement::Type::CAN_SAY && parsed_rule.statement != nullptr
-                         && parsed_rule.statement->name3.size() != 1))
-                    {
-                        continue;
-                    }
-
-                    // do any necessary replacement in the conditions
-                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
-                    {
-                        if (rule_conditions[i].name1 == parsed_rule.name3
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name1))
-                        {
-                            rule_conditions[i].name1 = statement.name3;
-                        }
-                        if (rule_conditions[i].name2 == parsed_rule.name3
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name2))
-                        {
-                            rule_conditions[i].name2 = statement.name3;
-                        }
-                        if (rule_conditions[i].name3 == parsed_rule.name3
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name3))
-                        {
-                            rule_conditions[i].name3 = statement.name3;
-                        }
-                    }
+                    continue;
                 }
 
                 if (parsed_rule.type == Statement::Type::CAN_SAY)
@@ -2325,20 +2320,79 @@ namespace UbiPAL
                     new_conditions.push_back(to_consider[i].conditions[j]);
                 }
 
-                status = EvaluateStatementRecurse(statement, to_consider[i].service_id, new_acl_trail, new_conditions, message);
-                if (status == SUCCESS)
+                // if it's a delegation with a variable service
+                std::vector<std::string> delegators;
+                if (to_consider[i].service_id.size() == 1)
                 {
-                    acl_trail = new_acl_trail;
-                    conditions = new_conditions;
-                    return status;
+                    // check if a condition applies, if it does, remove that condition and recurse on anything that meets the condition
+                    std::vector<std::string> root_conds;
+                    for (unsigned int k = 0; k < to_consider[i].conditions.size(); ++k)
+                    {
+                        if (to_consider[i].conditions[k].name1 == to_consider[i].service_id ||
+                            to_consider[i].conditions[k].name2 == to_consider[i].service_id ||
+                            to_consider[i].conditions[k].name3 == to_consider[i].service_id)
+                        {
+                            root_conds.push_back(to_consider[i].conditions[k].ToString());
+                            to_consider[i].conditions.erase(to_consider[i].conditions.begin() + k);
+                            --k;
+                        }
+                    }
+
+                    if (root_conds.size() != 0)
+                    {
+                        std::map<std::string, std::set<std::string>> potential_roots;
+                        status = FindNamesForStatements(root_conds, potential_roots);
+                        if ((status == SUCCESS || status == WAIT_ON_CONDITIONS) && potential_roots[to_consider[i].service_id].size() != 0)
+                        {
+                            for (std::set<std::string>::iterator set_itr = potential_roots[to_consider[i].service_id].begin(); set_itr != potential_roots[to_consider[i].service_id].end(); ++set_itr)
+                            {
+                                delegators.push_back(*set_itr);
+                            }
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                    }
+                    else
+                    {
+                        // else recurse on ALL possibilities
+                        std::vector<NamespaceCertificate> services;
+                        status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_SELF, services);
+                        if (status != SUCCESS)
+                        {
+                            return status;
+                        }
+
+                        for (unsigned int k = 0; k < services.size(); ++k)
+                        {
+                            delegators.push_back(services[k].id);
+                        }
+                    }
                 }
-                else if (status != NOT_IN_ACLS || status != FAILED_CONDITIONS)
+                else
                 {
-                    return status;
+                    delegators.push_back(to_consider[i].service_id);
+                }
+
+                for (unsigned int j = 0; j < delegators.size(); ++j)
+                {
+                    status = EvaluateStatementRecurse(statement, delegators[j], new_acl_trail, new_conditions, message);
+                    if (status == SUCCESS)
+                    {
+                        acl_trail = new_acl_trail;
+                        conditions = new_conditions;
+                        return status;
+                    }
+                    else if (status != NOT_IN_ACLS || status != FAILED_CONDITIONS)
+                    {
+                        return status;
+                    }
                 }
             }
         }
-        return status;
+        return NOT_IN_ACLS;
     }
 
     int UbipalService::StartConfirmChecks(const Message& message, const std::vector<Statement>& conditions)

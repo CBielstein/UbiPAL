@@ -66,6 +66,12 @@ namespace UbiPAL
             //          Statement&: this Statement after copying
             Statement& operator=(const Statement& rhs);
 
+            // ToString
+            // Returns the human-readable string version of this statement
+            // returns
+            //          std::string: The human readable string version of this statement
+            std::string ToString();
+
             std::string root;
             Type type;
             std::string name1;

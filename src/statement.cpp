@@ -128,4 +128,19 @@ namespace UbiPAL
             return false;
         }
     }
+
+    std::string Statement::ToString()
+    {
+        switch (type)
+        {
+            case IS_A: return root + " SAYS " + name1 + " IS A " + name2;
+            case IS: return root + " SAYS " + name1 + " IS " + name2;
+            case CAN_SEND_MESSAGE: return root + " SAYS " + name1 + " CAN SEND MESSAGE " + name2 + " TO " + name3;
+            case CAN_SAY: return (statement != nullptr) ? root + " SAYS " + name1 + " CAN SAY " + statement->ToString() : "INVALID CAN_SAY STATEMENT";
+            case CURRENT_TIME: return "CurrentTime() " + comparison + " " + std::to_string(num1) + ":" + std::to_string(num2);
+            case CURRENT_DATE: return "CurrentDate() " + comparison + " " + std::to_string(num1);
+            case CONFIRMS: return name1 + " CONFIRMS " + name2;
+            default: return std::string("INVALID STATEMENT");
+        }
+    }
 }
