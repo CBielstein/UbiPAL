@@ -12,6 +12,9 @@
 
 bool is_asleep;
 
+#define NOENCRYPT UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION
+static const std::string PHONE = "9F28495B15A3F8B1AA07587F745E94FD2C32899DB151C6F4EEB6610422316C3AF2F1F44FBDA10EE0AD8A4F4BEE4428D69942F201F0E69D2E514B635EB27AA7B8A154E0C95628B1759690653B9B19EDC3406D8510D3D97E1C6D81568E03D27DFCDA6C16AC009AC93675D051E360632C3DC946E760D0F883FDA15A9A4CE660B201-03";
+
 int IsAsleep(UbiPAL::UbipalService* us, UbiPAL::Message message)
 {
     if (is_asleep == false)
@@ -69,11 +72,14 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Commands: " << std::endl
-                              << "    a: Yes, is aleep." << std::endl
-                              << "    b: No, is not asleep." << std::endl
+                              << "    y: Yes, is aleep." << std::endl
+                              << "    n: No, is not asleep." << std::endl
+                              << "    c: Cache the condition at telephone." << std::endl
                               << "    q: Quits." << std::endl;
 
+    UbiPAL::NamespaceCertificate phone;
     char command;
+    unsigned char* reply_cache;
     while(1)
     {
         std::cin >> command;
@@ -86,6 +92,38 @@ int main(int argc, char** argv)
             case 'n':
                 std::cout << "Setting not asleep." << std::endl;
                 is_asleep = false;
+                break;
+            case 'c':
+                status = us.GetCertificateForName(PHONE, phone);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "GetCertificateForName failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
+                }
+
+                reply_cache = is_asleep ? (unsigned char*)"DENY" : (unsigned char*)"CONFIRM";
+                status = us.CacheCondition(NOENCRYPT, &phone, "IS_ASLEEP", reply_cache, strlen((char*)reply_cache));
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "CacheCondition failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
+                }
+
+                break;
+            case 'i':
+                status = us.GetCertificateForName(PHONE, phone);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "GetCertificateForName failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
+                }
+
+                status = us.InvalidateCachedCondition(NOENCRYPT, &phone, "IS_ASLEEP");
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "InvalidateCachedCondition failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                    continue;
+                }
                 break;
             case 's':
                 std::cout << "Sending namespace cert." << std::endl;

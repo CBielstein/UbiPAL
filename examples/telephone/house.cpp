@@ -69,8 +69,8 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Commands: " << std::endl
-                              << "    a: Yes, is home." << std::endl
-                              << "    b: No, is not home." << std::endl
+                              << "    y: Yes, is home." << std::endl
+                              << "    n: No, is not home." << std::endl
                               << "    s: Sends NamespaceCertificate." << std::endl
                               << "    q: Quits." << std::endl;
 

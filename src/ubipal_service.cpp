@@ -821,8 +821,16 @@ namespace UbiPAL
                 status = RecvMessage((Message*)msg);
                 if (status != SUCCESS)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvMessage failed: %s", GetErrorDescription(status));
-                    RETURN_STATUS(status);
+                    // this is not an error state, correct the status variable and continue
+                    if (status == WAIT_ON_CONDITIONS)
+                    {
+                        status = SUCCESS;
+                    }
+                    else
+                    {
+                        Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvMessage failed: %s", GetErrorDescription(status));
+                        RETURN_STATUS(status);
+                    }
                 }
                 break;
             case MessageType::NAMESPACE_CERTIFICATE:
@@ -1146,6 +1154,7 @@ namespace UbiPAL
             cached_conditions[message->from][condition] = std::tuple<unsigned char*, uint32_t>(reply, message->arg_len);
 
             cached_conditions_mutex.unlock();
+            return status;
         }
 
         if (message->message.compare(0, strlen("REMOVECACHECONDITION_"), "REMOVECACHECONDITION_") == 0)
@@ -1166,6 +1175,7 @@ namespace UbiPAL
             }
 
             cached_conditions_mutex.unlock();
+            return status;
         }
 
         if (message->message.compare(0, strlen("REQUESTCERTIFICATE"), "REQUESTCERTIFICATE") == 0)
@@ -2406,7 +2416,6 @@ namespace UbiPAL
     int UbipalService::ConfirmChecks(const Message& message, const std::vector<Statement>& conditions)
     {
         int status = SUCCESS;
-        bool created_awaiting_conditions = false;
 
         std::vector<NamespaceCertificate> services;
         status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED, services);
@@ -2415,9 +2424,12 @@ namespace UbiPAL
             return status;
         }
 
+        std::vector<Statement> remote_conditions;
+
+        // Handle any local conditions first
+        cached_conditions_mutex.lock();
         for (unsigned int i = 0; i < conditions.size(); ++i)
         {
-            cached_conditions_mutex.lock();
             // if we have an entry for the confirming service AND we have an entry for the condition
             if (cached_conditions.count(conditions[i].name1) == 1 && cached_conditions[conditions[i].name1].count(conditions[i].name2) == 1)
             {
@@ -2439,31 +2451,40 @@ namespace UbiPAL
                     }
                 }
             }
-            cached_conditions_mutex.unlock();
+            else
+            {
+                // if we haven't cached it, we'll have to check it with the source
+                remote_conditions.push_back(conditions[i]);
+            }
+        }
+        cached_conditions_mutex.unlock();
 
-            bool found_service = false;
+        // if there are no more conditions, we're done!
+        if (remote_conditions.size() == 0)
+        {
+            return SUCCESS;
+        }
+
+        // create conditions object
+        awaiting_conditions_mutex.lock();
+        ConditionCheck new_cond_check;
+        new_cond_check.message = message;
+        new_cond_check.conditions = remote_conditions;
+        new_cond_check.time = GetTimeMilliseconds();
+        awaiting_conditions.push_back(new_cond_check);
+        awaiting_conditions_mutex.unlock();
+
+        // check remote conditions
+        bool found_service = false;
+        for (unsigned int i = 0; i < remote_conditions.size(); ++i)
+        {
+            found_service = false;
             for (unsigned int j = 0; j < services.size(); ++j)
             {
-                if (services[j].id == conditions[i].name1)
+                if (services[j].id == remote_conditions[i].name1)
                 {
                     found_service = true;
-                    // if this is our first time here, create an awaiting conditions object
-                    if (created_awaiting_conditions == false)
-                    {
-                        awaiting_conditions_mutex.lock();
-
-                        ConditionCheck new_cond_check;
-                        new_cond_check.message = message;
-                        new_cond_check.conditions = conditions;
-                        new_cond_check.time = GetTimeMilliseconds();
-                        awaiting_conditions.push_back(new_cond_check);
-
-                        awaiting_conditions_mutex.unlock();
-
-                        created_awaiting_conditions = true;
-                    }
-
-                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], conditions[i].name2, NULL, 0, ConditionReplyCallback);
+                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
                         Log::Line(Log::WARN, "UbipalService::ConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
@@ -2480,15 +2501,7 @@ namespace UbiPAL
             }
         }
 
-        // if we have any messages to wait on...
-        if (created_awaiting_conditions == true)
-        {
-            return WAIT_ON_CONDITIONS;
-        }
-        else
-        {
-            return status;
-        }
+        return WAIT_ON_CONDITIONS;
     }
 
     int UbipalService::ConditionReplyCallback(UbipalService* us, const Message* original_message, const Message* reply_message)
