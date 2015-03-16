@@ -30,6 +30,20 @@
 
 #define FILE_READ_LENGTH 4096
 
+// variables for evaluation
+#ifdef EVALUATE
+    uint32_t NUM_MESSAGES_SENT = 0;
+    uint32_t NUM_MESSAGES_RECV = 0;
+    extern uint32_t NUM_RSA_ENCRYPTS;
+    extern double TIME_RSA_ENCRYPTS;
+    extern uint32_t NUM_RSA_DECRYPTS;
+    extern double TIME_RSA_DECRYPTS;
+    extern uint32_t NUM_RSA_SIGNS;
+    extern double TIME_RSA_SIGNS;
+    extern uint32_t NUM_RSA_VERIFIES;
+    extern double TIME_RSA_VERIFIES;
+#endif
+
 namespace UbiPAL
 {
     UbipalService::UbipalService()
@@ -323,6 +337,15 @@ namespace UbiPAL
 
         // free broadcast_info
         freeaddrinfo(broadcast_info);
+
+        #ifdef EVALUATE
+            // last thing before quitting, put out our stats
+            Log::Line(Log::INFO, "Quitting. Messages sent: %lu, messages received: %lu\nRSA Encrypts: %lu (%f secs), RSA Decrypts: %lu (%f secs), RSA Signs: %lu (%f secs), RSA Verifies: %lu (%f secs)",
+                      NUM_MESSAGES_SENT, NUM_MESSAGES_RECV, NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, NUM_RSA_SIGNS, TIME_RSA_SIGNS, NUM_RSA_VERIFIES, TIME_RSA_VERIFIES);
+        #endif
+
+        // Ensure everything hits the log before we die.
+        Log::FlushLog();
     }
 
     int UbipalService::SaveService(const std::string& file_path)
@@ -876,6 +899,10 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                // count all messages received, since they were received regardless of any failure afterward
+                ++NUM_MESSAGES_RECV;
+            #endif
             if (status != SUCCESS)
             {
                 Log::Line(Log::DEBUG, "UbipalService::HandleConnection: Exiting failure: %s", GetErrorDescription(status));
@@ -1570,6 +1597,13 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                // only count successfully sent messages because they only complete sending if successful
+                if (status == SUCCESS)
+                {
+                    ++NUM_MESSAGES_SENT;
+                }
+            #endif
             if ((sm_args->flags & SendMessageFlags::MESSAGE_AWAIT_REPLY) == 0)
             {
                 delete sm_args->msg;

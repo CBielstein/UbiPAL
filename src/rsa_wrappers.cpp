@@ -21,6 +21,17 @@
 #include <openssl/x509.h>
 #include <openssl/bn.h>
 
+// variables for evaluation
+#ifdef EVALUATE
+    uint32_t NUM_RSA_ENCRYPTS = 0;
+    double TIME_RSA_ENCRYPTS = 0;
+    uint32_t NUM_RSA_DECRYPTS = 0;
+    double TIME_RSA_DECRYPTS = 0;
+    uint32_t NUM_RSA_SIGNS = 0;
+    double TIME_RSA_SIGNS = 0;
+    uint32_t NUM_RSA_VERIFIES = 0;
+    double TIME_RSA_VERIFIES = 0;
+#endif
 
 namespace UbiPAL
 {
@@ -127,6 +138,11 @@ namespace UbiPAL
                                         unsigned int& sig_len)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         unsigned char* digest = nullptr;
 
         if (priv_key == nullptr || msg == nullptr)
@@ -169,6 +185,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_RSA_SIGNS += ((double) end - start) / CLOCKS_PER_SEC;
+                    ++NUM_RSA_SIGNS;
+                }
+            #endif
             FUNCTION_END;
     }
 
@@ -178,6 +202,10 @@ namespace UbiPAL
     {
         FUNCTION_START;
         unsigned char* digest = nullptr;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
 
         if (pub_key == nullptr || msg == nullptr || sig == nullptr)
         {
@@ -210,6 +238,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_RSA_VERIFIES += ((double) end - start)/ CLOCKS_PER_SEC;
+                    ++NUM_RSA_VERIFIES;
+                }
+            #endif
             FUNCTION_END;
     }
 
@@ -226,6 +262,10 @@ namespace UbiPAL
     int RsaWrappers::Encrypt(RSA* key, const unsigned char* msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
 
         if (result_len != nullptr)
         {
@@ -285,6 +325,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_RSA_ENCRYPTS += ((double) end - start)/ CLOCKS_PER_SEC;
+                    ++NUM_RSA_ENCRYPTS;
+                }
+            #endif
             if (status != SUCCESS)
             {
                 free(result);
@@ -295,6 +343,10 @@ namespace UbiPAL
     int RsaWrappers::Decrypt(RSA* key, const unsigned char* msg, const unsigned int msg_len, unsigned char*& result, unsigned int* result_len)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
 
         if (result_len != nullptr)
         {
@@ -344,6 +396,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_RSA_DECRYPTS += ((double) end - start) / CLOCKS_PER_SEC;
+                    ++NUM_RSA_DECRYPTS;
+                }
+            #endif
             if (status != SUCCESS)
             {
                 free(result);
