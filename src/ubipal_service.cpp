@@ -1098,6 +1098,49 @@ namespace UbiPAL
             return status;
         }
 
+        if (message->message.compare(0, strlen("CACHECONDITION_"), "CACHECONDITION_") == 0)
+        {
+            cached_conditions_mutex.lock();
+
+            // get condition
+            size_t underscore = message->message.find("_");
+            std::string condition = message->message.substr(underscore + 1);
+
+            // copy the reply
+            unsigned char* reply = (unsigned char*)malloc(message->arg_len);
+            if (reply == nullptr)
+            {
+                cached_conditions_mutex.unlock();
+                return MALLOC_FAILURE;
+            }
+            memcpy(reply, message->argument, message->arg_len);
+
+            // add to cache
+            cached_conditions[message->from][condition] = std::tuple<unsigned char*, uint32_t>(reply, message->arg_len);
+
+            cached_conditions_mutex.unlock();
+        }
+
+        if (message->message.compare(0, strlen("REMOVECACHECONDITION_"), "REMOVECACHECONDITION_") == 0)
+        {
+            cached_conditions_mutex.lock();
+
+            // get condition
+            size_t underscore = message->message.find("_");
+            std::string condition = message->message.substr(underscore + 1);
+
+            // remove from the mapped map
+            cached_conditions[message->from].erase(condition);
+
+            // remove the entry for that service, if there are no more conditions
+            if (cached_conditions[message->from].size() == 0)
+            {
+                cached_conditions.erase(message->from);
+            }
+
+            cached_conditions_mutex.unlock();
+        }
+
         // check against ACLs
         status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + message->message + " TO " + id, message);
         if (status == NOT_IN_ACLS)
@@ -2277,13 +2320,13 @@ namespace UbiPAL
                 }
                 else
                 {
-                    status = StartConfirmChecks(*message, all_conditions);
-                    if (status != SUCCESS)
+                    status = ConfirmChecks(*message, all_conditions);
+                    if (status != SUCCESS && status != WAIT_ON_CONDITIONS && status != FAILED_CONDITIONS)
                     {
-                        Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: StartConfirmChecks failed: %s", GetErrorDescription(status));
+                        Log::Line(Log::WARN, "UbipalService::CheckAclsRecurse: ConfirmChecks failed: %s", GetErrorDescription(status));
                         return status;
                     }
-                    return WAIT_ON_CONDITIONS;
+                    return status;
                 }
             }
             // else recurse
@@ -2314,19 +2357,10 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::StartConfirmChecks(const Message& message, const std::vector<Statement>& conditions)
+    int UbipalService::ConfirmChecks(const Message& message, const std::vector<Statement>& conditions)
     {
         int status = SUCCESS;
-
-        awaiting_conditions_mutex.lock();
-
-        ConditionCheck new_cond_check;
-        new_cond_check.message = message;
-        new_cond_check.conditions = conditions;
-        new_cond_check.time = GetTimeMilliseconds();
-        awaiting_conditions.push_back(new_cond_check);
-
-        awaiting_conditions_mutex.unlock();
+        bool created_awaiting_conditions = false;
 
         std::vector<NamespaceCertificate> services;
         status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED, services);
@@ -2337,14 +2371,54 @@ namespace UbiPAL
 
         for (unsigned int i = 0; i < conditions.size(); ++i)
         {
+            cached_conditions_mutex.lock();
+            // if we have an entry for the confirming service AND we have an entry for the condition
+            if (cached_conditions.count(conditions[i].name1) == 1 && cached_conditions[conditions[i].name1].count(conditions[i].name2) == 1)
+            {
+                // get the answer
+                std::tuple<unsigned char*, uint32_t> cond_reply = cached_conditions[conditions[i].name1][conditions[i].name2];
+                if (std::get<0>(cond_reply) != nullptr)
+                {
+                    if (std::get<1>(cond_reply) >= strlen("CONFIRM") && memcmp(std::get<0>(cond_reply), "CONFIRM", strlen("CONFIRM")) == 0)
+                    {
+                        // confirmed, we don't need to send a message about it
+                        cached_conditions_mutex.unlock();
+                        continue;
+                    }
+                    else
+                    {
+                        // something other than confirmed, conditions failed!
+                        cached_conditions_mutex.unlock();
+                        return FAILED_CONDITIONS;
+                    }
+                }
+            }
+            cached_conditions_mutex.unlock();
+
             for (unsigned int j = 0; j < services.size(); ++j)
             {
                 if (services[j].id == conditions[i].name1)
                 {
+                    // if this is our first time here, create an awaiting conditions object
+                    if (created_awaiting_conditions == false)
+                    {
+                        awaiting_conditions_mutex.lock();
+
+                        ConditionCheck new_cond_check;
+                        new_cond_check.message = message;
+                        new_cond_check.conditions = conditions;
+                        new_cond_check.time = GetTimeMilliseconds();
+                        awaiting_conditions.push_back(new_cond_check);
+
+                        awaiting_conditions_mutex.unlock();
+
+                        created_awaiting_conditions = true;
+                    }
+
                     status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
-                        Log::Line(Log::WARN, "UbipalService::StartConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
+                        Log::Line(Log::WARN, "UbipalService::ConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
                         return status;
                     }
                     break;
@@ -2352,7 +2426,15 @@ namespace UbiPAL
             }
         }
 
-        return status;
+        // if we have any messages to wait on...
+        if (created_awaiting_conditions == true)
+        {
+            return WAIT_ON_CONDITIONS;
+        }
+        else
+        {
+            return status;
+        }
     }
 
     int UbipalService::ConditionReplyCallback(UbipalService* us, const Message* original_message, const Message* reply_message)
@@ -2670,5 +2752,17 @@ namespace UbiPAL
         }
 
         return (time.tv_sec * 1000) + (time.tv_usec / 1000);
+    }
+
+
+    int UbipalService::CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
+                                      const unsigned char* const reply, const uint32_t reply_len)
+    {
+        return SendMessage(flags, to, "CACHECONDITION_" + condition, reply, reply_len);
+    }
+
+    int UbipalService::InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition)
+    {
+        return SendMessage(flags, to, "REMOVECACHECONDITION_" + condition, NULL, 0);
     }
 }

@@ -405,6 +405,34 @@ namespace UbiPAL
             //          string: ID of this service
             inline std::string GetId() { return id; }
 
+            // CacheCondition
+            // Sends a message to a given service to be cached on the receiving end. This cache stays until invalidated or updated.
+            // Updates by calling this function again, invalidations by calling InvalidateCachedCondition
+            // args
+            //          [IN] flags: flags, including:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] to: The NamespaceCertificate to which to send
+            //          [IN] condition: The condition for which the reply is cached
+            //          [IN] reply: The cached reply for the condition
+            //          [IN] reply_len: The length of reply
+            // return
+            //          int: SUCCESS on success, else a negative error
+            int CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
+                               const unsigned char* const reply, const uint32_t reply_len);
+
+            // InvalidateCachedCondition
+            // Sends a message to the receiving service to invalidate the given condition
+            // args
+            //          [IN] flags: flags, including:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] to: The NamespaceCertificate to which to send
+            //          [IN] condition: The condition which should be removed from the cache
+            // return
+            //          int: SUCCESS on success, else a negative error
+            int InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition);
+
         private:
 
             // MessageConditionPassed
@@ -707,6 +735,12 @@ namespace UbiPAL
             // holds the thread for checking condition timeouts
             pthread_t conditions_timeout_thread;
 
+            // holds cached conditions from other services, map<service name, map<condition, tuple< reply, reply_len>>>
+            std::unordered_map<std::string, std::unordered_map<std::string, std::tuple<unsigned char*, uint32_t>>> cached_conditions;
+
+            // prevents race conditions on the above strucutre
+            std::mutex cached_conditions_mutex;
+
             // The length of condition check timeout in milliseconds
             uint32_t condition_timeout_length;
 
@@ -743,8 +777,8 @@ namespace UbiPAL
             //          [IN] message: The message in question
             //          [IN] conditions: conditions which must be met
             // returns
-            //          int: SUCCESS on success, negative error code on error
-            int StartConfirmChecks(const Message& message, const std::vector<Statement>& conditions);
+            //          int: SUCCESS on all pass, WAIT_ON_CONDITIONS if we must wait, other negative error code on error
+            int ConfirmChecks(const Message& message, const std::vector<Statement>& conditions);
     };
 }
 
