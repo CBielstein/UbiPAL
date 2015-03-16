@@ -1,0 +1,104 @@
+// Cameron Bielstein, 3/16/15
+// bed.cpp
+// Part of the telephone example for UbiPAL
+
+// cin
+#include <iostream>
+
+// UbiPAL
+#include <ubipal/ubipal_service.h>
+#include <ubipal/error.h>
+#include <ubipal/log.h>
+
+bool is_asleep;
+
+int IsAsleep(UbiPAL::UbipalService* us, UbiPAL::Message message)
+{
+    if (is_asleep == false)
+    {
+        std::cout << "confirming." << std::endl;
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"CONFIRM", strlen("CONFIRM"));
+    }
+    else
+    {
+        std::cout << "denying." << std::endl;
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"DENY", strlen("DENY"));
+    }
+
+    return UbiPAL::SUCCESS;
+}
+
+int main(int argc, char** argv)
+{
+    int status = UbiPAL::SUCCESS;
+
+    is_asleep = false;
+
+    // log configuration
+    UbiPAL::Log::SetFile("bin/examples/telephone/bedlog.txt");
+    UbiPAL::Log::SetPrint(true);
+
+    // Create a UbiPAL service on the given port
+    UbiPAL::UbipalService us("examples/telephone/bed.txt");
+
+    // create an ACL that allows anyone to use IS_HOME
+    std::vector<std::string> rules;
+    std::string rule = "X CAN SEND MESSAGE IS_ASLEEP TO " + us.GetId();
+    rules.push_back(rule);
+    UbiPAL::AccessControlList acl_all;
+
+    status = us.CreateAcl("all", rules, acl_all);
+    if (status != UbiPAL::SUCCESS)
+    {
+        std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        return status;
+    }
+
+    status = us.RegisterCallback(std::string("IS_ASLEEP"), IsAsleep);
+    if (status != UbiPAL::SUCCESS)
+    {
+        std::cout << "Failed to send register calback: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        return status;
+    }
+
+    status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
+    if (status != UbiPAL::SUCCESS)
+    {
+        std::cout << "Failed to BeginRecv: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        return status;
+    }
+
+    std::cout << "Commands: " << std::endl
+                              << "    a: Yes, is aleep." << std::endl
+                              << "    b: No, is not asleep." << std::endl
+                              << "    q: Quits." << std::endl;
+
+    char command;
+    while(1)
+    {
+        std::cin >> command;
+        switch(command)
+        {
+            case 'y':
+                std::cout << "Setting asleep." << std::endl;
+                is_asleep = true;
+                break;
+            case 'n':
+                std::cout << "Setting not asleep." << std::endl;
+                is_asleep = false;
+                break;
+            case 's':
+                std::cout << "Sending namespace cert." << std::endl;
+                status = us.SendName(0, NULL);
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << UbiPAL::GetErrorDescription(status) << std::endl;
+                }
+                break;
+            case 'q': return status;
+            default: continue;
+        }
+    }
+
+    return status;
+}

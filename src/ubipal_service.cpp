@@ -1168,6 +1168,18 @@ namespace UbiPAL
             cached_conditions_mutex.unlock();
         }
 
+        if (message->message.compare(0, strlen("REQUESTCERTIFICATE"), "REQUESTCERTIFICATE") == 0)
+        {
+            // TODO fill this in
+        }
+
+        if (message->message.compare(0, strlen("REQUESTACL"), "REQUESTACL") == 0)
+        {
+            // TODO fill this in
+            // think about privacy infringement if this is always replied to
+            return NOT_IMPLEMENTED;
+        }
+
         // check against ACLs
         status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + message->message + " TO " + id, message);
         if (status == NOT_IN_ACLS)
@@ -2429,10 +2441,12 @@ namespace UbiPAL
             }
             cached_conditions_mutex.unlock();
 
+            bool found_service = false;
             for (unsigned int j = 0; j < services.size(); ++j)
             {
                 if (services[j].id == conditions[i].name1)
                 {
+                    found_service = true;
                     // if this is our first time here, create an awaiting conditions object
                     if (created_awaiting_conditions == false)
                     {
@@ -2457,6 +2471,12 @@ namespace UbiPAL
                     }
                     break;
                 }
+            }
+
+            if (found_service == false)
+            {
+                Log::Line(Log::DEBUG, "UbipalService::ConfirmChecks: Failed to find a service.");
+                return NOT_FOUND;
             }
         }
 
@@ -2798,5 +2818,40 @@ namespace UbiPAL
     int UbipalService::InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition)
     {
         return SendMessage(flags, to, "REMOVECACHECONDITION_" + condition, NULL, 0);
+    }
+
+    int UbipalService::RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
+    {
+        // TODO add a callback to handle adding the returned certificate
+        return SendMessage(flags, to, "REQUESTCERTIFICATE", (unsigned char*)service_id.c_str(), service_id.size());
+    }
+
+    int UbipalService::RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
+    {
+        // TODO add a callback to handle adding the returned ACL
+        return SendMessage(flags, to, "REQUESTACL", (unsigned char*)service_id.c_str(), service_id.size());
+    }
+
+    int UbipalService::GetCertificateForName(const std::string& name, NamespaceCertificate& certificate)
+    {
+        int status = SUCCESS;
+
+        std::vector<NamespaceCertificate> all_certificates;
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, all_certificates);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        for (unsigned int i = 0; i < all_certificates.size(); ++i)
+        {
+            if (all_certificates[i].id == name)
+            {
+                certificate = all_certificates[i];
+                return SUCCESS;
+            }
+        }
+
+        return NOT_FOUND;
     }
 }

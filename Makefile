@@ -28,6 +28,7 @@ TESTDEPS = $(TEST_OBJECTS:.o=.d)
 
 # gather example source files
 EXAMPLE_SOURCES = $(wildcard $(EXDIR)/*.cpp)
+EXAMPLE_SOURCES += $(wildcard $(EXDIR)/telephone/*.cpp)
 EXAMPLE_OBJECTS = $(addprefix $(BINDIR)/, $(EXAMPLE_SOURCES:.cpp=.o))
 EXDEPS = $(EXAMPLE_OBJECTS:.o=.d)
 
@@ -115,7 +116,23 @@ test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
 .PHONY: examples
-examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer
+examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller
+
+$(BINDIR)/$(EXDIR)/telephone/house: $(BINDIR)/$(EXDIR)/telephone/house.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/telephone/house.o -o $(BINDIR)/$(EXDIR)/telephone/house $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/telephone/bed: $(BINDIR)/$(EXDIR)/telephone/bed.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/telephone/bed.o -o $(BINDIR)/$(EXDIR)/telephone/bed $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/telephone/phone: $(BINDIR)/$(EXDIR)/telephone/phone.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/telephone/phone.o -o $(BINDIR)/$(EXDIR)/telephone/phone $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/telephone/caller: $(BINDIR)/$(EXDIR)/telephone/caller.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/telephone/caller.o -o $(BINDIR)/$(EXDIR)/telephone/caller $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)

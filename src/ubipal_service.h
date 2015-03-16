@@ -372,6 +372,15 @@ namespace UbiPAL
             //          int: 0 imples SUCCESS, NOT_IN_ACLS, FAILED_CONDITIONS_or TIMEOUT_CONDITIONS if it fails, else negative error code
             int FindNameForStatements(const std::vector<std::string>& statements, NamespaceCertificate& result_name);
 
+            // GetCertificateForName
+            // Returns the certificate for a given name
+            // args
+            //          [IN] name: The name to match to a certificate
+            //          [OUT] certificate: The found certificate
+            // return
+            //          int SUCCESS if found, NOT_FOUND if not
+            int GetCertificateForName(const std::string& name, NamespaceCertificate& certificate);
+
             enum GetNamesFlags
             {
                 INCLUDE_UNTRUSTED = 2 << 0,
@@ -432,6 +441,34 @@ namespace UbiPAL
             // return
             //          int: SUCCESS on success, else a negative error
             int InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition);
+
+            // XXX
+            // RequestCertificate
+            // Sends a message to to (or broadcasts if null) and requests the certificate for service_id
+            // Function should be treated as async and results should be polled from GetNames
+            // args
+            //          [IN] flags:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] service_id: The name of the service for which we are requesting the NamespaceCertificate
+            //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
+            //  return
+            //          int: SUCCESS on successful send of message, else a negative error
+            int RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
+
+            // XXX
+            // RequestCertificate
+            // Sends a message to to (or broadcasts if null) and requests any ACLs from service_id
+            // Function should be treated as async.
+            // args
+            //          [IN] flags:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] service_id: The name of the service for which we are requesting ACLs
+            //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
+            //  return
+            //          int: SUCCESS on successful send of message, else a negative error
+            int RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
 
         private:
 
