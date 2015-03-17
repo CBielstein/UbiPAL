@@ -566,6 +566,14 @@ namespace UbiPAL
             //          int: SUCCESS on success, else a negative error
             int RecvAcl(const AccessControlList* const acl);
 
+            // RecvAesKeymessage
+            // Handles receiving for an AES key iv pair message. Puts it in the data structure, replacing any previous key.
+            // args
+            //          [IN] akm: The AesKeyMessage to process
+            // return
+            //          int: SUCCESS on success, else a negative error
+            int RecvAesKeyMessage(const AesKeyMessage* const akm);
+
             // IncomingData
             // Allows either an incoming connection or buffer of data to be enqueued for handling later
             struct IncomingData
@@ -816,6 +824,12 @@ namespace UbiPAL
             // returns
             //          int: SUCCESS on all pass, WAIT_ON_CONDITIONS if we must wait, other negative error code on error
             int ConfirmChecks(const Message& message, const std::vector<Statement>& conditions);
+
+            // holds AES symmetric keys. Maps UbiPAL service ID to a tuple of <AES key, AES IV>
+            std::unordered_map<std::string, std::tuple<unsigned char*, unsigned char*>> aes_keys;
+
+            // prevents race conditions on the above object
+            std::mutex aes_keys_mutex;
     };
 }
 

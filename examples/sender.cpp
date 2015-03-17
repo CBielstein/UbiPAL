@@ -75,7 +75,7 @@ int main(int argc, char** argv)
         {
             if (receiver == services[i].id)
             {
-                status = us.SendMessage(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &services[i],
+                status = us.SendMessage(0, &services[i],
                                         std::string("PrintToScreen"), (unsigned char*)argument.c_str(), argument.size(), print_replies);
                 if (status != UbiPAL::SUCCESS)
                 {

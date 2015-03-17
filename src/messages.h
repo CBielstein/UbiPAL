@@ -50,6 +50,12 @@ AccessControlList: BaseMessage, plus the following
     num_rules times the following
         4 bytes: rule_len
         rule_len bytes: rule char*
+
+AesKeysMessage: BaseMessage plus the following
+    4 bytes: key_len
+    key_len bytes: key
+    4 bytes: iv_len
+    iv_len bytes: iv
 **/
 
 
@@ -61,6 +67,7 @@ namespace UbiPAL
         MESSAGE = 1,
         NAMESPACE_CERTIFICATE = 2,
         ACCESS_CONTROL_LIST = 3,
+        AES_KEY_MESSAGE = 4,
     };
 
     struct BaseMessage
@@ -200,6 +207,22 @@ namespace UbiPAL
         virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
         virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
         virtual int EncodedLength() const override;
+    };
+
+    struct AesKeyMessage : BaseMessage
+    {
+        uint32_t key_len;
+        unsigned char* key;
+        uint32_t iv_len;
+        unsigned char* iv;
+
+        virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
+        virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
+        virtual int EncodedLength() const override;
+        AesKeyMessage();
+        AesKeyMessage(const unsigned char* const _key, const uint32_t _key_len, const unsigned char* const _iv, const uint32_t _iv_len);
+        ~AesKeyMessage() override;
+        AesKeyMessage& operator=(const AesKeyMessage& rhs);
     };
 
     // Define comparison operators

@@ -9,6 +9,7 @@
 #include "log.h"
 #include "error.h"
 #include "rsa_wrappers.h"
+#include "aes_wrappers.h"
 #include "macros.h"
 
 // Standard
@@ -903,6 +904,44 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
                 break;
+            case AES_KEY_MESSAGE:
+                // reinterpret and authenticate
+                delete msg;
+                msg = new AesKeyMessage();
+                returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
+                if (status < 0)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: AesKeyMessage::Decode failed: %s", GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+
+                // authenticate - check signature
+                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
+                                                                 incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
+                if (returned_value < 0)
+                {
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
+                              GetErrorDescription(returned_value));
+                    RETURN_STATUS(returned_value);
+                }
+                else if (returned_value == 0)
+                {
+                    status = SIGNATURE_INVALID;
+                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                              GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                status = RecvAesKeyMessage((AesKeyMessage*)msg);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvAesKeyMessage failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                fprintf(stderr, "aes_keys: %lu\n", aes_keys.size());
+
+                break;
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -958,6 +997,22 @@ namespace UbiPAL
         }
 
         external_acls_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::RecvAesKeyMessage(const AesKeyMessage* const akm)
+    {
+        int status = SUCCESS;
+        if (akm == nullptr)
+        {
+            return NULL_ARG;
+        }
+
+        aes_keys_mutex.lock();
+
+        aes_keys[akm->from] = std::tuple<unsigned char*, unsigned char*>(akm->key, akm->iv);
+
+        aes_keys_mutex.unlock();
         return status;
     }
 
@@ -1567,20 +1622,110 @@ namespace UbiPAL
         // but don't encrypt if NO_ENCRYPTION
         if (!sm_args->msg->to.empty() && ((sm_args->flags & SendMessageFlags::NO_ENCRYPTION) == 0))
         {
-            status = RsaWrappers::StringToPublicKey(sm_args->msg->to, dest_pub_key);
-            if (status != SUCCESS)
+            // if we have an AES key, use that, else make one and send it
+            sm_args->us->aes_keys_mutex.lock();
+            // we have no AES key, so make one and send it
+            if (sm_args->us->aes_keys.count(sm_args->msg->to) == 0)
             {
-                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
-                RETURN_STATUS(status);
+                status = RsaWrappers::StringToPublicKey(sm_args->msg->to, dest_pub_key);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                // create key & IV
+                unsigned char* key = nullptr;
+                int key_length = 0;
+                unsigned char* iv = nullptr;
+                int iv_length = 0;
+                status = AesWrappers::GenerateAesObject(key, &key_length);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalServide::HandleSendMessage: AesWrappers::GenerateAesObject failed creating key: %s",
+                              GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                status = AesWrappers::GenerateAesObject(iv, &iv_length);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalServide::HandleSendMessage: AesWrappers::GenerateAesObject failed creating iv: %s",
+                              GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                fprintf(stderr, "key_len: %d, iv_len %d\n", key_length, iv_length);
+
+                //  put it in our structure
+                sm_args->us->aes_keys[sm_args->msg->to] = std::tuple<unsigned char*, unsigned char*>(key, iv);
+
+                // send it to receiving message
+                AesKeyMessage aes_msg(key, key_length, iv, iv_length);
+                aes_msg.to = sm_args->msg->to;
+                aes_msg.from = sm_args->msg->from;
+
+                unsigned char* encrypted_aes_msg = (unsigned char*)malloc(aes_msg.EncodedLength()
+                                                                          + RsaWrappers::SignatureLength(sm_args->us->private_key));
+                if (encrypted_aes_msg == nullptr)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed on encrypted_aes_msg");
+                    RETURN_STATUS(MALLOC_FAILURE);
+                }
+
+                status = aes_msg.Encode(encrypted_aes_msg, aes_msg.EncodedLength());
+                if (status < 0)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage aes_msg.Encode: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                unsigned int sig_len = RsaWrappers::SignatureLength(sm_args->us->private_key);
+                unsigned char* sig = encrypted_aes_msg + aes_msg.EncodedLength();
+                status = RsaWrappers::CreateSignedDigest(sm_args->us->private_key, encrypted_aes_msg, aes_msg.EncodedLength(),
+                                                         sig, sig_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: CreateSignedDigest failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                unsigned char* aes_result = nullptr;
+                unsigned int aes_result_len = 0;
+                unsigned int encrypted_aes_len = aes_msg.EncodedLength() + RsaWrappers::SignatureLength(sm_args->us->private_key);
+                status = RsaWrappers::Encrypt(sm_args->us->private_key, encrypted_aes_msg, encrypted_aes_len, aes_result, &aes_result_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: RsaWrappers::Encrypt failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                status = sm_args->us->SendData(sm_args->address, sm_args->port, encrypted_aes_msg, aes_msg.EncodedLength() +
+                                               RsaWrappers::SignatureLength(sm_args->us->private_key));
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: SendData failed for encrypted_aes_msg: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
             }
 
-
-            status = RsaWrappers::Encrypt(sm_args->us->private_key, bytes, total_len, result, &result_len);
-            if (status != SUCCESS)
+            if (sm_args->us->aes_keys.count(sm_args->msg->to) == 1)
             {
-                Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: RsaWrappers::Encrypt failed: %s", GetErrorDescription(status));
-                RETURN_STATUS(status);
+                std::tuple<unsigned char*, unsigned char*> keyIv = sm_args->us->aes_keys[sm_args->msg->to];
+                status = AesWrappers::Encrypt(std::get<0>(keyIv), std::get<1>(keyIv), bytes, total_len, result, &result_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: AesWrappers::Encrypt failed: %s", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
             }
+            else
+            {
+                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Failed to create a new aes key & iv pair and send to dest.");
+                RETURN_STATUS(GENERAL_FAILURE);
+            }
+
+            sm_args->us->aes_keys_mutex.unlock();
 
             // make the below code work regardless of encryption or not
             free(bytes);
