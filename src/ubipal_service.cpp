@@ -1387,14 +1387,14 @@ namespace UbiPAL
         status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + message->message + " TO " + id, message);
         if (status == NOT_IN_ACLS)
         {
-            ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
+            ReplyToMessage(0, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
             Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
             return status;
         }
         else if (status == FAILED_CONDITIONS)
         {
-            ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+            ReplyToMessage(0, message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
             Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
             return status;
@@ -2091,7 +2091,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         // check flags
-        if ((flags & ~(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED)) != 0)
+        if ((flags & ~(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_SELF)) != 0)
         {
             Log::Line(Log::WARN, "UbipalService::GetNames: passed invalid flag");
             return INVALID_ARG;
@@ -2099,6 +2099,18 @@ namespace UbiPAL
 
         // empty vector
         names.clear();
+
+        // add me if flaged
+        if ((flags & GetNamesFlags::INCLUDE_SELF) != 0)
+        {
+            NamespaceCertificate self_nc;
+            self_nc.from = id;
+            self_nc.id = id;
+            self_nc.description = description;
+            self_nc.address = address;
+            self_nc.port = port;
+            names.push_back(self_nc);
+        }
 
         // add untrusted, if flagged
         services_mutex.lock();
@@ -2167,7 +2179,7 @@ namespace UbiPAL
 
         // default all fields
         statement_struct.root = std::string();
-        statement_struct.type = INVALID;
+        statement_struct.type = Statement::Type::INVALID;
         statement_struct.name1 = std::string();
         statement_struct.name2 = std::string();
         statement_struct.name3 = std::string();
@@ -2179,7 +2191,7 @@ namespace UbiPAL
         // parse type of statement
         if (statement.find(" CAN SAY ") != std::string::npos)
         {
-            statement_struct.type = CAN_SAY;
+            statement_struct.type = Statement::Type::CAN_SAY;
             size_t connective = statement.find(" CAN SAY ");
             size_t connective_end = connective + strlen(" CAN SAY ");
             statement_struct.statement = new Statement; // TODO this is a memory leak
@@ -2206,7 +2218,7 @@ namespace UbiPAL
         }
         else if (statement.find(" CAN SEND MESSAGE ") != std::string::npos)
         {
-            statement_struct.type = CAN_SEND_MESSAGE;
+            statement_struct.type = Statement::Type::CAN_SEND_MESSAGE;
 
             // find connective
             size_t connective = statement.find(" CAN SEND MESSAGE ");
@@ -2247,7 +2259,7 @@ namespace UbiPAL
         }
         else if (statement.find(" IS A ") != std::string::npos)
         {
-            statement_struct.type = IS_A;
+            statement_struct.type = Statement::Type::IS_A;
 
             size_t connective = statement.find(" IS A ");
             size_t connective_end = connective + strlen(" IS A ");
@@ -2276,7 +2288,7 @@ namespace UbiPAL
         }
         else if (statement.find(" IS ") != std::string::npos)
         {
-            statement_struct.type = IS;
+            statement_struct.type = Statement::Type::IS;
 
             size_t connective = statement.find(" IS ");
             size_t connective_end = connective + strlen(" IS ");
@@ -2307,7 +2319,7 @@ namespace UbiPAL
         }
         else if (statement.find(" CONFIRMS ") != std::string::npos)
         {
-            statement_struct.type = CONFIRMS;
+            statement_struct.type = Statement::Type::CONFIRMS;
 
             size_t connective = statement.find(" CONFIRMS ");
             size_t connective_end = connective + strlen(" CONFIRMS ");
@@ -2336,7 +2348,7 @@ namespace UbiPAL
         }
         else if (statement.find("CurrentTime() ") != std::string::npos)
         {
-            statement_struct.type = CURRENT_TIME;
+            statement_struct.type = Statement::Type::CURRENT_TIME;
             if (statement.find(" < ") != std::string::npos)
             {
                 statement_struct.comparison = "<";
@@ -2350,7 +2362,6 @@ namespace UbiPAL
                 RETURN_STATUS(INVALID_SYNTAX);
             }
 
-
             size_t num_start = statement.find(" " + statement_struct.comparison + " ") + strlen(" < ");
             std::string num_string = statement.substr(num_start);
             returned_value = std::sscanf(num_string.c_str(), "%u:%u", &statement_struct.num1, &statement_struct.num2);
@@ -2361,7 +2372,7 @@ namespace UbiPAL
         }
         else if (statement.find("CurrentDate() ") != std::string::npos)
         {
-            statement_struct.type = CURRENT_DATE;
+            statement_struct.type = Statement::Type::CURRENT_DATE;
             if (statement.find(" < ") != std::string::npos)
             {
                 statement_struct.comparison = "<";
@@ -2391,6 +2402,7 @@ namespace UbiPAL
 
         // scope variable end to avoid jump errors when going to exit
         {
+            // find the root of the authority for this (if the rule starts with FOO SAYS)
             size_t end = statement.find(" SAYS ");
             if (end != std::string::npos)
             {
@@ -2398,7 +2410,15 @@ namespace UbiPAL
             }
             else
             {
-                statement_struct.root = id;
+                // if it doesn't, if we're talking about a CAN_SEND_MESSAGE type, set the base to the receiving service if it isn't a variable
+                if (statement_struct.type == Statement::Type::CAN_SEND_MESSAGE && statement_struct.name3.size() != 1)
+                {
+                    statement_struct.root = statement_struct.name3;
+                }
+                else
+                {
+                    statement_struct.root = id;
+                }
             }
         }
 
@@ -2420,7 +2440,7 @@ namespace UbiPAL
         std::vector<Statement> new_conditions;
 
         // some statement types need not look at the ACLs, handle those immediately
-        if (statement.type == CURRENT_TIME)
+        if (statement.type == Statement::Type::CURRENT_TIME)
         {
             time_t timet = time(NULL);
             struct tm* time_struct = localtime(&timet);
@@ -2445,7 +2465,7 @@ namespace UbiPAL
 
             return passed_eval ? SUCCESS : FAILED_EVALUATION;
         }
-        else if (statement.type == CURRENT_DATE)
+        else if (statement.type == Statement::Type::CURRENT_DATE)
         {
             struct timeval tv;
             returned_value = gettimeofday(&tv, NULL);
@@ -2470,7 +2490,7 @@ namespace UbiPAL
 
             return passed_eval ? SUCCESS : FAILED_EVALUATION;
         }
-        else if (statement.type == CONFIRMS)
+        else if (statement.type == Statement::Type::CONFIRMS)
         {
             return WAIT_ON_CONDITIONS;
         }
@@ -2526,102 +2546,104 @@ namespace UbiPAL
                 // compare rules
                 if (statement.type != parsed_rule.type)
                 {
-                    if (parsed_rule.type != CAN_SAY || parsed_rule.statement == nullptr || parsed_rule.statement->type != statement.type)
+                    if (parsed_rule.type != Statement::Type::CAN_SAY
+                        || parsed_rule.statement == nullptr
+                        || parsed_rule.statement->type != statement.type)
                     {
                         continue;
                     }
                 }
 
-                // check for any mismathes
-                if ((statement.name1 != parsed_rule.name1) && (parsed_rule.statement == nullptr || parsed_rule.statement->name1 != statement.name1))
+                bool skip = false;
+                for (Statement* itr = &parsed_rule; itr != nullptr; itr = itr->statement)
                 {
-                    // all variables are length 1
-                    if ((parsed_rule.name1.size() != 1 && parsed_rule.type != CAN_SAY)
-                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name1.size() != 1))
+                    // check for any mismatches
+                    if ((statement.name1 != itr->name1))
                     {
-                        continue;
-                    }
+                        // all variables are length 1
+                        if (itr->name1.size() != 1 && itr->type != Statement::Type::CAN_SAY)
+                        {
+                            skip = true;
+                            break;
+                        }
 
-                    // do any necessary replacement in the conditions
-                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                        // do any necessary replacement in the conditions
+                        for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                        {
+                            if (rule_conditions[i].name1 == itr->name1)
+                            {
+                                rule_conditions[i].name1 = statement.name1;
+                            }
+                            if (rule_conditions[i].name2 == itr->name1)
+                            {
+                                rule_conditions[i].name2 = statement.name1;
+                            }
+                            if (rule_conditions[i].name3 == itr->name1)
+                            {
+                                rule_conditions[i].name3 = statement.name1;
+                            }
+                        }
+                    }
+                    if (statement.name2 != itr->name2)
                     {
-                        if (rule_conditions[i].name1 == parsed_rule.name1
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name1))
+                        // all variables are length 1
+                        if (itr->name2.size() != 1 && itr->type != Statement::Type::CAN_SAY)
                         {
-                            rule_conditions[i].name1 = statement.name1;
+                            skip = true;
+                            break;
                         }
-                        if (rule_conditions[i].name2 == parsed_rule.name1
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name2))
+
+                        // do any necessary replacement in the conditions
+                        for (unsigned int i = 0; i < rule_conditions.size(); ++i)
                         {
-                            rule_conditions[i].name2 = statement.name1;
+                            if (rule_conditions[i].name1 == itr->name2)
+                            {
+                                rule_conditions[i].name1 = statement.name2;
+                            }
+                            if (rule_conditions[i].name2 == itr->name2)
+                            {
+                                rule_conditions[i].name2 = statement.name2;
+                            }
+                            if (rule_conditions[i].name3 == itr->name2)
+                            {
+                                rule_conditions[i].name3 = statement.name2;
+                            }
                         }
-                        if (rule_conditions[i].name3 == parsed_rule.name1
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name1 == rule_conditions[i].name3))
+                    }
+                    if (statement.name3 != parsed_rule.name3)
+                    {
+                        // all variables are length 1
+                        if (itr->name3.size() != 1 && itr->type != Statement::Type::CAN_SAY)
                         {
-                            rule_conditions[i].name3 = statement.name1;
+                            skip = true;
+                            break;
+                        }
+
+                        // do any necessary replacement in the conditions
+                        for (unsigned int i = 0; i < rule_conditions.size(); ++i)
+                        {
+                            if (rule_conditions[i].name1 == itr->name3)
+                            {
+                                rule_conditions[i].name1 = statement.name3;
+                            }
+                            if (rule_conditions[i].name2 == itr->name3)
+                            {
+                                rule_conditions[i].name2 = statement.name3;
+                            }
+                            if (rule_conditions[i].name3 == itr->name3)
+                            {
+                                rule_conditions[i].name3 = statement.name3;
+                            }
                         }
                     }
                 }
-                if ((statement.name2 != parsed_rule.name2) && (parsed_rule.statement == nullptr || parsed_rule.statement->name2 != statement.name2))
+
+                if (skip == true)
                 {
-                    // all variables are length 1
-                    if ((parsed_rule.name2.size() != 1 && parsed_rule.type != CAN_SAY)
-                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name2.size() != 1))
-                    {
-                        continue;
-                    }
-
-                    // do any necessary replacement in the conditions
-                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
-                    {
-                        if (rule_conditions[i].name1 == parsed_rule.name2
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name1))
-                        {
-                            rule_conditions[i].name1 = statement.name2;
-                        }
-                        if (rule_conditions[i].name2 == parsed_rule.name2
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name2))
-                        {
-                            rule_conditions[i].name2 = statement.name2;
-                        }
-                        if (rule_conditions[i].name3 == parsed_rule.name2
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name2 == rule_conditions[i].name3))
-                        {
-                            rule_conditions[i].name3 = statement.name2;
-                        }
-                    }
-                }
-                if ((statement.name3 != parsed_rule.name3) && (parsed_rule.statement == nullptr || parsed_rule.statement->name3 != statement.name3))
-                {
-                    // all variables are length 1
-                    if ((parsed_rule.name3.size() != 1 && parsed_rule.type != CAN_SAY)
-                         || (parsed_rule.type == CAN_SAY && parsed_rule.statement != nullptr && parsed_rule.statement->name3.size() != 1))
-                    {
-                        continue;
-                    }
-
-                    // do any necessary replacement in the conditions
-                    for (unsigned int i = 0; i < rule_conditions.size(); ++i)
-                    {
-                        if (rule_conditions[i].name1 == parsed_rule.name3
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name1))
-                        {
-                            rule_conditions[i].name1 = statement.name3;
-                        }
-                        if (rule_conditions[i].name2 == parsed_rule.name3
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name2))
-                        {
-                            rule_conditions[i].name2 = statement.name3;
-                        }
-                        if (rule_conditions[i].name3 == parsed_rule.name3
-                            || (parsed_rule.statement != nullptr && parsed_rule.statement->name3 == rule_conditions[i].name3))
-                        {
-                            rule_conditions[i].name3 = statement.name3;
-                        }
-                    }
+                    continue;
                 }
 
-                if (parsed_rule.type == CAN_SAY)
+                if (parsed_rule.type == Statement::Type::CAN_SAY)
                 {
                     temp_consider.service_id = parsed_rule.name1;
                 }
@@ -2632,7 +2654,7 @@ namespace UbiPAL
                 temp_consider.referenced_from_acl = current_acls[i].msg_id;
                 temp_consider.conditions = rule_conditions;
 
-                if (parsed_rule.type == CAN_SAY)
+                if (parsed_rule.type == Statement::Type::CAN_SAY)
                 {
                     to_consider.push_back(temp_consider);
                 }
@@ -2662,7 +2684,7 @@ namespace UbiPAL
                 bool did_fail_conds = false;
                 for (unsigned int j = 0; j < all_conditions.size(); ++j)
                 {
-                    if (all_conditions[j].type != CONFIRMS)
+                    if (all_conditions[j].type != Statement::Type::CONFIRMS)
                     {
                         std::vector<std::string> cond_acl_trail;
                         std::vector<Statement> cond_conds;
@@ -2712,20 +2734,79 @@ namespace UbiPAL
                     new_conditions.push_back(to_consider[i].conditions[j]);
                 }
 
-                status = EvaluateStatementRecurse(statement, to_consider[i].service_id, new_acl_trail, new_conditions, message);
-                if (status == SUCCESS)
+                // if it's a delegation with a variable service
+                std::vector<std::string> delegators;
+                if (to_consider[i].service_id.size() == 1)
                 {
-                    acl_trail = new_acl_trail;
-                    conditions = new_conditions;
-                    return status;
+                    // check if a condition applies, if it does, remove that condition and recurse on anything that meets the condition
+                    std::vector<std::string> root_conds;
+                    for (unsigned int k = 0; k < to_consider[i].conditions.size(); ++k)
+                    {
+                        if (to_consider[i].conditions[k].name1 == to_consider[i].service_id ||
+                            to_consider[i].conditions[k].name2 == to_consider[i].service_id ||
+                            to_consider[i].conditions[k].name3 == to_consider[i].service_id)
+                        {
+                            root_conds.push_back(to_consider[i].conditions[k].ToString());
+                            to_consider[i].conditions.erase(to_consider[i].conditions.begin() + k);
+                            --k;
+                        }
+                    }
+
+                    if (root_conds.size() != 0)
+                    {
+                        std::map<std::string, std::set<std::string>> potential_roots;
+                        status = FindNamesForStatements(root_conds, potential_roots);
+                        if ((status == SUCCESS || status == WAIT_ON_CONDITIONS) && potential_roots[to_consider[i].service_id].size() != 0)
+                        {
+                            for (std::set<std::string>::iterator set_itr = potential_roots[to_consider[i].service_id].begin(); set_itr != potential_roots[to_consider[i].service_id].end(); ++set_itr)
+                            {
+                                delegators.push_back(*set_itr);
+                            }
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                    }
+                    else
+                    {
+                        // else recurse on ALL possibilities
+                        std::vector<NamespaceCertificate> services;
+                        status = GetNames(GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_SELF, services);
+                        if (status != SUCCESS)
+                        {
+                            return status;
+                        }
+
+                        for (unsigned int k = 0; k < services.size(); ++k)
+                        {
+                            delegators.push_back(services[k].id);
+                        }
+                    }
                 }
-                else if (status != NOT_IN_ACLS || status != FAILED_CONDITIONS)
+                else
                 {
-                    return status;
+                    delegators.push_back(to_consider[i].service_id);
+                }
+
+                for (unsigned int j = 0; j < delegators.size(); ++j)
+                {
+                    status = EvaluateStatementRecurse(statement, delegators[j], new_acl_trail, new_conditions, message);
+                    if (status == SUCCESS)
+                    {
+                        acl_trail = new_acl_trail;
+                        conditions = new_conditions;
+                        return status;
+                    }
+                    else if (status != NOT_IN_ACLS || status != FAILED_CONDITIONS)
+                    {
+                        return status;
+                    }
                 }
             }
         }
-        return status;
+        return NOT_IN_ACLS;
     }
 
     int UbipalService::ConfirmChecks(const Message& message, const std::vector<Statement>& conditions)
@@ -2799,7 +2880,7 @@ namespace UbiPAL
                 if (services[j].id == remote_conditions[i].name1)
                 {
                     found_service = true;
-                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
+                    status = SendMessage(0, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
                         Log::Line(Log::WARN, "UbipalService::ConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
@@ -2911,7 +2992,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         // send failure
-        status = ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+        status = ReplyToMessage(0, &message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
         if (status != SUCCESS)
         {
             Log::Line(Log::WARN, "UbipalService::MessageConditionFailed: ReplyToMessage failed %s", GetErrorDescription(status));
@@ -2926,7 +3007,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         // send failure
-        status = ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"TIMEOUT_CONDITIONS", strlen("TIMEOUT_CONDITIONS") + 1);
+        status = ReplyToMessage(0, &message, (const unsigned char*)"TIMEOUT_CONDITIONS", strlen("TIMEOUT_CONDITIONS") + 1);
         if (status != SUCCESS)
         {
             Log::Line(Log::WARN, "UbipalService::MessageConditionTimeout: ReplyToMessage failed %s", GetErrorDescription(status));
@@ -3136,7 +3217,6 @@ namespace UbiPAL
         return (time.tv_sec * 1000) + (time.tv_usec / 1000);
     }
 
-
     int UbipalService::CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
                                       const unsigned char* const reply, const uint32_t reply_len)
     {
@@ -3181,5 +3261,144 @@ namespace UbiPAL
         }
 
         return NOT_FOUND;
+    }
+
+    int UbipalService::FindNamesForStatements(const std::string& statement, std::map<std::string, std::set<std::string>>& names)
+    {
+        std::vector<std::string> statements_vector;
+        statements_vector.push_back(statement);
+        return FindNamesForStatements(statements_vector, names);
+    }
+
+    int UbipalService::FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names)
+    {
+        int status = SUCCESS;
+        std::vector<Statement> parsed_statements;
+        Statement parsed;
+        for (unsigned int i = 0; i < statements.size(); ++i)
+        {
+            status = ParseStatement(statements[i], parsed);
+            if (status != SUCCESS)
+            {
+                continue;
+            }
+            parsed_statements.push_back(parsed);
+        }
+
+        status = FindNamesForStatements(parsed_statements, names);
+        return status;
+    }
+
+    int UbipalService::FindNamesForStatements(const std::vector<Statement>& statements, std::map<std::string, std::set<std::string>>& names)
+    {
+        int status = SUCCESS;
+
+        // create a set for each variable name
+        std::map<std::string, std::set<std::string>> possible_answers;
+
+        // organize each
+        std::map<std::string, std::set<Statement>> grouped_statements;
+
+        // group statements by which variables they reference
+        for (unsigned int i = 0; i < statements.size(); ++i)
+        {
+            if (statements[i].type == Statement::Type::CURRENT_TIME || statements[i].type == Statement::Type::CURRENT_DATE ||
+                statements[i].type == Statement::Type::CONFIRMS || statements[i].type == Statement::Type::INVALID)
+            {
+                continue;
+            }
+
+            // for each variable, add it to the appropriate
+            for (const Statement* itr = &statements[i]; itr != nullptr; itr = itr->statement)
+            {
+                if (itr->root.size() == 1)
+                {
+                    grouped_statements[itr->root].insert(statements[i]);
+                }
+                if (itr->name1.size() == 1)
+                {
+                    grouped_statements[itr->name1].insert(statements[i]);
+                }
+                if (itr->name2.size() == 1)
+                {
+                    grouped_statements[itr->name2].insert(statements[i]);
+                }
+                if (itr->name3.size() == 1)
+                {
+                    grouped_statements[itr->name3].insert(statements[i]);
+                }
+            }
+        }
+
+        // get all names we've heard of
+        std::vector<NamespaceCertificate> all_certificates;
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_SELF, all_certificates);
+        if (status != SUCCESS)
+        {
+            Log::Line(Log::WARN, "UbipalService::FindNamesForStatements: GetNames failed: %d", GetErrorDescription(status));
+            return status;
+        }
+
+        std::set<std::string> successful_names;
+        for (std::map<std::string, std::set<Statement>>::iterator itr = grouped_statements.begin(); itr != grouped_statements.end(); ++itr)
+        {
+            for (std::set<Statement>::iterator stmnts = itr->second.begin(); stmnts != itr->second.end(); ++stmnts)
+            {
+                successful_names.clear();
+                for (unsigned int i = 0; i < all_certificates.size(); ++i)
+                {
+                    Statement temp_statement = *stmnts;
+                    for (Statement* statement_itr = &temp_statement; statement_itr != nullptr; statement_itr = statement_itr->statement)
+                    {
+                        // for each field, if it equals the variable in this set, replace it with the certificate id, else leave it
+                        // if we're sending to a variable, we care about the permissions at the receiver, so fix the root
+                        if (statement_itr->root == itr->first || (statement_itr->type == Statement::Type::CAN_SEND_MESSAGE && statement_itr->name3 == itr->first))
+                        {
+                            statement_itr->root = all_certificates[i].id;
+                        }
+                        statement_itr->name1 = (statement_itr->name1 == itr->first) ? all_certificates[i].id : statement_itr->name1;
+                        statement_itr->name2 = (statement_itr->name2 == itr->first) ? all_certificates[i].id : statement_itr->name2;
+                        statement_itr->name3 = (statement_itr->name3 == itr->first) ? all_certificates[i].id : statement_itr->name3;
+
+                    }
+
+                    // replacements are done, try to evaluate
+                    std::vector<std::string> acl_trail;
+                    std::vector<Statement> conditions;
+                    status = EvaluateStatementRecurse(temp_statement, temp_statement.root, acl_trail, conditions, NULL);
+                    if (status == SUCCESS)
+                    {
+                        successful_names.insert(all_certificates[i].id);
+                    }
+                }
+
+                // if it's the first round, copy the set
+                if (stmnts == itr->second.begin())
+                {
+                    possible_answers[itr->first] = successful_names;
+                }
+                else
+                {
+                    // else, remove any name not in succesful_names
+                    std::set<std::string> new_possible_answers;
+                    for (std::set<std::string>::iterator add_itr = possible_answers[itr->first].begin(); add_itr != possible_answers[itr->first].end(); ++add_itr)
+                    {
+                        if (successful_names.count(*add_itr) == 1)
+                        {
+                            new_possible_answers.insert(*add_itr);
+                        }
+                    }
+
+                    possible_answers[itr->first] = new_possible_answers;
+                }
+                if (possible_answers[itr->first].size() == 0)
+                {
+                    return NOT_IN_ACLS;
+                }
+            }
+        }
+
+        names = possible_answers;
+        return SUCCESS;
     }
 }

@@ -474,6 +474,111 @@ namespace UbiPAL
         return NOT_IMPLEMENTED;
     }
 
+    int UbipalServiceTests::UbipalServiceTestDiscoverService()
+    {
+        int status = SUCCESS;
+
+        UbipalService us;
+
+        NamespaceCertificate nc;
+        nc.id = "Elynn";
+        us.untrusted_services["Elynn"] = nc;
+        nc.id = "Jessica";
+        us.untrusted_services["Jessica"] = nc;
+        nc.id = "Cameron";
+        us.untrusted_services["Cameron"] = nc;
+
+        AccessControlList elynn_acl;
+        elynn_acl.id = "Elynn";
+        elynn_acl.from = "Elynn";
+        elynn_acl.rules.push_back("Jessica CAN SEND MESSAGE Test TO Elynn");
+        us.external_acls["Elynn"].push_back(elynn_acl);
+
+        std::vector<std::string> rules;
+        rules.push_back("Elynn IS A student");
+        rules.push_back("Jessica IS A student");
+        rules.push_back("Cameron IS A student");
+
+        AccessControlList acl;
+        status = us.CreateAcl("students", rules, acl);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::CreateAcl failed: %s\n", GetErrorDescription(status));
+            return status;
+        }
+
+        std::vector<std::string> statement;
+        statement.push_back("X IS A student");
+        std::map<std::string, std::set<std::string>> result_names;
+        status = us.FindNamesForStatements(statement, result_names);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatements failed: %s\n", GetErrorDescription(status));
+            return status;
+        }
+
+        if (result_names.size() != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many variables. Should be 1, it said %lu\n",
+                    result_names.size());
+            return GENERAL_FAILURE;
+        }
+        if (result_names[std::string("X")].size() != 3)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many results. Should be 3, it said %lu\n",
+                    result_names[std::string("X")].size());
+            return GENERAL_FAILURE;
+        }
+        if  (result_names[std::string("X")].count("Jessica") != 1 || result_names[std::string("X")].count("Cameron") != 1 || result_names[std::string("X")].count("Elynn") != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned invalid numbers for Jessica, Elynn, Cameron: %lu %lu %lu\n",
+                    result_names[std::string("X")].count("Jessica"), result_names[std::string("X")].count("Elynn"), result_names[std::string("X")].count("Cameron"));
+            return GENERAL_FAILURE;
+        }
+
+        // test no matches
+        statement.clear();
+        statement.push_back("X IS A professor");
+        result_names.clear();
+        status = us.FindNamesForStatements(statement, result_names);
+        if (status != NOT_IN_ACLS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatements didn't say the expected GENERAL_FAILURE: %s\n",
+                    GetErrorDescription(status));
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        statement.clear();
+        statement.push_back("X IS A student");
+        statement.push_back("X CAN SEND MESSAGE Test TO Elynn");
+        result_names.clear();
+        status = us.FindNamesForStatements(statement, result_names);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatements failed: %s\n", GetErrorDescription(status));
+            return status;
+        }
+        if (result_names.size() != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many variables. Should be 1, it said %lu\n",
+                    result_names.size());
+            return GENERAL_FAILURE;
+        }
+        if (result_names[std::string("X")].size() != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many results. Should be 1, it said %lu\n",
+                    result_names[std::string("X")].size());
+            return GENERAL_FAILURE;
+        }
+        if  (result_names[std::string("X")].count("Jessica") != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement did not include Jessica");
+            return GENERAL_FAILURE;
+        }
+
+        return SUCCESS;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -502,5 +607,7 @@ namespace UbiPAL
                                  "UbipalServiceTestConditionParse", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestParseTimeDate, SUCCESS,
                                  "UbipalServiceTestParseTimeDate", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestDiscoverService, SUCCESS,
+                                 "UbipalServiceTestDiscoverService", module_count, module_fails);
     }
 }

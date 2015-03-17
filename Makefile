@@ -29,6 +29,7 @@ TESTDEPS = $(TEST_OBJECTS:.o=.d)
 # gather example source files
 EXAMPLE_SOURCES = $(wildcard $(EXDIR)/*.cpp)
 EXAMPLE_SOURCES += $(wildcard $(EXDIR)/telephone/*.cpp)
+EXAMPLE_SOURCES += $(wildcard $(EXDIR)/sinewave/*.cpp)
 EXAMPLE_OBJECTS = $(addprefix $(BINDIR)/, $(EXAMPLE_SOURCES:.cpp=.o))
 EXDEPS = $(EXAMPLE_OBJECTS:.o=.d)
 
@@ -116,7 +117,7 @@ test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
 .PHONY: examples
-examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller
+examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display $(BINDIR)/$(EXDIR)/sinewave/delegator
 
 $(BINDIR)/$(EXDIR)/telephone/house: $(BINDIR)/$(EXDIR)/telephone/house.o
 	$(dir_guard)
@@ -133,6 +134,18 @@ $(BINDIR)/$(EXDIR)/telephone/phone: $(BINDIR)/$(EXDIR)/telephone/phone.o
 $(BINDIR)/$(EXDIR)/telephone/caller: $(BINDIR)/$(EXDIR)/telephone/caller.o
 	$(dir_guard)
 	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/telephone/caller.o -o $(BINDIR)/$(EXDIR)/telephone/caller $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/sinewave/delegator: $(BINDIR)/$(EXDIR)/sinewave/delegator.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/delegator.o -o $(BINDIR)/$(EXDIR)/sinewave/delegator $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/sinewave/producer: $(BINDIR)/$(EXDIR)/sinewave/producer.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/producer.o -o $(BINDIR)/$(EXDIR)/sinewave/producer $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/sinewave/display: $(BINDIR)/$(EXDIR)/sinewave/display.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/display.o -o $(BINDIR)/$(EXDIR)/sinewave/display $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)

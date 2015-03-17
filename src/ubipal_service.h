@@ -7,6 +7,7 @@
 
 // Ubipal
 #include "messages.h"
+#include "statement.h"
 
 // Standard
 #include <vector>
@@ -16,6 +17,8 @@
 #include <pthread.h>
 #include <queue>
 #include <condition_variable>
+#include <set>
+#include <map>
 
 // OpenSSL
 #include <openssl/rsa.h>
@@ -25,8 +28,6 @@
 
 // chosen to be outside of the range of assigned ports
 #define UBIPAL_BROADCAST_PORT "50015"
-
-// Note: Any function marked XXX is yet to be implemented
 
 namespace UbiPAL
 {
@@ -275,58 +276,6 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error code if not
             int RevokeAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
-            // StatementType
-            // The types of UbiPAL statements which are exist.
-            enum StatementType
-            {
-                IS_A,
-                IS,
-                CAN_SEND_MESSAGE,
-                CAN_SAY,
-                CURRENT_TIME,
-                CURRENT_DATE,
-                CONFIRMS,
-                INVALID,
-            };
-
-            // Statement
-            // A struct to hold a parsed UbiPAL statement
-            // STATEMENT
-            //          - NAME says NAME CONNECTIVE NAME
-            //          - NAME says NAME CONNECTIVE NAME CONNECTIVE NAME
-            //          - CurrentTime() COMPARISON INTEGER
-            //          - CurrentDate() COMPARISON INTEGER
-            //          - NAME says NAME CONNECTIVE STATEMENT
-            //          - NAME confirms NAME
-            //
-            // CONNECTIVE
-            //          - {is a, is, can send message, to}
-            //
-            // COMPARISON
-            //          - { <, > }
-            //
-            // Examples: (a, b, c for variables)
-            // a says b is a c
-            // a says b is c
-            // a says b can send message c to d
-            // CurrentTime() a b // CurrentTime() > 9:00, CurrentTime() < 17:00
-            // CurrentDate() a b // CurrentDate() < UNIX_TIME (seconds since epoch)
-            // a says b can say STATEMENT
-            // a confirms b
-            struct Statement
-            {
-                std::string root;
-                StatementType type;
-                std::string name1;
-                std::string name2;
-                std::string name3;
-                std::string comparison;
-                uint32_t num1;
-                uint32_t num2;
-                Statement* statement;
-            };
-
-            // XXX
             // EvaluateStatement
             // Checks to see if the given rule holds based on ACLs we've heard. Will evaluate conditions as necessary.
             // example:
@@ -338,7 +287,6 @@ namespace UbiPAL
             //          int: SUCCESS implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
             int EvaluateStatement(const std::string& statement, const Message* message);
 
-            // XXX
             // EvaluateStatementRecurse
             // Recursive call for EvaluateStatement.
             // args
@@ -360,17 +308,16 @@ namespace UbiPAL
             //          int: SUCCESS on success, otherwise a negative error.
             int ParseStatement(const std::string& statement, Statement& statement_struct);
 
-            // XXX
-            // FindNameForStatements
-            // Checks to see if there is a name that matches the given statements
+            // FindNamesForStatements
+            // Checks to see if there is a name that matches the given statements. Does not consider time-related statements or confirmations. Thoe are left for request-time checks.
             // args
-            //          [IN] statements: The statements to evaluate. "NAME" is used as the wildcard in these rules.
-            //                  Examples: "NAME can send message OPEN to FOO", "FOO say NAME is a BAR", "NAME can say FOO can send message BAR to BAZ"
-            //                  This would find a service which can send OPEN to FOO, FOO says is a BAR, and can delegate sending BAR to BAZ.
-            //          [OUT] result_name: The resulting name. For now, this selects the first name which matches the criteria.
+            //          [IN] statements: The statements to evaluate. Variables are single letter long name.
+            //          [OUT] result_statements: A vector of statements which hold under the currently heard rules.
             // return
-            //          int: 0 imples SUCCESS, NOT_IN_ACLS, FAILED_CONDITIONS_or TIMEOUT_CONDITIONS if it fails, else negative error code
-            int FindNameForStatements(const std::vector<std::string>& statements, NamespaceCertificate& result_name);
+            //          int: SUCCESS if a potential mapping could be found, else negative error code
+            int FindNamesForStatements(const std::string& statement, std::map<std::string, std::set<std::string>>& names);
+            int FindNamesForStatements(const std::vector<std::string>& statements, std::map<std::string, std::set<std::string>>& names);
+            int FindNamesForStatements(const std::vector<Statement>& statements, std::map<std::string, std::set<std::string>>& names);
 
             // GetCertificateForName
             // Returns the certificate for a given name
@@ -384,7 +331,8 @@ namespace UbiPAL
             enum GetNamesFlags
             {
                 INCLUDE_UNTRUSTED = 2 << 0,
-                INCLUDE_TRUSTED = 2 << 1
+                INCLUDE_TRUSTED = 2 << 1,
+                INCLUDE_SELF = 2 << 2,
             };
 
             // GetNames
@@ -394,6 +342,7 @@ namespace UbiPAL
             //          [IN] flags: flags, including
             //                  INCLUDE_UNTRUSTED: includes untrusted names
             //                  INCLUDE_TRUSTED: includes trusted names
+            //                  INCLUDE_SELF: includes this service's certificate in the resultant vector
             //          [IN/OUT] names: A vector of resultant names
             // return
             //          int: SUCCESS on success, negative error otherwise
