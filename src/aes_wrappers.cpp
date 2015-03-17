@@ -18,11 +18,26 @@
 // Standard includes
 #include <string.h>
 
+// variables for evaluation
+#ifdef EVALUATE
+    uint32_t NUM_AES_ENCRYPTS = 0;
+    double TIME_AES_ENCRYPTS = 0;
+    uint32_t NUM_AES_DECRYPTS = 0;
+    double TIME_AES_DECRYPTS = 0;
+    uint32_t NUM_AES_GENERATES = 0;
+    double TIME_AES_GENERATES = 0;
+#endif
+
 namespace UbiPAL
 {
     int AesWrappers::GenerateAesObject(unsigned char*& obj, int* obj_len)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         const unsigned int length = AES_KEYLEN/8;
         if (obj_len != nullptr)
         {
@@ -43,6 +58,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_AES_ENCRYPTS += ((double) end - start)/ CLOCKS_PER_SEC;
+                    ++NUM_AES_GENERATES;
+                }
+            #endif
             if (status != SUCCESS)
             {
                 free(obj);
@@ -89,6 +112,11 @@ namespace UbiPAL
                              const unsigned char* const msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         EVP_CIPHER_CTX ctx;
         unsigned int res_len = 0;
         unsigned int length = 0;
@@ -141,6 +169,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_AES_ENCRYPTS += ((double) end - start)/ CLOCKS_PER_SEC;
+                    ++NUM_AES_ENCRYPTS;
+                }
+            #endif
             if (status != SUCCESS)
             {
                 free(result);
@@ -152,6 +188,11 @@ namespace UbiPAL
                              const unsigned char* const msg, const unsigned int& msg_len, unsigned char*& result, unsigned int* result_len)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         EVP_CIPHER_CTX ctx;
         unsigned int res_len = 0;
         unsigned int length = 0;
@@ -204,6 +245,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_AES_DECRYPTS += ((double) end - start) / CLOCKS_PER_SEC;
+                    ++NUM_AES_DECRYPTS;
+                }
+            #endif
             if (status != SUCCESS)
             {
                 free(result);

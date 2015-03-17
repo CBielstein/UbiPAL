@@ -257,8 +257,8 @@ namespace UbiPAL
         type = *type_ptr;
         offset += length;
 
-        // decode to
-        status = DecodeString(buf + offset, buf_len - offset, to);
+        // decode from
+        status = DecodeString(buf + offset, buf_len - offset, from);
         if (status < 0)
         {
             Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
@@ -269,8 +269,8 @@ namespace UbiPAL
             offset += status;
         }
 
-        // decode from
-        status = DecodeString(buf + offset, buf_len - offset, from);
+        // decode to
+        status = DecodeString(buf + offset, buf_len - offset, to);
         if (status < 0)
         {
             Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
@@ -325,8 +325,8 @@ namespace UbiPAL
         *type_ptr = type;
         offset += length;
 
-        // encode to
-        status = EncodeString(buf + offset, buf_len - offset, to);
+        // encode from
+        status = EncodeString(buf + offset, buf_len - offset, from);
         if (status < 0)
         {
             Log::Line(Log::WARN, "BaseMessage::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
@@ -337,8 +337,8 @@ namespace UbiPAL
             offset += status;
         }
 
-        // encode from
-        status = EncodeString(buf + offset, buf_len - offset, from);
+        // encode to
+        status = EncodeString(buf + offset, buf_len - offset, to);
         if (status < 0)
         {
             Log::Line(Log::WARN, "BaseMessage::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));

@@ -52,7 +52,7 @@ int main(int argc, char** argv)
     {
         if (argument == "q")
         {
-            break;
+            return 0;
         }
         else if (argument == "s")
         {

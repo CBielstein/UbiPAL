@@ -21,10 +21,10 @@ All types should use the appropriate translations to and from network types for 
 
 BaseMessage:
     1 byte: type
-    4 bytes: length_to, length of name dest address in bytes
-    length_to bytes: name of dest
     4 bytes: length_from, length of name of sender address in bytes
     length_from bytes: name of source
+    4 bytes: length_to, length of name dest address in bytes
+    length_to bytes: name of dest
 
 Message: BaseMessage, plus the following
     4 bytes: msg_len uint32_t

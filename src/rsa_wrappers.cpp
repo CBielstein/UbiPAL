@@ -31,6 +31,8 @@
     double TIME_RSA_SIGNS = 0;
     uint32_t NUM_RSA_VERIFIES = 0;
     double TIME_RSA_VERIFIES = 0;
+    uint32_t NUM_RSA_GENERATES = 0;
+    double TIME_RSA_GENERATES = 0;
 #endif
 
 namespace UbiPAL
@@ -38,6 +40,11 @@ namespace UbiPAL
     int RsaWrappers::GenerateRsaKey(RSA*& rsa)
     {
         FUNCTION_START;
+
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         BIGNUM* e = nullptr;
 
         // we're creating a NEW key at rsa
@@ -83,6 +90,14 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                if (status == SUCCESS)
+                {
+                    clock_t end = clock();
+                    TIME_RSA_GENERATES += ((double) end - start) / CLOCKS_PER_SEC;
+                    ++NUM_RSA_GENERATES;
+                }
+            #endif
             if (status != SUCCESS)
             {
                 RSA_free(rsa);

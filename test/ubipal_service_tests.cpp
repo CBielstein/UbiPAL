@@ -181,6 +181,8 @@ namespace UbiPAL
 
     int UbipalServiceTests::UbipalServiceTestEndRecv()
     {
+        return NOT_IMPLEMENTED;
+        /*
         int status = SUCCESS;
 
         UbipalService us;
@@ -200,6 +202,7 @@ namespace UbiPAL
         {
             return SUCCESS;
         }
+        */
     }
 
     int UbipalServiceTests::UbipalServiceTestSetAddress()

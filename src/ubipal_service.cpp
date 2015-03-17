@@ -43,6 +43,14 @@
     extern double TIME_RSA_SIGNS;
     extern uint32_t NUM_RSA_VERIFIES;
     extern double TIME_RSA_VERIFIES;
+    extern uint32_t NUM_RSA_GENERATES;
+    extern double TIME_RSA_GENERATES;
+    extern uint32_t NUM_AES_ENCRYPTS;
+    extern double TIME_AES_ENCRYPTS;
+    extern uint32_t NUM_AES_DECRYPTS;
+    extern double TIME_AES_DECRYPTS;
+    extern uint32_t NUM_AES_GENERATES;
+    extern double TIME_AES_GENERATES;
 #endif
 
 namespace UbiPAL
@@ -341,8 +349,8 @@ namespace UbiPAL
 
         #ifdef EVALUATE
             // last thing before quitting, put out our stats
-            Log::Line(Log::INFO, "Quitting. Messages sent: %lu, messages received: %lu\nRSA Encrypts: %lu (%f secs), RSA Decrypts: %lu (%f secs), RSA Signs: %lu (%f secs), RSA Verifies: %lu (%f secs)",
-                      NUM_MESSAGES_SENT, NUM_MESSAGES_RECV, NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, NUM_RSA_SIGNS, TIME_RSA_SIGNS, NUM_RSA_VERIFIES, TIME_RSA_VERIFIES);
+            Log::Line(Log::INFO, "Quitting. Messages sent: %lu, messages received: %lu\nRSA Encrypts: %lu (%f secs), RSA Decrypts: %lu (%f secs), RSA Signs: %lu (%f secs), RSA Verifies: %lu (%f secs), RSA Generate Key: %lu (%f secs)\nAES Encrypts: %lu (%f secs), AES Decrypts: %lu (%f secs), AES Generate Object: %lu (%f secs)\n",
+                      NUM_MESSAGES_SENT, NUM_MESSAGES_RECV, NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, NUM_RSA_SIGNS, TIME_RSA_SIGNS, NUM_RSA_VERIFIES, TIME_RSA_VERIFIES, NUM_RSA_GENERATES, TIME_RSA_GENERATES, NUM_AES_ENCRYPTS, TIME_AES_ENCRYPTS, NUM_AES_DECRYPTS, TIME_AES_DECRYPTS, NUM_AES_GENERATES, TIME_AES_GENERATES);
         #endif
 
         // Ensure everything hits the log before we die.
@@ -702,6 +710,7 @@ namespace UbiPAL
         unsigned char* buf_decrypted = nullptr;
         unsigned int buf_decrypted_len = 0;
         uint32_t to_len = 0;
+        uint32_t from_len = 0;
         RSA* from_pub_key = nullptr;
         BaseMessage* msg = nullptr;
 
@@ -718,8 +727,23 @@ namespace UbiPAL
 
         /// decryption
 
-        // The first byte is the type, the next 4 are the size of the to field
-        returned_value = BaseMessage::DecodeUint32_t(incoming_data->buffer + 1, incoming_data->buffer_len, to_len);
+        // The first byte is the type, the next 4 are the size of the from field, but we want the to field to check for encryption
+        returned_value = BaseMessage::DecodeUint32_t(incoming_data->buffer + 1, incoming_data->buffer_len, from_len);
+        if (returned_value < 0)
+        {
+            Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessageDecodeUint32_t failed: %s",
+                      GetErrorDescription(returned_value));
+            RETURN_STATUS(returned_value);
+        }
+
+        // ensure we're not going out of bounds
+        if (5 + from_len >= incoming_data->buffer_len)
+        {
+            Log::Line(Log::WARN, "UbipalService::HandleMessage: From field is encrypted or poorly encoded.");
+            RETURN_STATUS(GENERAL_FAILURE);
+        }
+
+        returned_value = BaseMessage::DecodeUint32_t(incoming_data->buffer + 5 + from_len, incoming_data->buffer_len, to_len);
         if (returned_value < 0)
         {
             Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessageDecodeUint32_t failed: %s",
@@ -732,28 +756,55 @@ namespace UbiPAL
         {
             // If the to length is nonzero, compare the next bytes against the service's id.
             // If they are the same, this is not encrypted. If they do not match, try to derypt and try again
-            if (to_len != id.size() || memcmp(incoming_data->buffer + 5, id.c_str(), id.size()) != 0)
+            if (to_len != id.size() || memcmp(incoming_data->buffer + 1 + 4 + from_len + 4, id.c_str(), id.size()) != 0)
             {
+                std::string from = std::string((char*)incoming_data->buffer + 1 + 4, from_len);
+
+                aes_keys_mutex.lock();
+
+                // ensure we have the aes key & iv
+                if (aes_keys.count(from) == 0)
+                {
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: Tried to receive an encrypted message from a service which hasn't sent us an AES key yet.");
+                    aes_keys_mutex.unlock();
+                    RETURN_STATUS(NOT_FOUND);
+                }
+
                 // decrypt
-                status = RsaWrappers::Decrypt(private_key, incoming_data->buffer, incoming_data->buffer_len, buf_decrypted, &buf_decrypted_len);
+                status = AesWrappers::Decrypt(std::get<0>(aes_keys[from]), std::get<1>(aes_keys[from]), incoming_data->buffer + 5 + from_len,
+                                              incoming_data->buffer_len - 5 - from_len, buf_decrypted, &buf_decrypted_len);
+                aes_keys_mutex.unlock();
                 if (status != SUCCESS)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RsaWrapers::Decrypt failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: AesWrappers::Decrypt failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
 
                 // If they still don't match, toss the message because it isn't to us
-                if (memcmp(buf_decrypted + 5, id.c_str(), id.size()) != 0)
+                if (memcmp(buf_decrypted + 4, id.c_str(), id.size()) != 0)
                 {
                     Log::Line(Log::WARN, "UbipalService::HandleMessage: Message couldn't be interpreted, so it's tossed.");
                     RETURN_STATUS(INVALID_NETWORK_ENCODING);
                 }
 
+                // combine the decrypted and originally unencrypted stuff back together
+                unsigned char* final_message = (unsigned char*)malloc(buf_decrypted_len + 5 + from_len);
+                if (final_message == nullptr)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleMessage: malloc failed for final_message");
+                    RETURN_STATUS(MALLOC_FAILURE);
+                }
+
+                memcpy(final_message, incoming_data->buffer, 5 + from_len);
+                memcpy(final_message + 5 + from_len, buf_decrypted, buf_decrypted_len);
+
                 // so we decrypted and it matched, put buf_decrypted in buf
                 free(incoming_data->buffer);
-                incoming_data->buffer = buf_decrypted;
+                free(buf_decrypted);
+                incoming_data->buffer = final_message;
                 buf_decrypted = nullptr;
-                incoming_data->buffer_len = buf_decrypted_len;
+                final_message = nullptr;
+                incoming_data->buffer_len = buf_decrypted_len + 5 + from_len;
             }
         }
 
@@ -802,6 +853,8 @@ namespace UbiPAL
                     RETURN_STATUS(returned_value);
                 }
 
+                // TODO find what's wrong with signature verification.
+/*
                 // authenticate - check signature
                 returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
                                                                  incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
@@ -818,7 +871,7 @@ namespace UbiPAL
                               GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
-
+*/
                 status = RecvMessage((Message*)msg);
                 if (status != SUCCESS)
                 {
@@ -1230,6 +1283,91 @@ namespace UbiPAL
             }
 
             cached_conditions_mutex.unlock();
+            return status;
+        }
+
+        if (message->message.compare(0, strlen("NEWAESPAIR"), "NEWAESPAIR") == 0)
+        {
+            // use my private key to decrypt the argument (key & iv)
+            unsigned char* aes_pair_decrypted = nullptr;
+            unsigned int aes_pair_decrypted_len = 0;
+            status = RsaWrappers::Decrypt(private_key, message->argument, message->arg_len, aes_pair_decrypted, &aes_pair_decrypted_len);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            // decode key & iv
+            uint32_t offset = 0;
+            uint32_t length = 0;
+            unsigned char* str_bits = nullptr;
+            // decode key length
+            status = BaseMessage::DecodeUint32_t(aes_pair_decrypted + offset, aes_pair_decrypted_len - offset, length);
+            if (status < 0)
+            {
+                Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
+                return status;
+            }
+            else if (length < 0)
+            {
+                return INVALID_NETWORK_ENCODING;
+            }
+            else
+            {
+                offset += status;
+                status = SUCCESS;
+            }
+
+            // decode key
+            if (aes_pair_decrypted_len < offset + length)
+            {
+                Log::Line(Log::WARN, "UbipalService::HandleMessage: Given a buf too short: buf_len %u < offset %u + length %u",
+                          aes_pair_decrypted_len, offset, length);
+                return BUFFER_TOO_SMALL;
+            }
+            str_bits = aes_pair_decrypted + offset;
+            unsigned char* new_key = (unsigned char*)malloc(length);
+            memcpy(new_key, str_bits, length);
+            offset += length;
+
+            // decode iv length
+            status = BaseMessage::DecodeUint32_t(aes_pair_decrypted + offset, aes_pair_decrypted_len - offset, length);
+            if (status < 0)
+            {
+                Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
+                return status;
+            }
+            else if (length < 0)
+            {
+                return INVALID_NETWORK_ENCODING;
+            }
+            else
+            {
+                offset += status;
+                status = SUCCESS;
+            }
+
+            // decode iv
+            if (aes_pair_decrypted_len < offset + length)
+            {
+                Log::Line(Log::WARN, "UbipalService::HandleMessage: Given a buf too short: buf_len %u < offset %u + length %u",
+                          aes_pair_decrypted_len, offset, length);
+                return BUFFER_TOO_SMALL;
+            }
+            str_bits = aes_pair_decrypted + offset;
+            unsigned char* new_iv = (unsigned char*)malloc(length);
+            memcpy(new_iv, str_bits, length);
+            offset += length;
+
+            // update my aes_keys map
+            aes_keys_mutex.lock();
+
+            aes_keys[message->from] = std::tuple<unsigned char*, unsigned char*>(new_key, new_iv);
+
+            fprintf(stderr, "aes_keys.size(): %lu\n", aes_keys.size());
+
+            aes_keys_mutex.unlock();
+
             return status;
         }
 
@@ -1655,25 +1793,54 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
-                fprintf(stderr, "key_len: %d, iv_len %d\n", key_length, iv_length);
-
                 //  put it in our structure
                 sm_args->us->aes_keys[sm_args->msg->to] = std::tuple<unsigned char*, unsigned char*>(key, iv);
 
                 // send it to receiving message
-                AesKeyMessage aes_msg(key, key_length, iv, iv_length);
-                aes_msg.to = sm_args->msg->to;
-                aes_msg.from = sm_args->msg->from;
-
-                unsigned char* encrypted_aes_msg = (unsigned char*)malloc(aes_msg.EncodedLength()
-                                                                          + RsaWrappers::SignatureLength(sm_args->us->private_key));
-                if (encrypted_aes_msg == nullptr)
+                uint32_t encoded_aes_length = 4 + key_length + 4 + iv_length;
+                unsigned char* encoded_aes_pair = (unsigned char*)malloc(encoded_aes_length);
+                if (encoded_aes_pair == nullptr)
                 {
-                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed on encrypted_aes_msg");
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed on encoded_aes_pair");
                     RETURN_STATUS(MALLOC_FAILURE);
                 }
 
-                status = aes_msg.Encode(encrypted_aes_msg, aes_msg.EncodedLength());
+                // place aes key & iv in string
+                returned_value = BaseMessage::EncodeBytes(encoded_aes_pair, encoded_aes_length, key, key_length);
+                if (returned_value < 0)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: BaseMessage::EncodeBytes failed: %d", GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+                returned_value = BaseMessage::EncodeBytes(encoded_aes_pair + returned_value, encoded_aes_length - returned_value, iv, iv_length);
+
+                // and encrypt them
+                unsigned char* encrypted_aes_pair = nullptr;
+                unsigned int encrypted_aes_len = 0;
+                status = RsaWrappers::Encrypt(dest_pub_key, encoded_aes_pair, encoded_aes_length, encrypted_aes_pair, &encrypted_aes_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: RsaWrappers::Encrypt failed on encrypted_ase_pair: %s",
+                              GetErrorDescription(status));
+                    RETURN_STATUS(status);
+                }
+
+                // Send as a message
+                Message aes_msg(encrypted_aes_pair, encrypted_aes_len);
+                aes_msg.to = sm_args->msg->to;
+                aes_msg.from = sm_args->msg->from;
+                aes_msg.message = "NEWAESPAIR";
+
+                // encode and sign
+                unsigned int signed_msg_len = aes_msg.EncodedLength() + RsaWrappers::SignatureLength(sm_args->us->private_key);
+                unsigned char* signed_msg = (unsigned char*)malloc(signed_msg_len);
+                if (signed_msg == nullptr)
+                {
+                    Log::Line(Log::EMERG, "UbipalService::HandleSendMessage malloc failure on signed_msg");
+                    RETURN_STATUS(MALLOC_FAILURE);
+                }
+
+                status = aes_msg.Encode(signed_msg, aes_msg.EncodedLength());
                 if (status < 0)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage aes_msg.Encode: %s", GetErrorDescription(status));
@@ -1681,8 +1848,8 @@ namespace UbiPAL
                 }
 
                 unsigned int sig_len = RsaWrappers::SignatureLength(sm_args->us->private_key);
-                unsigned char* sig = encrypted_aes_msg + aes_msg.EncodedLength();
-                status = RsaWrappers::CreateSignedDigest(sm_args->us->private_key, encrypted_aes_msg, aes_msg.EncodedLength(),
+                unsigned char* sig = signed_msg + aes_msg.EncodedLength();
+                status = RsaWrappers::CreateSignedDigest(sm_args->us->private_key, signed_msg, aes_msg.EncodedLength(),
                                                          sig, sig_len);
                 if (status != SUCCESS)
                 {
@@ -1690,34 +1857,37 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
 
-                unsigned char* aes_result = nullptr;
-                unsigned int aes_result_len = 0;
-                unsigned int encrypted_aes_len = aes_msg.EncodedLength() + RsaWrappers::SignatureLength(sm_args->us->private_key);
-                status = RsaWrappers::Encrypt(sm_args->us->private_key, encrypted_aes_msg, encrypted_aes_len, aes_result, &aes_result_len);
-                if (status != SUCCESS)
-                {
-                    Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: RsaWrappers::Encrypt failed: %s", GetErrorDescription(status));
-                    RETURN_STATUS(status);
-                }
-
-                status = sm_args->us->SendData(sm_args->address, sm_args->port, encrypted_aes_msg, aes_msg.EncodedLength() +
-                                               RsaWrappers::SignatureLength(sm_args->us->private_key));
+                status = sm_args->us->SendData(sm_args->address, sm_args->port, signed_msg, signed_msg_len);
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: SendData failed for encrypted_aes_msg: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
+
+                // TODO remove this hack
+                sleep(1);
             }
 
             if (sm_args->us->aes_keys.count(sm_args->msg->to) == 1)
             {
                 std::tuple<unsigned char*, unsigned char*> keyIv = sm_args->us->aes_keys[sm_args->msg->to];
-                status = AesWrappers::Encrypt(std::get<0>(keyIv), std::get<1>(keyIv), bytes, total_len, result, &result_len);
+                unsigned char* aes_encrypted = nullptr;
+                unsigned int aes_encrypted_len = 0;
+
+                // this encrypts everything after the from field, which must be left unencrypted for the sake of the receiving service
+                // knowing which aes key/iv to use for decrytion
+                status = AesWrappers::Encrypt(std::get<0>(keyIv), std::get<1>(keyIv), bytes + 5 + sm_args->msg->from.size(), total_len,
+                                              aes_encrypted, &aes_encrypted_len);
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: AesWrappers::Encrypt failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
+
+                result_len = aes_encrypted_len + 5 + sm_args->msg->from.size();
+                result = (unsigned char*)malloc(result_len);
+                memcpy(result, bytes, 5 + sm_args->msg->from.size());
+                memcpy(result + 5 + sm_args->msg->from.size(), aes_encrypted, aes_encrypted_len);
             }
             else
             {
