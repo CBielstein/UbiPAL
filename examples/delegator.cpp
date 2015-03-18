@@ -54,7 +54,7 @@ int main(int argc, char** argv)
                     return status;
                 }
 
-                status = us.SendAcl(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, acl_all, NULL);
+                status = us.SendAcl(0, acl_all, NULL);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to broadcast acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -63,7 +63,7 @@ int main(int argc, char** argv)
                 break;
             case 'b':
                 std::cout << "Revoking..." << std::endl;
-                status = us.RevokeAcl(UbiPAL::UbipalService::RevokeAclFlags::NO_ENCRYPT, acl_all, NULL);
+                status = us.RevokeAcl(0, acl_all, NULL);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to revoke acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -87,7 +87,7 @@ int main(int argc, char** argv)
                     return status;
                 }
 
-                status = us.SendAcl(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, acl_all, NULL);
+                status = us.SendAcl(0, acl_all, NULL);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to broadcast acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

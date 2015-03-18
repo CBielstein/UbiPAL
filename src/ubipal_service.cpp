@@ -854,7 +854,6 @@ namespace UbiPAL
                 }
 
                 // TODO find what's wrong with signature verification.
-/*
                 // authenticate - check signature
                 returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
                                                                  incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
@@ -871,7 +870,6 @@ namespace UbiPAL
                               GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
-*/
                 status = RecvMessage((Message*)msg);
                 if (status != SUCCESS)
                 {
@@ -1387,14 +1385,16 @@ namespace UbiPAL
         status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + message->message + " TO " + id, message);
         if (status == NOT_IN_ACLS)
         {
-            ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
+            // TODO only encrypt if replying to an encrypted message?
+            ReplyToMessage(0, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
             Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
             return status;
         }
         else if (status == FAILED_CONDITIONS)
         {
-            ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+            // TODO only encrypt if replying to an encrypted message?
+            ReplyToMessage(0, message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
             Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
             return status;
@@ -1876,7 +1876,7 @@ namespace UbiPAL
 
                 // this encrypts everything after the from field, which must be left unencrypted for the sake of the receiving service
                 // knowing which aes key/iv to use for decrytion
-                status = AesWrappers::Encrypt(std::get<0>(keyIv), std::get<1>(keyIv), bytes + 5 + sm_args->msg->from.size(), total_len,
+                status = AesWrappers::Encrypt(std::get<0>(keyIv), std::get<1>(keyIv), bytes + 5 + sm_args->msg->from.size(), total_len - 5 - sm_args->msg->from.size(),
                                               aes_encrypted, &aes_encrypted_len);
                 if (status != SUCCESS)
                 {
@@ -2799,7 +2799,7 @@ namespace UbiPAL
                 if (services[j].id == remote_conditions[i].name1)
                 {
                     found_service = true;
-                    status = SendMessage(SendMessageFlags::NO_ENCRYPTION, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
+                    status = SendMessage(0, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
                         Log::Line(Log::WARN, "UbipalService::ConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
@@ -2911,7 +2911,8 @@ namespace UbiPAL
         int status = SUCCESS;
 
         // send failure
-        status = ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
+        // TODO only encrypt if replying to encrypted message?
+        status = ReplyToMessage(0, &message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
         if (status != SUCCESS)
         {
             Log::Line(Log::WARN, "UbipalService::MessageConditionFailed: ReplyToMessage failed %s", GetErrorDescription(status));
@@ -2926,7 +2927,8 @@ namespace UbiPAL
         int status = SUCCESS;
 
         // send failure
-        status = ReplyToMessage(SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"TIMEOUT_CONDITIONS", strlen("TIMEOUT_CONDITIONS") + 1);
+        // TODO only encrypt if replying to encrypted message?
+        status = ReplyToMessage(0, &message, (const unsigned char*)"TIMEOUT_CONDITIONS", strlen("TIMEOUT_CONDITIONS") + 1);
         if (status != SUCCESS)
         {
             Log::Line(Log::WARN, "UbipalService::MessageConditionTimeout: ReplyToMessage failed %s", GetErrorDescription(status));

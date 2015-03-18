@@ -25,7 +25,7 @@ int printer(UbiPAL::UbipalService* us, UbiPAL::Message message)
 
     // reply to message
     std::string reply_string("Printed by " + us->GetId() + "!");
-    us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message,
+    us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING, &message,
                        (unsigned char*)reply_string.c_str(), reply_string.size() + 1);
 
     // tell UbiPAL everything went well
@@ -92,7 +92,7 @@ int main(int argc, char** argv)
                     return status;
                 }
 
-                status = us.SendAcl(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, acl, NULL);
+                status = us.SendAcl(0, acl, NULL);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to broadcast acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -120,7 +120,7 @@ int main(int argc, char** argv)
                     return status;
                 }
 
-                status = us.SendAcl(UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, acl, NULL);
+                status = us.SendAcl(0, acl, NULL);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to broadcast acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

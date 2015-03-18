@@ -17,12 +17,12 @@ int IsHome(UbiPAL::UbipalService* us, UbiPAL::Message message)
     if (is_home)
     {
         std::cout << "confirming." << std::endl;
-        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"CONFIRM", strlen("CONFIRM"));
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING, &message, (const unsigned char*)"CONFIRM", strlen("CONFIRM"));
     }
     else
     {
         std::cout << "denying." << std::endl;
-        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"DENY", strlen("DENY"));
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING, &message, (const unsigned char*)"DENY", strlen("DENY"));
     }
 
     return UbiPAL::SUCCESS;

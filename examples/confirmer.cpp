@@ -18,12 +18,12 @@ int confirmer(UbiPAL::UbipalService* us, UbiPAL::Message message)
     if (allow && reply)
     {
         std::cout << "confirming." << std::endl;
-        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"CONFIRM", strlen("CONFIRM"));
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING, &message, (const unsigned char*)"CONFIRM", strlen("CONFIRM"));
     }
     else if (reply)
     {
         std::cout << "denying." << std::endl;
-        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING | UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION, &message, (const unsigned char*)"DENY", strlen("DENY"));
+        us->ReplyToMessage(UbiPAL::UbipalService::SendMessageFlags::NONBLOCKING, &message, (const unsigned char*)"DENY", strlen("DENY"));
     }
     else
     {
