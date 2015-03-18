@@ -566,14 +566,6 @@ namespace UbiPAL
             //          int: SUCCESS on success, else a negative error
             int RecvAcl(const AccessControlList* const acl);
 
-            // RecvAesKeymessage
-            // Handles receiving for an AES key iv pair message. Puts it in the data structure, replacing any previous key.
-            // args
-            //          [IN] akm: The AesKeyMessage to process
-            // return
-            //          int: SUCCESS on success, else a negative error
-            int RecvAesKeyMessage(const AesKeyMessage* const akm);
-
             // IncomingData
             // Allows either an incoming connection or buffer of data to be enqueued for handling later
             struct IncomingData

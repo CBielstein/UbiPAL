@@ -955,44 +955,6 @@ namespace UbiPAL
                     RETURN_STATUS(status);
                 }
                 break;
-            case AES_KEY_MESSAGE:
-                // reinterpret and authenticate
-                delete msg;
-                msg = new AesKeyMessage();
-                returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
-                if (status < 0)
-                {
-                    Log::Line(Log::WARN, "UbipalService::HandleMessage: AesKeyMessage::Decode failed: %s", GetErrorDescription(returned_value));
-                    RETURN_STATUS(returned_value);
-                }
-
-                // authenticate - check signature
-                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
-                                                                 incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
-                if (returned_value < 0)
-                {
-                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
-                              GetErrorDescription(returned_value));
-                    RETURN_STATUS(returned_value);
-                }
-                else if (returned_value == 0)
-                {
-                    status = SIGNATURE_INVALID;
-                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
-                              GetErrorDescription(status));
-                    RETURN_STATUS(status);
-                }
-
-                status = RecvAesKeyMessage((AesKeyMessage*)msg);
-                if (status != SUCCESS)
-                {
-                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvAesKeyMessage failed: %s", GetErrorDescription(status));
-                    RETURN_STATUS(status);
-                }
-
-                fprintf(stderr, "aes_keys: %lu\n", aes_keys.size());
-
-                break;
             default: RETURN_STATUS(GENERAL_FAILURE);
         }
 
@@ -1048,22 +1010,6 @@ namespace UbiPAL
         }
 
         external_acls_mutex.unlock();
-        return status;
-    }
-
-    int UbipalService::RecvAesKeyMessage(const AesKeyMessage* const akm)
-    {
-        int status = SUCCESS;
-        if (akm == nullptr)
-        {
-            return NULL_ARG;
-        }
-
-        aes_keys_mutex.lock();
-
-        aes_keys[akm->from] = std::tuple<unsigned char*, unsigned char*>(akm->key, akm->iv);
-
-        aes_keys_mutex.unlock();
         return status;
     }
 
