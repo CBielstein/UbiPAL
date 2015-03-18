@@ -15,8 +15,6 @@
 #include <set>     //std::set
 #include <map>     //std::map
 
-#define UNENCRYPTED UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION
-
 int PrintSine(UbiPAL::UbipalService* us, const UbiPAL::Message* original_message, const UbiPAL::Message* message)
 {
     if (message->argument == nullptr)
@@ -80,8 +78,13 @@ int main ()
     // every ten seconds, broadcast namespace certificate
     time_t name_resend = std::clock() + 10 * CLOCKS_PER_SEC;
     time_t update_sine = std::clock() + CLOCKS_PER_SEC;
+    time_t quit = std::clock() + 30 * CLOCKS_PER_SEC;
     while (true)
     {
+        if (std::clock() > quit)
+        {
+            return status;
+        }
         // on each interval
         if (std::clock() > update_sine)
         {
@@ -114,7 +117,7 @@ int main ()
                 }
 
                 // then send to that name
-                status = us.SendMessage(UNENCRYPTED, &nc, "SINE", NULL, 0, PrintSine);
+                status = us.SendMessage(0, &nc, "SINE", NULL, 0, PrintSine);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "SendMessage to " << *itr << " failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -129,7 +132,7 @@ int main ()
         if (std::clock() > name_resend)
         {
             // resend the name certificate to allow for replies
-            status = us.SendName(UNENCRYPTED, NULL);
+            status = us.SendName(0, NULL);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "SendName failed: " << UbiPAL::GetErrorDescription(status) << std::endl;

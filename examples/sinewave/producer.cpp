@@ -14,12 +14,10 @@
 #include <string>  //std::string
 #include <vector>  //std::vector
 
-#define UNENCRYPTED UbiPAL::UbipalService::SendMessageFlags::NO_ENCRYPTION
-
 int ReplySine(UbiPAL::UbipalService* us, UbiPAL::Message message)
 {
     uint32_t sinewave = htonl(10*sin(std::clock()/(CLOCKS_PER_SEC/8)/(2*M_PI)));
-    return us->ReplyToMessage(UNENCRYPTED, &message, (unsigned char*)&sinewave, sizeof(uint32_t));
+    return us->ReplyToMessage(0, &message, (unsigned char*)&sinewave, sizeof(uint32_t));
 }
 
 std::vector<std::string> ReadRulesFile(const std::string& file)
@@ -77,17 +75,18 @@ int main ()
 
     // every ten seconds, broadcast namespace certificate
     time_t timeout = std::clock() + 10 * CLOCKS_PER_SEC;
+    time_t quit = std::clock() + 30 * CLOCKS_PER_SEC;
     while (true)
     {
         if (std::clock() > timeout)
         {
-            status = us.SendName(UNENCRYPTED, NULL);
+            status = us.SendName(0, NULL);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to broadcast name: " << UbiPAL::GetErrorDescription(status) << std::endl;
             }
 
-            status = us.SendAcl(UNENCRYPTED, delegate, NULL);
+            status = us.SendAcl(0, delegate, NULL);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to broadcast ACL: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -96,5 +95,10 @@ int main ()
             timeout = std::clock() + 10 * CLOCKS_PER_SEC;
         }
         sched_yield();
+
+        if (std::clock() > quit)
+        {
+            return status;
+        }
     }
 }
