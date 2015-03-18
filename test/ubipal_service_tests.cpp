@@ -474,6 +474,70 @@ namespace UbiPAL
         return NOT_IMPLEMENTED;
     }
 
+    int UbipalServiceTests::UbipalServiceTestRecvAcl()
+    {
+        int status = SUCCESS;
+
+        UbipalService us;
+
+        if (us.external_acls.size() != 0)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        AccessControlList acl1;
+        acl1.id = "Lauren";
+
+        status = us.RecvAcl(&acl1);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+        if (us.external_acls.size() != 1 || us.external_acls["Lauren"].size() != 1)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        status = us.RecvAcl(&acl1);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+        if (us.external_acls.size() != 1 || us.external_acls["Lauren"].size() != 1)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        AccessControlList acl2;
+        acl2.id = "Lauren";
+
+        status = us.RecvAcl(&acl2);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+        if (us.external_acls.size() != 1 || us.external_acls["Lauren"].size() != 2)
+        {
+            return GENERAL_FAILURE;
+        }
+
+
+        AccessControlList acl3;
+        acl3.id = "Cameron";
+
+        status = us.RecvAcl(&acl3);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+        if (us.external_acls.size() != 2 || us.external_acls["Lauren"].size() != 2 || us.external_acls["Cameron"].size() != 1)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return status;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -502,5 +566,7 @@ namespace UbiPAL
                                  "UbipalServiceTestConditionParse", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestParseTimeDate, SUCCESS,
                                  "UbipalServiceTestParseTimeDate", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestRecvAcl, SUCCESS,
+                                 "UbipalServiceTestRecvAcl", module_count, module_fails);
     }
 }

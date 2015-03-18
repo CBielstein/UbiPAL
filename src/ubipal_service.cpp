@@ -974,7 +974,6 @@ namespace UbiPAL
     int UbipalService::RecvAcl(const AccessControlList* const acl)
     {
         int status = SUCCESS;
-        std::unordered_map<std::string, std::vector<AccessControlList>>::iterator acl_itr;
         std::vector<AccessControlList> acl_vector;
 
         if (acl == nullptr)
@@ -985,8 +984,7 @@ namespace UbiPAL
 
         // find all the acls from this service
         external_acls_mutex.lock();
-        acl_itr = external_acls.find(acl->id);
-        if (acl_itr == external_acls.end())
+        if (external_acls.count(acl->id) == 0)
         {
             // wasnt found, so add it
             acl_vector.push_back(*acl);
@@ -995,9 +993,9 @@ namespace UbiPAL
         else
         {
             // was found, so check through the associated vector to see if this is an update (based on ID)
-            for (unsigned int i = 0; i < acl_itr->second.size(); ++i)
+            for (unsigned int i = 0; i < external_acls[acl->id].size(); ++i)
             {
-                if (acl_itr->second[i].msg_id.compare(acl->msg_id))
+                if (external_acls[acl->id][i].msg_id == acl->msg_id)
                 {
                     // we've already heard this one, so we're done.
                     external_acls_mutex.unlock();
@@ -1006,7 +1004,7 @@ namespace UbiPAL
             }
 
             // if we get here, we haven't heard it, so we're adding it
-            acl_itr->second.push_back(*acl);
+            external_acls[acl->id].push_back(*acl);
         }
 
         external_acls_mutex.unlock();
