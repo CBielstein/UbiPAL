@@ -2269,6 +2269,7 @@ namespace UbiPAL
         std::vector<Statement> all_conditions;
         for (unsigned int i = 0; i < to_consider.size(); ++i)
         {
+            all_conditions.clear();
             // if to_consider[i].id is current, then just check conditions
             if (to_consider[i].service_id == current_service)
             {
@@ -2323,11 +2324,9 @@ namespace UbiPAL
                 // set up temporary recursion variables
                 new_acl_trail = acl_trail;
                 new_acl_trail.push_back(to_consider[i].referenced_from_acl);
-                new_conditions = conditions;
-                for (unsigned int j = 0; j < to_consider[i].conditions.size(); ++j)
-                {
-                    new_conditions.push_back(to_consider[i].conditions[j]);
-                }
+                all_conditions.clear();
+                all_conditions.insert(all_conditions.end(), conditions.begin(), conditions.end());
+                all_conditions.insert(all_conditions.end(), to_consider[i].conditions.begin(), to_consider[i].conditions.end());
 
                 // if it's a delegation with a variable service
                 std::vector<std::string> delegators;
@@ -2346,6 +2345,12 @@ namespace UbiPAL
                             --k;
                         }
                     }
+
+                    // update all_conditions after removals
+                    all_conditions.clear();
+                    all_conditions.insert(all_conditions.end(), conditions.begin(), conditions.end());
+                    all_conditions.insert(all_conditions.end(), to_consider[i].conditions.begin(), to_consider[i].conditions.end());
+
 
                     if (root_conds.size() != 0)
                     {
@@ -2937,7 +2942,6 @@ namespace UbiPAL
                 }
             }
         }
-
 
         names = possible_answers;
         return SUCCESS;
