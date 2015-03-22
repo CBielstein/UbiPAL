@@ -157,6 +157,10 @@ int main ()
             {
                 // take number of service to add
                 std::cin >> rm_id;
+                if (rm_id == -1)
+                {
+                    break;
+                }
                 if (rm_id >= (int)allowed_names.size() || rm_id < -1)
                 {
                     std::cout << "Number out of range." << std::endl;
