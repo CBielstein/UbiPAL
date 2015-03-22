@@ -579,6 +579,205 @@ namespace UbiPAL
         return SUCCESS;
     }
 
+    int UbipalServiceTests::UbipalServiceTestParseDelegation()
+    {
+        int status = SUCCESS;
+
+        // create service
+        UbipalService lauren;
+        lauren.id = "Lauren";
+
+        // add rules
+        std::vector<std::string> rules;
+        rules.push_back("Meredith CAN SAY Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+        rules.push_back("Josh CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
+        rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
+        AccessControlList acl;
+        status = lauren.CreateAcl("delegation", rules, acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        AccessControlList mere;
+        mere.id = "Meredith";
+        mere.rules.push_back("X CAN SEND MESSAGE TWO_STEP TO Lauren");
+        lauren.external_acls["Meredith"].push_back(mere);
+
+        AccessControlList josh;
+        josh.id = "Josh";
+        josh.rules.push_back("X CAN SEND MESSAGE POLKA TO Lauren");
+        lauren.external_acls["Josh"].push_back(josh);
+
+        // run tests
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE WALTZ TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SWING TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE POLKA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SALSA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestParseDelegationVariable()
+    {
+        int status = SUCCESS;
+
+        // create service
+        UbipalService lauren;
+        lauren.id = "Lauren";
+
+        // add rules
+        std::vector<std::string> rules;
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
+        rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
+        AccessControlList acl;
+        status = lauren.CreateAcl("delegation", rules, acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        AccessControlList mere;
+        mere.id = "Meredith";
+        mere.rules.push_back("X CAN SEND MESSAGE TWO_STEP TO Lauren");
+        lauren.external_acls["Meredith"].push_back(mere);
+
+        AccessControlList josh;
+        josh.id = "Josh";
+        josh.rules.push_back("X CAN SEND MESSAGE POLKA TO Lauren");
+        lauren.external_acls["Josh"].push_back(josh);
+
+        // run tests
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE WALTZ TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SWING TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE POLKA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SALSA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestParseDelegationVariableConditions()
+    {
+        int status = SUCCESS;
+
+        // create service
+        UbipalService lauren;
+        lauren.id = "Lauren";
+
+        // add rules
+        std::vector<std::string> rules;
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE TWO_STEP TO Lauren if X IS MERE");
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE SALSA TO Lauren if X IS NOBODY");
+        rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
+        rules.push_back("Meredith IS MERE");
+        AccessControlList acl;
+        status = lauren.CreateAcl("delegation", rules, acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        AccessControlList mere;
+        mere.id = "Meredith";
+        mere.rules.push_back("X CAN SEND MESSAGE TWO_STEP TO Lauren");
+        lauren.external_acls["Meredith"].push_back(mere);
+
+        AccessControlList josh;
+        josh.id = "Josh";
+        josh.rules.push_back("X CAN SEND MESSAGE POLKA TO Lauren");
+        lauren.external_acls["Josh"].push_back(josh);
+
+        AccessControlList other;
+        josh.id = "Other";
+        josh.rules.push_back("X CAN SEND MESSAGE SALSA TO Lauren");
+        lauren.external_acls["Other"].push_back(other);
+
+        // run tests
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE WALTZ TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SWING TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE POLKA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SALSA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        return SUCCESS;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -609,5 +808,11 @@ namespace UbiPAL
                                  "UbipalServiceTestParseTimeDate", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestDiscoverService, SUCCESS,
                                  "UbipalServiceTestDiscoverService", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseDelegation, SUCCESS,
+                                 "UbipalServiceTestParseDelegation", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseDelegationVariable, SUCCESS,
+                                 "UbipalServiceTestParseDelegationVariable", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseDelegationVariableConditions, SUCCESS,
+                                 "UbipalServiceTestParseDelegationVariableConditions", module_count, module_fails);
     }
 }

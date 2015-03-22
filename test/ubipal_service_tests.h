@@ -27,6 +27,9 @@ namespace UbiPAL
             static int UbipalServiceTestConditionParse();
             static int UbipalServiceTestParseTimeDate();
             static int UbipalServiceTestDiscoverService();
+            static int UbipalServiceTestParseDelegation();
+            static int UbipalServiceTestParseDelegationVariable();
+            static int UbipalServiceTestParseDelegationVariableConditions();
 
             // End Unit tests
 

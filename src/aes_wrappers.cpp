@@ -141,6 +141,7 @@ namespace UbiPAL
         }
 
         exit:
+            EVP_CIPHER_CTX_cleanup(&ctx);
             if (status != SUCCESS)
             {
                 free(result);
@@ -204,6 +205,7 @@ namespace UbiPAL
         }
 
         exit:
+            EVP_CIPHER_CTX_cleanup(&ctx);
             if (status != SUCCESS)
             {
                 free(result);

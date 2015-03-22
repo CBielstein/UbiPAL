@@ -29,6 +29,7 @@ namespace UbiPAL
         else
         {
             FreeStatementHelper(statement->statement);
+            fprintf(stderr, "deleting\n");
             delete statement;
             return;
         }

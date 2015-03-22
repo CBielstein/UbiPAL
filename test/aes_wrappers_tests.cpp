@@ -216,6 +216,7 @@ namespace UbiPAL
 
         exit:
             free(msg_encrypted);
+            free(msg_decrypted);
             free(key);
             free(iv);
             return status;
