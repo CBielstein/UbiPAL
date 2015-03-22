@@ -186,7 +186,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         UbipalService us;
-        us.receiving = true;
+        status = us.BeginRecv(UbipalService::BeginRecvFlags::NON_BLOCKING);
 
         status = us.EndRecv();
 
@@ -364,40 +364,43 @@ namespace UbiPAL
 
     int UbipalServiceTests::UbipalServiceTestConditionParse()
     {
-        /*int status = SUCCESS;
-        std::vector<std::string> conds;
+        int status = SUCCESS;
+        std::vector<Statement> conds;
         UbipalService us;
 
-        std::string rule = "alice can send OPEN to bob_door if bob_house confirms IS_PRESENT(bob)";
+        std::string rule = "alice CAN SEND MESSAGE OPEN to bob_door if bob_house CONFIRMS IS_PRESENT";
         status = us.GetConditionsFromRule(rule, conds);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
         if (conds.size() != 1)
         {
             return GENERAL_FAILURE;
         }
-        if (conds[0] != std::string("bob_house confirms IS_PRESENT(bob)"))
+        if (conds[0].type != Statement::Type::CONFIRMS || conds[0].name1 != "bob_house" || conds[0].name2 != "IS_PRESENT")
         {
             return GENERAL_FAILURE;
         }
 
         conds.clear();
-        rule += ", bob_clock confirms TIME_IS(12:00)";
+        rule += ", bob_clock CONFIRMS TIME";
         status = us.GetConditionsFromRule(rule, conds);
         if (conds.size() != 2)
         {
             return GENERAL_FAILURE;
         }
-        if (conds[0] != std::string("bob_house confirms IS_PRESENT(bob)") || conds[1] != std::string("bob_clock confirms TIME_IS(12:00)"))
+        if ((conds[0].type != Statement::Type::CONFIRMS || conds[0].name1 != "bob_house" || conds[0].name2 != "IS_PRESENT") ||
+            (conds[1].type != Statement::Type::CONFIRMS || conds[1].name1 != "bob_clock" || conds[1].name2 != "TIME"))
         {
             return GENERAL_FAILURE;
         }
 
-        return status;*/
-        return NOT_IMPLEMENTED;
+        return status;
     }
 
     int UbipalServiceTests::UbipalServiceTestParseTimeDate()
     {
-        /*
         int status = SUCCESS;
         UbipalService us;
 
@@ -470,8 +473,339 @@ namespace UbiPAL
             return status;
         }
 
-        return SUCCESS;*/
-        return NOT_IMPLEMENTED;
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestDiscoverService()
+    {
+        int status = SUCCESS;
+
+        UbipalService us;
+
+        NamespaceCertificate nc;
+        nc.id = "Elynn";
+        us.untrusted_services["Elynn"] = nc;
+        nc.id = "Jessica";
+        us.untrusted_services["Jessica"] = nc;
+        nc.id = "Cameron";
+        us.untrusted_services["Cameron"] = nc;
+
+        AccessControlList elynn_acl;
+        elynn_acl.id = "Elynn";
+        elynn_acl.from = "Elynn";
+        elynn_acl.rules.push_back("Jessica CAN SEND MESSAGE Test TO Elynn");
+        us.external_acls["Elynn"].push_back(elynn_acl);
+
+        std::vector<std::string> rules;
+        rules.push_back("Elynn IS A student");
+        rules.push_back("Jessica IS A student");
+        rules.push_back("Cameron IS A student");
+
+        AccessControlList acl;
+        status = us.CreateAcl("students", rules, acl);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::CreateAcl failed: %s\n", GetErrorDescription(status));
+            return status;
+        }
+
+        std::vector<std::string> statement;
+        statement.push_back("X IS A student");
+        std::map<std::string, std::set<std::string>> result_names;
+        status = us.FindNamesForStatements(statement, result_names);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatements failed: %s\n", GetErrorDescription(status));
+            return status;
+        }
+
+        if (result_names.size() != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many variables. Should be 1, it said %lu\n",
+                    result_names.size());
+            return GENERAL_FAILURE;
+        }
+        if (result_names[std::string("X")].size() != 3)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many results. Should be 3, it said %lu\n",
+                    result_names[std::string("X")].size());
+            return GENERAL_FAILURE;
+        }
+        if  (result_names[std::string("X")].count("Jessica") != 1 || result_names[std::string("X")].count("Cameron") != 1 || result_names[std::string("X")].count("Elynn") != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned invalid numbers for Jessica, Elynn, Cameron: %lu %lu %lu\n",
+                    result_names[std::string("X")].count("Jessica"), result_names[std::string("X")].count("Elynn"), result_names[std::string("X")].count("Cameron"));
+            return GENERAL_FAILURE;
+        }
+
+        // test no matches
+        statement.clear();
+        statement.push_back("X IS A professor");
+        result_names.clear();
+        status = us.FindNamesForStatements(statement, result_names);
+        if (status != NOT_IN_ACLS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatements didn't say the expected GENERAL_FAILURE: %s\n",
+                    GetErrorDescription(status));
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        statement.clear();
+        statement.push_back("X IS A student");
+        statement.push_back("X CAN SEND MESSAGE Test TO Elynn");
+        result_names.clear();
+        status = us.FindNamesForStatements(statement, result_names);
+        if (status != SUCCESS)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatements failed: %s\n", GetErrorDescription(status));
+            return status;
+        }
+        if (result_names.size() != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many variables. Should be 1, it said %lu\n",
+                    result_names.size());
+            return GENERAL_FAILURE;
+        }
+        if (result_names[std::string("X")].size() != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement returned too many results. Should be 1, it said %lu\n",
+                    result_names[std::string("X")].size());
+            return GENERAL_FAILURE;
+        }
+        if  (result_names[std::string("X")].count("Jessica") != 1)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::FindNamesForStatement did not include Jessica");
+            return GENERAL_FAILURE;
+        }
+
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestParseDelegation()
+    {
+        int status = SUCCESS;
+
+        // create service
+        UbipalService lauren;
+        lauren.id = "Lauren";
+
+        // add rules
+        std::vector<std::string> rules;
+        rules.push_back("Meredith CAN SAY Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+        rules.push_back("Josh CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
+        rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
+        AccessControlList acl;
+        status = lauren.CreateAcl("delegation", rules, acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        AccessControlList mere;
+        mere.id = "Meredith";
+        mere.rules.push_back("X CAN SEND MESSAGE TWO_STEP TO Lauren");
+        lauren.external_acls["Meredith"].push_back(mere);
+
+        AccessControlList josh;
+        josh.id = "Josh";
+        josh.rules.push_back("X CAN SEND MESSAGE POLKA TO Lauren");
+        lauren.external_acls["Josh"].push_back(josh);
+
+        // run tests
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE WALTZ TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SWING TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE POLKA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SALSA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestParseDelegationVariable()
+    {
+        int status = SUCCESS;
+
+        // create service
+        UbipalService lauren;
+        lauren.id = "Lauren";
+
+        // add rules
+        std::vector<std::string> rules;
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
+        rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
+        AccessControlList acl;
+        status = lauren.CreateAcl("delegation", rules, acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        AccessControlList mere;
+        mere.id = "Meredith";
+        mere.rules.push_back("X CAN SEND MESSAGE TWO_STEP TO Lauren");
+        lauren.external_acls["Meredith"].push_back(mere);
+
+        AccessControlList josh;
+        josh.id = "Josh";
+        josh.rules.push_back("X CAN SEND MESSAGE POLKA TO Lauren");
+        lauren.external_acls["Josh"].push_back(josh);
+
+        // run tests
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE WALTZ TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SWING TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE POLKA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SALSA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestParseDelegationVariableConditions()
+    {
+        int status = SUCCESS;
+
+        // create service
+        UbipalService lauren;
+        lauren.id = "Lauren";
+
+        // add rules
+        std::vector<std::string> rules;
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE TWO_STEP TO Lauren if X IS MERE");
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
+        rules.push_back("X CAN SAY Y CAN SEND MESSAGE SALSA TO Lauren if X IS NOBODY");
+        rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
+        rules.push_back("Meredith IS MERE");
+        AccessControlList acl;
+        status = lauren.CreateAcl("delegation", rules, acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        AccessControlList mere;
+        mere.id = "Meredith";
+        mere.rules.push_back("X CAN SEND MESSAGE TWO_STEP TO Lauren");
+        lauren.external_acls["Meredith"].push_back(mere);
+
+        AccessControlList josh;
+        josh.id = "Josh";
+        josh.rules.push_back("X CAN SEND MESSAGE POLKA TO Lauren");
+        lauren.external_acls["Josh"].push_back(josh);
+
+        AccessControlList other;
+        josh.id = "Other";
+        josh.rules.push_back("X CAN SEND MESSAGE SALSA TO Lauren");
+        lauren.external_acls["Other"].push_back(other);
+
+        // run tests
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE WALTZ TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SWING TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE POLKA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE SALSA TO Lauren", NULL);
+        if (status != NOT_IN_ACLS)
+        {
+            return (status == SUCCESS) ? GENERAL_FAILURE : status;
+        }
+
+        return SUCCESS;
+    }
+
+    int UbipalServiceTests::UbipalServiceTestUpperCase()
+    {
+        std::string upper_letters = UbipalService::UpperCase("This is A test of letters");
+        if (upper_letters != std::string("THIS IS A TEST OF LETTERS"))
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestUpperCase: %s did not equal %s\n", upper_letters.c_str(), "THIS IS A TEST OF LETTERS");
+            return GENERAL_FAILURE;
+        }
+
+        std::string symbols = "*909/?.<";
+        std::string upper_symbols = UbipalService::UpperCase(symbols);
+        if (upper_symbols != symbols)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestUpperCase: %s did not equal %s\n", upper_symbols.c_str(), symbols.c_str());
+            return GENERAL_FAILURE;
+        }
+
+        std::string mixed = "Hello? Is it M3 you're looking for?";
+        std::string upper_mixed = UbipalService::UpperCase(mixed);
+        if (upper_mixed != std::string("HELLO? IS IT M3 YOU'RE LOOKING FOR?"))
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestUpperCase: %s did not equal %s\n", upper_mixed.c_str(), "HELLO? IS IT M3 YOU'RE LOOKING FOR?");
+            return GENERAL_FAILURE;
+        }
+
+        return SUCCESS;
     }
 
     int UbipalServiceTests::UbipalServiceTestRecvAcl()
@@ -568,5 +902,15 @@ namespace UbiPAL
                                  "UbipalServiceTestParseTimeDate", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestRecvAcl, SUCCESS,
                                  "UbipalServiceTestRecvAcl", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestDiscoverService, SUCCESS,
+                                 "UbipalServiceTestDiscoverService", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseDelegation, SUCCESS,
+                                 "UbipalServiceTestParseDelegation", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseDelegationVariable, SUCCESS,
+                                 "UbipalServiceTestParseDelegationVariable", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseDelegationVariableConditions, SUCCESS,
+                                 "UbipalServiceTestParseDelegationVariableConditions", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestUpperCase, SUCCESS,
+                                 "UbipalServiceTestUpperCase", module_count, module_fails);
     }
 }

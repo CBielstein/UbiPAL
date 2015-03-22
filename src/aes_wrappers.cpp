@@ -177,6 +177,7 @@ namespace UbiPAL
                     ++NUM_AES_ENCRYPTS;
                 }
             #endif
+            EVP_CIPHER_CTX_cleanup(&ctx);
             if (status != SUCCESS)
             {
                 free(result);
@@ -253,6 +254,7 @@ namespace UbiPAL
                     ++NUM_AES_DECRYPTS;
                 }
             #endif
+            EVP_CIPHER_CTX_cleanup(&ctx);
             if (status != SUCCESS)
             {
                 free(result);
