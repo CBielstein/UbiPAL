@@ -181,12 +181,10 @@ namespace UbiPAL
 
     int UbipalServiceTests::UbipalServiceTestEndRecv()
     {
-        return NOT_IMPLEMENTED;
-        /*
         int status = SUCCESS;
 
         UbipalService us;
-        us.receiving = true;
+        status = us.BeginRecv(UbipalService::BeginRecvFlags::NON_BLOCKING);
 
         status = us.EndRecv();
 
@@ -202,7 +200,6 @@ namespace UbiPAL
         {
             return SUCCESS;
         }
-        */
     }
 
     int UbipalServiceTests::UbipalServiceTestSetAddress()
@@ -364,40 +361,43 @@ namespace UbiPAL
 
     int UbipalServiceTests::UbipalServiceTestConditionParse()
     {
-        /*int status = SUCCESS;
-        std::vector<std::string> conds;
+        int status = SUCCESS;
+        std::vector<Statement> conds;
         UbipalService us;
 
-        std::string rule = "alice can send OPEN to bob_door if bob_house confirms IS_PRESENT(bob)";
+        std::string rule = "alice CAN SEND MESSAGE OPEN to bob_door if bob_house CONFIRMS IS_PRESENT";
         status = us.GetConditionsFromRule(rule, conds);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
         if (conds.size() != 1)
         {
             return GENERAL_FAILURE;
         }
-        if (conds[0] != std::string("bob_house confirms IS_PRESENT(bob)"))
+        if (conds[0].type != Statement::Type::CONFIRMS || conds[0].name1 != "bob_house" || conds[0].name2 != "IS_PRESENT")
         {
             return GENERAL_FAILURE;
         }
 
         conds.clear();
-        rule += ", bob_clock confirms TIME_IS(12:00)";
+        rule += ", bob_clock CONFIRMS TIME";
         status = us.GetConditionsFromRule(rule, conds);
         if (conds.size() != 2)
         {
             return GENERAL_FAILURE;
         }
-        if (conds[0] != std::string("bob_house confirms IS_PRESENT(bob)") || conds[1] != std::string("bob_clock confirms TIME_IS(12:00)"))
+        if ((conds[0].type != Statement::Type::CONFIRMS || conds[0].name1 != "bob_house" || conds[0].name2 != "IS_PRESENT") ||
+            (conds[1].type != Statement::Type::CONFIRMS || conds[1].name1 != "bob_clock" || conds[1].name2 != "TIME"))
         {
             return GENERAL_FAILURE;
         }
 
-        return status;*/
-        return NOT_IMPLEMENTED;
+        return status;
     }
 
     int UbipalServiceTests::UbipalServiceTestParseTimeDate()
     {
-        /*
         int status = SUCCESS;
         UbipalService us;
 
@@ -470,8 +470,7 @@ namespace UbiPAL
             return status;
         }
 
-        return SUCCESS;*/
-        return NOT_IMPLEMENTED;
+        return SUCCESS;
     }
 
     int UbipalServiceTests::UbipalServiceTestDiscoverService()
@@ -778,6 +777,34 @@ namespace UbiPAL
         return SUCCESS;
     }
 
+    int UbipalServiceTests::UbipalServiceTestUpperCase()
+    {
+        std::string upper_letters = UbipalService::UpperCase("This is A test of letters");
+        if (upper_letters != std::string("THIS IS A TEST OF LETTERS"))
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestUpperCase: %s did not equal %s\n", upper_letters.c_str(), "THIS IS A TEST OF LETTERS");
+            return GENERAL_FAILURE;
+        }
+
+        std::string symbols = "*909/?.<";
+        std::string upper_symbols = UbipalService::UpperCase(symbols);
+        if (upper_symbols != symbols)
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestUpperCase: %s did not equal %s\n", upper_symbols.c_str(), symbols.c_str());
+            return GENERAL_FAILURE;
+        }
+
+        std::string mixed = "Hello? Is it M3 you're looking for?";
+        std::string upper_mixed = UbipalService::UpperCase(mixed);
+        if (upper_mixed != std::string("HELLO? IS IT M3 YOU'RE LOOKING FOR?"))
+        {
+            fprintf(stderr, "UbipalServiceTests::UbipalServiceTestUpperCase: %s did not equal %s\n", upper_mixed.c_str(), "HELLO? IS IT M3 YOU'RE LOOKING FOR?");
+            return GENERAL_FAILURE;
+        }
+
+        return SUCCESS;
+    }
+
     void UbipalServiceTests::RunUbipalServiceTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(UbipalServiceTestDefaultConstructor, SUCCESS,
@@ -814,5 +841,7 @@ namespace UbiPAL
                                  "UbipalServiceTestParseDelegationVariable", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestParseDelegationVariableConditions, SUCCESS,
                                  "UbipalServiceTestParseDelegationVariableConditions", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestUpperCase, SUCCESS,
+                                 "UbipalServiceTestUpperCase", module_count, module_fails);
     }
 }

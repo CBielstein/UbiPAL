@@ -465,34 +465,11 @@ namespace UbiPAL
 
     int UbipalService::EndRecv()
     {
-        int returned_value = 0;
         receiving_mutex.lock();
             receiving = false;
+            recv_threads.clear();
+            send_threads.clear();
         receiving_mutex.unlock();
-
-        for (unsigned int i = 0; i < recv_threads.size(); ++i)
-        {
-            returned_value = pthread_join(recv_threads[i], NULL);
-            if (returned_value != 0)
-            {
-                Log::Line(Log::WARN, "UbipalService::EndRecv(): pthread_join returned %d for recv_threads[%d]", returned_value, i);
-            }
-        }
-
-        for (unsigned int i = 0; i < send_threads.size(); ++i)
-        {
-            returned_value = pthread_join(send_threads[i], NULL);
-            if (returned_value != 0)
-            {
-                Log::Line(Log::WARN, "UbipalService::EndRecv(): pthread_join returned %d for send_threads[%d]", returned_value, i);
-            }
-        }
-
-        returned_value = pthread_join(conditions_timeout_thread, NULL);
-        if (returned_value != 0)
-        {
-            Log::Line(Log::WARN, "UbipalService::EndRecv(): pthread_join returned %d for conditions_timeout_thread", returned_value);
-        }
 
         return SUCCESS;
     }
@@ -611,7 +588,12 @@ namespace UbiPAL
             // wait for non-empty queue
             while(us->incoming_messages.size() == 0)
             {
-                us->incoming_msg_cv.wait(lock);
+                if (us->receiving == false)
+                {
+                    lock.unlock();
+                    return NULL;
+                }
+                us->incoming_msg_cv.wait_for(lock, std::chrono::milliseconds(500));
             }
 
             // grab stuff off the queue
@@ -1728,6 +1710,11 @@ namespace UbiPAL
         num_recv_threads = recv_threads;
         num_send_threads = send_threads;
         return SUCCESS;
+    }
+
+    int UbipalService::EvaluateStatement(const std::string& statement)
+    {
+        return EvaluateStatement(statement, NULL);
     }
 
     int UbipalService::EvaluateStatement(const std::string& statement, const Message* message)
@@ -2945,5 +2932,17 @@ namespace UbiPAL
 
         names = possible_answers;
         return SUCCESS;
+    }
+
+    std::string UbipalService::UpperCase(const std::string& str)
+    {
+        std::locale loc;
+        std::string upper;
+        for (unsigned int i = 0; i < str.size(); ++i)
+        {
+            upper += std::toupper(str[i], loc);
+        }
+
+        return upper;
     }
 }

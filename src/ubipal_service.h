@@ -285,6 +285,7 @@ namespace UbiPAL
             //          [IN] message: Optional, a message to deliver if the statement passes condition checks
             // return
             //          int: SUCCESS implies it holds, else will receive NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
+            int EvaluateStatement(const std::string& statement);
             int EvaluateStatement(const std::string& statement, const Message* message);
 
             // EvaluateStatementRecurse
@@ -702,6 +703,14 @@ namespace UbiPAL
             // returns
             //          int: SUCCESS on success, negative error code on error
             int StartConfirmChecks(const Message& message, const std::vector<Statement>& conditions);
+
+            // UpperCase
+            // A convenience function to make rules and other strings upper case to make UbiPAL case insensitive
+            // args
+            //          [IN] str: The string object to put to upper
+            // return
+            //          std::string: The upper case version of the string
+            static std::string UpperCase(const std::string& str);
     };
 }
 
