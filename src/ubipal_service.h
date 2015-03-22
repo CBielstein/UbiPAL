@@ -363,34 +363,6 @@ namespace UbiPAL
             //          string: ID of this service
             inline std::string GetId() { return id; }
 
-            // CacheCondition
-            // Sends a message to a given service to be cached on the receiving end. This cache stays until invalidated or updated.
-            // Updates by calling this function again, invalidations by calling InvalidateCachedCondition
-            // args
-            //          [IN] flags: flags, including:
-            //                  NONBLOCKING: returns immediately, uses a different thread to send
-            //                  NO_ENCRYPTION: does not encrypt communication.
-            //          [IN] to: The NamespaceCertificate to which to send
-            //          [IN] condition: The condition for which the reply is cached
-            //          [IN] reply: The cached reply for the condition
-            //          [IN] reply_len: The length of reply
-            // return
-            //          int: SUCCESS on success, else a negative error
-            int CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
-                               const unsigned char* const reply, const uint32_t reply_len);
-
-            // InvalidateCachedCondition
-            // Sends a message to the receiving service to invalidate the given condition
-            // args
-            //          [IN] flags: flags, including:
-            //                  NONBLOCKING: returns immediately, uses a different thread to send
-            //                  NO_ENCRYPTION: does not encrypt communication.
-            //          [IN] to: The NamespaceCertificate to which to send
-            //          [IN] condition: The condition which should be removed from the cache
-            // return
-            //          int: SUCCESS on success, else a negative error
-            int InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition);
-
             // XXX
             // RequestCertificate
             // Sends a message to to (or broadcasts if null) and requests the certificate for service_id
@@ -418,6 +390,42 @@ namespace UbiPAL
             //  return
             //          int: SUCCESS on successful send of message, else a negative error
             int RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
+
+            // XXX
+            // RegisterForUpdates
+            // Sends a request to a given service to hear updates on a given message. Caches the updates locally. This avoids network overhead
+            // with often-requested messages with slowly changing replies.
+            // args
+            //          [IN] flags: Flags for sending. Same as SendMessage.
+            //          [IN] service: The service with which we are registering
+            //          [IN] message: The message to which we wish to register
+            //          [IN] callback: The function to call when a message update is delivered
+            // return
+            //          int: SUCCESS on succesful request. Successful registration is known upon reply from service, which will be handled by callback.
+            int RegisterForUpdates(const uint32_t flags, const NamespaceCertificate& service, const std::string& message, const UbipalReplyCallback callback);
+
+            // XXX
+            // UnregisterForUpdates
+            // Sends a request to a given service to no longer hear updates on a given message.
+            // args
+            //          [IN] flags: Flags for sending. Same as SendMessage.
+            //          [IN] service: The service with which we are unregistering
+            //          [IN] message: The message to which we wish to unregister
+            // return
+            //          int: SUCCESS on succesful request and removal from ACLs
+            int RegisterForUpdates(const uint32_t flags, const NamespaceCertificate& service, const std::string& message);
+
+            // XXX
+            // SendMessageUpdate
+            // Sends the new message to any registered services
+            // args
+            //          [IN] flags: Flags for sending. Same as SendMessage.
+            //          [IN] message: The message to send.
+            //          [IN] arg: The arguments to that message
+            //          [IN] arg_len: The length of arg
+            // return
+            //          int: SUCCESS on successful send
+            int SendMessageUpdate(const uint32_t flags, const std::string& message, const unsigned char* const arg, const uint32_t arg_len);
 
         private:
 
@@ -721,11 +729,11 @@ namespace UbiPAL
             // holds the thread for checking condition timeouts
             pthread_t conditions_timeout_thread;
 
-            // holds cached conditions from other services, map<service name, map<condition, tuple< reply, reply_len>>>
-            std::unordered_map<std::string, std::unordered_map<std::string, std::tuple<unsigned char*, uint32_t>>> cached_conditions;
+            // holds cached conditions from other services, map<service name, map<message, Message>>
+            std::unordered_map<std::string, std::unordered_map<std::string, Message>> cached_messages;
 
             // prevents race conditions on the above strucutre
-            std::mutex cached_conditions_mutex;
+            std::mutex cached_messages_mutex;
 
             // The length of condition check timeout in milliseconds
             uint32_t condition_timeout_length;

@@ -1165,51 +1165,6 @@ namespace UbiPAL
             return status;
         }
 
-        if (message->message.compare(0, strlen("CACHECONDITION_"), "CACHECONDITION_") == 0)
-        {
-            cached_conditions_mutex.lock();
-
-            // get condition
-            size_t underscore = message->message.find("_");
-            std::string condition = message->message.substr(underscore + 1);
-
-            // copy the reply
-            unsigned char* reply = (unsigned char*)malloc(message->arg_len);
-            if (reply == nullptr)
-            {
-                cached_conditions_mutex.unlock();
-                return MALLOC_FAILURE;
-            }
-            memcpy(reply, message->argument, message->arg_len);
-
-            // add to cache
-            cached_conditions[message->from][condition] = std::tuple<unsigned char*, uint32_t>(reply, message->arg_len);
-
-            cached_conditions_mutex.unlock();
-            return status;
-        }
-
-        if (message->message.compare(0, strlen("REMOVECACHECONDITION_"), "REMOVECACHECONDITION_") == 0)
-        {
-            cached_conditions_mutex.lock();
-
-            // get condition
-            size_t underscore = message->message.find("_");
-            std::string condition = message->message.substr(underscore + 1);
-
-            // remove from the mapped map
-            cached_conditions[message->from].erase(condition);
-
-            // remove the entry for that service, if there are no more conditions
-            if (cached_conditions[message->from].size() == 0)
-            {
-                cached_conditions.erase(message->from);
-            }
-
-            cached_conditions_mutex.unlock();
-            return status;
-        }
-
         if (message->message.compare(0, strlen("NEWAESPAIR"), "NEWAESPAIR") == 0)
         {
             // use my private key to decrypt the argument (key & iv)
@@ -1548,6 +1503,27 @@ namespace UbiPAL
         {
             Log::Line(Log::WARN, "UbipalService::SendMessage: called with invalid flags");
             RETURN_STATUS(INVALID_ARG);
+        }
+
+        // if we've cached the response, we just simulate a reply
+        // but we can only check this if we're sending to a name
+        if ((to != nullptr) && (to->id.empty() == false))
+        {
+            cached_messages_mutex.lock();
+            if (cached_messages.count(to->id) != 0)
+            {
+                if (cached_messages[to->id].count(message) != 0)
+                {
+                    Message sim_reply = cached_messages[to->id][message];
+                    sim_reply.message = "REPLY_" + sim_reply.message;
+
+                    cached_messages_mutex.unlock();
+
+                    status = RecvMessage(&sim_reply);
+                    return status;
+                }
+            }
+            cached_messages_mutex.unlock();
         }
 
         msg = new Message(arg, arg_len);
@@ -2767,67 +2743,26 @@ namespace UbiPAL
             return status;
         }
 
-        std::vector<Statement> remote_conditions;
-
-        // Handle any local conditions first
-        cached_conditions_mutex.lock();
-        for (unsigned int i = 0; i < conditions.size(); ++i)
-        {
-            // if we have an entry for the confirming service AND we have an entry for the condition
-            if (cached_conditions.count(conditions[i].name1) == 1 && cached_conditions[conditions[i].name1].count(conditions[i].name2) == 1)
-            {
-                // get the answer
-                std::tuple<unsigned char*, uint32_t> cond_reply = cached_conditions[conditions[i].name1][conditions[i].name2];
-                if (std::get<0>(cond_reply) != nullptr)
-                {
-                    if (std::get<1>(cond_reply) >= strlen("CONFIRM") && memcmp(std::get<0>(cond_reply), "CONFIRM", strlen("CONFIRM")) == 0)
-                    {
-                        // confirmed, we don't need to send a message about it
-                        cached_conditions_mutex.unlock();
-                        continue;
-                    }
-                    else
-                    {
-                        // something other than confirmed, conditions failed!
-                        cached_conditions_mutex.unlock();
-                        return FAILED_CONDITIONS;
-                    }
-                }
-            }
-            else
-            {
-                // if we haven't cached it, we'll have to check it with the source
-                remote_conditions.push_back(conditions[i]);
-            }
-        }
-        cached_conditions_mutex.unlock();
-
-        // if there are no more conditions, we're done!
-        if (remote_conditions.size() == 0)
-        {
-            return SUCCESS;
-        }
-
         // create conditions object
         awaiting_conditions_mutex.lock();
         ConditionCheck new_cond_check;
         new_cond_check.message = message;
-        new_cond_check.conditions = remote_conditions;
+        new_cond_check.conditions = conditions;
         new_cond_check.time = GetTimeMilliseconds();
         awaiting_conditions.push_back(new_cond_check);
         awaiting_conditions_mutex.unlock();
 
         // check remote conditions
         bool found_service = false;
-        for (unsigned int i = 0; i < remote_conditions.size(); ++i)
+        for (unsigned int i = 0; i < conditions.size(); ++i)
         {
             found_service = false;
             for (unsigned int j = 0; j < services.size(); ++j)
             {
-                if (services[j].id == remote_conditions[i].name1)
+                if (services[j].id == conditions[i].name1)
                 {
                     found_service = true;
-                    status = SendMessage(0, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
+                    status = SendMessage(0, &services[j], conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
                         Log::Line(Log::WARN, "UbipalService::ConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
@@ -2916,6 +2851,17 @@ namespace UbiPAL
     {
         int status = SUCCESS;
         std::unordered_map<std::string, UbipalCallback>::iterator found;
+
+        // if we're caching this message, update the cache
+        cached_messages_mutex.lock();
+        if (cached_messages.count(message.from) != 0)
+        {
+            if (cached_messages[message.from].count(message.message) != 0)
+            {
+                cached_messages[message.from][message.message] = message;
+            }
+        }
+        cached_messages_mutex.lock();
 
         // find function to call
         found = callback_map.find(message.message);
@@ -3164,18 +3110,6 @@ namespace UbiPAL
         }
 
         return (time.tv_sec * 1000) + (time.tv_usec / 1000);
-    }
-
-
-    int UbipalService::CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
-                                      const unsigned char* const reply, const uint32_t reply_len)
-    {
-        return SendMessage(flags, to, "CACHECONDITION_" + condition, reply, reply_len);
-    }
-
-    int UbipalService::InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition)
-    {
-        return SendMessage(flags, to, "REMOVECACHECONDITION_" + condition, NULL, 0);
     }
 
     int UbipalService::RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
