@@ -73,12 +73,12 @@ int main(int argc, char** argv)
     std::cout << "Commands: " << std::endl
                               << "    y: Yes, is aleep." << std::endl
                               << "    n: No, is not asleep." << std::endl
-                              << "    c: Cache the condition at telephone." << std::endl
+                              //<< "    c: Cache the condition at telephone." << std::endl
                               << "    q: Quits." << std::endl;
 
     UbiPAL::NamespaceCertificate phone;
     char command;
-    unsigned char* reply_cache;
+    //unsigned char* reply_cache;
     while(1)
     {
         std::cin >> command;
@@ -92,7 +92,7 @@ int main(int argc, char** argv)
                 std::cout << "Setting not asleep." << std::endl;
                 is_asleep = false;
                 break;
-            case 'c':
+            /*case 'c':
                 status = us.GetCertificateForName(PHONE, phone);
                 if (status != UbiPAL::SUCCESS)
                 {
@@ -108,8 +108,8 @@ int main(int argc, char** argv)
                     continue;
                 }
 
-                break;
-            case 'i':
+                break;*/
+            /*case 'i':
                 status = us.GetCertificateForName(PHONE, phone);
                 if (status != UbiPAL::SUCCESS)
                 {
@@ -123,7 +123,7 @@ int main(int argc, char** argv)
                     std::cout << "InvalidateCachedCondition failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
                     continue;
                 }
-                break;
+                break;*/
             case 's':
                 std::cout << "Sending namespace cert." << std::endl;
                 status = us.SendName(0, NULL);
