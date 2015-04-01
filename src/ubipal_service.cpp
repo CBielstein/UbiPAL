@@ -935,7 +935,7 @@ namespace UbiPAL
                 status = RecvAcl((AccessControlList*)msg);
                 if (status != SUCCESS)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvNamespaceCertificate failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvAcl failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
                 break;
@@ -1252,7 +1252,19 @@ namespace UbiPAL
 
         if (message->message.compare(0, strlen("REQUESTCERTIFICATE"), "REQUESTCERTIFICATE") == 0)
         {
-            // TODO fill this in
+            std::string requested_service((char*)message->argument, message->arg_len);
+
+            // find if we have the appropriate certificate
+            NamespaceCertificate requested_cert;
+            status = GetCertificateForName(requested_service, requested_cert);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            // send it as a message
+            status = ReplyToMessage(0, message, requested_cert.raw_bytes, requested_cert.raw_bytes_len);
+            return status;
         }
 
         if (message->message.compare(0, strlen("REQUESTACL"), "REQUESTACL") == 0)
@@ -3243,7 +3255,7 @@ namespace UbiPAL
     int UbipalService::RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
     {
         // TODO add a callback to handle adding the returned certificate
-        return SendMessage(flags, to, "REQUESTCERTIFICATE", (unsigned char*)service_id.c_str(), service_id.size());
+        return SendMessage(flags, to, "REQUESTCERTIFICATE", (unsigned char*)service_id.c_str(), service_id.size(), HandleRequestCertificateReply);
     }
 
     int UbipalService::RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
@@ -3629,6 +3641,48 @@ namespace UbiPAL
         broadcast_name_interval = ms;
 
         broadcast_name_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::HandleRequestCertificateReply(UbipalService* us, const Message* original_message, const Message* reply_message)
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+
+        // check arguments
+        if (us == nullptr || reply_message == nullptr)
+        {
+            return NULL_ARG;
+        }
+        if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        {
+            return NOT_FOUND;
+        }
+
+        // decode NamespaceCertificate
+        NamespaceCertificate received_cert;
+        returned_value = received_cert.Decode(reply_message->argument, reply_message->arg_len);
+        if (returned_value < SUCCESS)
+        {
+            return returned_value;
+        }
+
+        // verify signature
+        RSA* pkey = nullptr;
+        status = RsaWrappers::StringToPublicKey(received_cert.id, pkey);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        // call RecvNamespaceCertificate to handle the rest
+        status = us->RecvNamespaceCertificate(&received_cert);
         return status;
     }
 }

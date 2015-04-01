@@ -179,8 +179,12 @@ namespace UbiPAL
         std::string description;
         std::string address;
         std::string port;
+        unsigned char* raw_bytes;
+        uint32_t raw_bytes_len;
 
         NamespaceCertificate();
+        ~NamespaceCertificate();
+        NamespaceCertificate& operator=(const NamespaceCertificate& rhs);
 
         virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
         virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;

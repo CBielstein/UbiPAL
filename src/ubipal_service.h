@@ -830,6 +830,16 @@ namespace UbiPAL
             // return
             //          std::string: The upper case version of the string
             static std::string UpperCase(const std::string& str);
+
+            // HandleRequestCertificateReply
+            // Stores the certificate held in the reply
+            // args
+            //          [IN] us: The UbiPAL service which should run this operation
+            //          [IN] original_message: The message which was sent
+            //          [IN] reply_message: The reply that we received with the namespace certificate
+            // return
+            //          int: SUCCESS if the reply contained a legitimate certificate and it was successfully stored
+            static int HandleRequestCertificateReply(UbipalService* us, const Message* original_message, const Message* reply_message);
     };
 }
 

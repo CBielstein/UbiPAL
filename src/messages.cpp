@@ -261,7 +261,7 @@ namespace UbiPAL
         status = DecodeString(buf + offset, buf_len - offset, from);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "BaseMessage::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -273,7 +273,7 @@ namespace UbiPAL
         status = DecodeString(buf + offset, buf_len - offset, to);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "BaseMessage::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -285,7 +285,7 @@ namespace UbiPAL
         status = DecodeString(buf + offset, buf_len - offset, msg_id);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "BaseMessage::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -569,17 +569,43 @@ namespace UbiPAL
         if (argument == nullptr)
         {
             Log::Line(Log::EMERG, "Message::operator=(const Message&): malloc failed!");
-            return *this;;
+            return *this;
         }
 
         memcpy(argument, rhs.argument, arg_len);
         return *this;
     }
 
+    NamespaceCertificate& NamespaceCertificate::operator=(const NamespaceCertificate& rhs)
+    {
+        type = rhs.type;
+        to = rhs.to;
+        from = rhs.from;
+        msg_id = rhs.msg_id;
+        raw_bytes_len = rhs.raw_bytes_len;
+
+        raw_bytes = (unsigned char*) malloc(raw_bytes_len);
+        if (raw_bytes == nullptr)
+        {
+            Log::Line(Log::EMERG, "NamespaceCertificate::operator=(const NamespaceCertificate&): malloc failed!");
+            return *this;
+        }
+
+        memcpy(raw_bytes, rhs.raw_bytes, raw_bytes_len);
+        return *this;
+    }
+
     NamespaceCertificate::NamespaceCertificate()
         : BaseMessage()
     {
-       type = NAMESPACE_CERTIFICATE;
+        type = NAMESPACE_CERTIFICATE;
+        raw_bytes = nullptr;
+        raw_bytes_len = 0;
+    }
+
+    NamespaceCertificate::~NamespaceCertificate()
+    {
+        free(raw_bytes);
     }
 
     AccessControlList::AccessControlList()
@@ -672,6 +698,15 @@ namespace UbiPAL
             Log::Line(Log::WARN, "NamespaceCertificate::Decode: Decode(%p, %u)", buf, buf_len);
             return INVALID_ARG;
         }
+
+        // save the bytes for later forwarding
+        raw_bytes = (unsigned char*) malloc(buf_len);
+        if (raw_bytes == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+        raw_bytes_len = buf_len;
+        memcpy(raw_bytes, buf, raw_bytes_len);
 
         // decode basemessage part of the struct
         status = BaseMessage::Decode(buf, buf_len);
