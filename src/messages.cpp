@@ -578,10 +578,14 @@ namespace UbiPAL
 
     NamespaceCertificate& NamespaceCertificate::operator=(const NamespaceCertificate& rhs)
     {
+        id = rhs.id;
+        description = rhs.description;
         type = rhs.type;
         to = rhs.to;
         from = rhs.from;
         msg_id = rhs.msg_id;
+        address = rhs.address;
+        port = rhs.port;
         raw_bytes_len = rhs.raw_bytes_len;
 
         raw_bytes = (unsigned char*) malloc(raw_bytes_len);
@@ -603,6 +607,12 @@ namespace UbiPAL
         raw_bytes_len = 0;
     }
 
+    NamespaceCertificate::NamespaceCertificate(const NamespaceCertificate& other)
+    {
+        type = ACCESS_CONTROL_LIST;
+        *this = other;
+    }
+
     NamespaceCertificate::~NamespaceCertificate()
     {
         free(raw_bytes);
@@ -612,6 +622,37 @@ namespace UbiPAL
         : BaseMessage()
     {
         type = ACCESS_CONTROL_LIST;
+        raw_bytes = nullptr;
+        raw_bytes_len = 0;
+        is_private = false;
+    }
+
+    AccessControlList::~AccessControlList()
+    {
+        free(raw_bytes);
+    }
+
+    AccessControlList& AccessControlList::operator=(const AccessControlList& rhs)
+    {
+        id = rhs.id;
+        description = rhs.description;
+        rules = rhs.rules;
+        type = rhs.type;
+        to = rhs.to;
+        from = rhs.from;
+        is_private = rhs.is_private;
+        msg_id = rhs.msg_id;
+        raw_bytes_len = rhs.raw_bytes_len;
+
+        raw_bytes = (unsigned char*) malloc(raw_bytes_len);
+        if (raw_bytes == nullptr)
+        {
+            Log::Line(Log::EMERG, "AccessControlList::operator=(const AccessControlList&): malloc failed!");
+            return *this;
+        }
+
+        memcpy(raw_bytes, rhs.raw_bytes, raw_bytes_len);
+        return *this;
     }
 
     int NamespaceCertificate::Encode(unsigned char* const buf, const uint32_t buf_len) const
@@ -813,6 +854,19 @@ namespace UbiPAL
             status = SUCCESS;
         }
 
+        // encode is_private
+        unsigned char is_private_byte = is_private ? 1 : 0;
+        if (offset >= buf_len)
+        {
+            return BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            buf[offset] = is_private_byte;
+            offset += 1;
+            status = SUCCESS;
+        }
+
         // encode number of strings
         status = EncodeUint32_t(buf + offset, buf_len - offset, rules.size());
         if (status < 0)
@@ -858,6 +912,15 @@ namespace UbiPAL
             return INVALID_ARG;
         }
 
+        // save the bytes for later forwarding
+        raw_bytes = (unsigned char*) malloc(buf_len);
+        if (raw_bytes == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+        raw_bytes_len = buf_len;
+        memcpy(raw_bytes, buf, raw_bytes_len);
+
         // decode basemessage part of the struct
         status = BaseMessage::Decode(buf, buf_len);
         if (status < 0)
@@ -883,6 +946,21 @@ namespace UbiPAL
             offset += status;
             status = SUCCESS;
         }
+
+        // check is_private
+        if (buf[offset] == 0)
+        {
+            is_private = false;
+        }
+        else if (buf[offset] == 1)
+        {
+            is_private = true;
+        }
+        else
+        {
+            return INVALID_NETWORK_ENCODING;
+        }
+        offset += 1;
 
         // decode number of strings
         status = DecodeUint32_t(buf + offset, buf_len - offset, num_rules);
@@ -922,6 +1000,9 @@ namespace UbiPAL
         int length = 0;
 
         length = BaseMessage::EncodedLength();
+
+        // is_private
+        length += 1;
 
         // id
         length += 4 + id.size();

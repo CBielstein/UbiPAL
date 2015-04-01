@@ -228,17 +228,26 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error on failure
             int SendAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
+            // CreateAclFlags
+            // Flags for options to the CreateAcl functions
+            enum CreateAclFlags
+            {
+                PRIVATE = 2 << 0,
+            };
+
             // CreateAcl
             // adds a new Acl to the list of local acls with the given rules. There is also a version which takes a file path to rules.
             // args
+            //          [IN] flags:
+            //                  PRIVATE: Do not automatically share with other services when requested
             //          [IN] description: a description to put on the ACL, local only does not get published
             //          [IN] rules: a vector of rules to place in the new ACL
             //          [IN] file: The file where the access control list is listed (one rule per line)
             //          [OUT] result: the resultant ACL
             // return
             //          int: SUCCESS on success, else negative error code
-            int CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result);
-            int CreateAcl(const std::string& description, const std::string file, AccessControlList result);
+            int CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList& result);
+            int CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList result);
 
             // GetAclFlags
             // Flags for GetAcl, descriptions in comments on that function
@@ -368,7 +377,6 @@ namespace UbiPAL
             //          string: ID of this service
             inline std::string GetId() { return id; }
 
-            // XXX
             // RequestCertificate
             // Sends a message to to (or broadcasts if null) and requests the certificate for service_id
             // Function should be treated as async and results should be polled from GetNames
@@ -380,11 +388,10 @@ namespace UbiPAL
             //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
             //  return
             //          int: SUCCESS on successful send of message, else a negative error
-            int RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
+            int RequestCertificate(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to);
 
-            // XXX
             // RequestAcl
-            // Sends a message to to (or broadcasts if null) and requests any Access Control Lists (ACLs) from service_id
+            // Sends a message to to (or broadcasts if null) and requests any Access Control Lists (ACLs) with ACL id equal to acl_id
             // Function should be treated as async.
             // args
             //          [IN] flags:
@@ -394,7 +401,22 @@ namespace UbiPAL
             //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
             //  return
             //          int: SUCCESS on successful send of message, else a negative error
-            int RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
+            int RequestAcl(const uint32_t flags, const std::string& acl_id, const NamespaceCertificate* to);
+
+            // RequestAclsFromName
+            // Sends a message to to (or broadcasts if null) and requests a list of Access COntrol Lists (ACLs) that to has heard from service_id. Calls callback on reply.
+            // Reply format is comma separated list of IDs of ACLs, that are not private, that the replying service has heard from service_id
+            // Function should be treated as async.
+            // args
+            //          [IN] flags:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] service_id: The name of the service for which we are requesting ACLs
+            //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
+            //          [IN] callback: A function to call on reply
+            //  return
+            //          int: SUCCESS on successful send of message, else a negative error
+            int RequestAclsFromName(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to, const UbipalReplyCallback callback);
 
             // RegisterForUpdates
             // Sends a request to a given service to hear updates on a given message. Caches the updates locally. This avoids network overhead
@@ -840,6 +862,16 @@ namespace UbiPAL
             // return
             //          int: SUCCESS if the reply contained a legitimate certificate and it was successfully stored
             static int HandleRequestCertificateReply(UbipalService* us, const Message* original_message, const Message* reply_message);
+
+            // HandleRequestAclReply
+            // Stores the ACL held in the reply
+            // args
+            //          [IN] us: The UbiPAL service which should run this operation
+            //          [IN] original_message: The message which was sent
+            //          [IN] reply_message: The reply that we received with the ACL
+            // return
+            //          int: SUCCESS if the reply contained a legitimate ACL and it was successfully stored
+            static int HandleRequestAclReply(UbipalService* us, const Message* original_message, const Message* reply_message);
     };
 }
 

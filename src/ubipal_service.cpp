@@ -1167,7 +1167,7 @@ namespace UbiPAL
             return status;
         }
 
-        if (message->message.compare(0, strlen("NEWAESPAIR"), "NEWAESPAIR") == 0)
+        if (message->message == "NEWAESPAIR")
         {
             // use my private key to decrypt the argument (key & iv)
             unsigned char* aes_pair_decrypted = nullptr;
@@ -1250,28 +1250,106 @@ namespace UbiPAL
             return status;
         }
 
-        if (message->message.compare(0, strlen("REQUESTCERTIFICATE"), "REQUESTCERTIFICATE") == 0)
+        if (message->message == "REQUESTCERTIFICATE")
         {
             std::string requested_service((char*)message->argument, message->arg_len);
 
             // find if we have the appropriate certificate
             NamespaceCertificate requested_cert;
             status = GetCertificateForName(requested_service, requested_cert);
-            if (status != SUCCESS)
-            {
-                return status;
-            }
+
+            const unsigned char* reply_bytes = (status == SUCCESS) ? requested_cert.raw_bytes : (const unsigned char*)"NOT_FOUND";
+            const uint32_t reply_bytes_len = (status == SUCCESS) ? requested_cert.raw_bytes_len : strlen("NOT_FOUND");
 
             // send it as a message
-            status = ReplyToMessage(0, message, requested_cert.raw_bytes, requested_cert.raw_bytes_len);
+            status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
             return status;
         }
 
-        if (message->message.compare(0, strlen("REQUESTACL"), "REQUESTACL") == 0)
+        if (message->message == "REQUESTACL")
         {
-            // TODO fill this in
-            // think about privacy infringement if this is always replied to
-            return NOT_IMPLEMENTED;
+            std::string requested_acl((char*)message->argument, message->arg_len);
+
+            // iterate through all acls to see if this service has heard an acl with the appropriate msg_id
+            AccessControlList found_acl;
+            bool was_found = false;
+            local_acls_mutex.lock();
+            for (std::vector<AccessControlList>::iterator itr = local_acls.begin(); itr != local_acls.end(); ++itr)
+            {
+                if (itr->msg_id == requested_acl)
+                {
+                    found_acl = *itr;
+                    was_found = true;
+                    break;
+                }
+            }
+            local_acls_mutex.unlock();
+
+            if (was_found == false)
+            {
+                external_acls_mutex.lock();
+                for (std::unordered_map<std::string, std::vector<AccessControlList>>::iterator map_itr = external_acls.begin(); map_itr != external_acls.end(); ++map_itr)
+                {
+                    for (std::vector<AccessControlList>::iterator vec_itr = map_itr->second.begin(); vec_itr != map_itr->second.end(); ++vec_itr)
+                    {
+                        if (vec_itr->msg_id == requested_acl)
+                        {
+                            found_acl = *vec_itr;
+                            was_found = true;
+                            break;
+                        }
+                    }
+
+                    if (was_found == true)
+                    {
+                        break;
+                    }
+                }
+                external_acls_mutex.unlock();
+            }
+
+            const unsigned char* reply_bytes = was_found ? found_acl.raw_bytes : (const unsigned char*)"NOT_FOUND";
+            const uint32_t reply_bytes_len = was_found ? found_acl.raw_bytes_len : strlen("NOT_FOUND");
+
+            // send it as a message
+            status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
+            return status;
+        }
+
+        if (message->message == "REQUESTLISTACL")
+        {
+            std::string requested_service((char*)message->argument, message->arg_len);
+            std::vector<AccessControlList> overheard_acls;
+
+            if (requested_service == GetId())
+            {
+                local_acls_mutex.lock();
+                overheard_acls = local_acls;
+                local_acls_mutex.unlock();
+            }
+            else
+            {
+                external_acls_mutex.lock();
+                if (external_acls.count(requested_service) != 0)
+                {
+                    overheard_acls = external_acls[requested_service];
+                }
+                external_acls_mutex.unlock();
+            }
+
+            std::string reply_ids;
+            for (unsigned int i = 0; i < overheard_acls.size(); ++i)
+            {
+                if (overheard_acls[i].is_private == false)
+                {
+                    reply_ids += overheard_acls[i].msg_id + ",";
+                }
+            }
+
+            const unsigned char* reply_bytes = (overheard_acls.size() > 0) ? (const unsigned char*)reply_ids.c_str() : (const unsigned char*)"NOT_FOUND";
+            const uint32_t reply_bytes_len = (overheard_acls.size() > 0) ? reply_ids.size() : strlen("NOT_FOUND");
+            status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
+            return status;
         }
 
         // check against ACLs
@@ -3052,13 +3130,23 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)
+    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)
     {
-        local_acls_mutex.lock();
-
         int status = SUCCESS;
 
+        if ((flags & ~(CreateAclFlags::PRIVATE)) != 0)
+        {
+            return INVALID_ARG;
+        }
+
+        local_acls_mutex.lock();
+
         AccessControlList temp_acl;
+
+        if ((flags & CreateAclFlags::PRIVATE) != 0)
+        {
+            temp_acl.is_private = true;
+        }
 
         temp_acl.id = id;
         temp_acl.description = description;
@@ -3071,9 +3159,14 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::CreateAcl(const std::string& description, const std::string file, AccessControlList result)
+    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList result)
     {
         int status = SUCCESS;
+
+        if ((flags & ~(CreateAclFlags::PRIVATE)) != 0)
+        {
+            return INVALID_ARG;
+        }
 
         // open file
         std::vector<std::string> rules;
@@ -3092,7 +3185,7 @@ namespace UbiPAL
         }
 
         // create file
-        status = CreateAcl(description, rules, result);
+        status = CreateAcl(flags, description, rules, result);
 
         return status;
     }
@@ -3252,16 +3345,19 @@ namespace UbiPAL
         return (time.tv_sec * 1000) + (time.tv_usec / 1000);
     }
 
-    int UbipalService::RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
+    int UbipalService::RequestCertificate(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to)
     {
-        // TODO add a callback to handle adding the returned certificate
         return SendMessage(flags, to, "REQUESTCERTIFICATE", (unsigned char*)service_id.c_str(), service_id.size(), HandleRequestCertificateReply);
     }
 
-    int UbipalService::RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
+    int UbipalService::RequestAcl(const uint32_t flags, const std::string& acl_id, const NamespaceCertificate* to)
     {
-        // TODO add a callback to handle adding the returned ACL
-        return SendMessage(flags, to, "REQUESTACL", (unsigned char*)service_id.c_str(), service_id.size());
+        return SendMessage(flags, to, "REQUESTACL", (unsigned char*)acl_id.c_str(), acl_id.size(), HandleRequestAclReply);
+    }
+
+    int UbipalService::RequestAclsFromName(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to, const UbipalReplyCallback callback)
+    {
+        return SendMessage(flags, to, "REQUESTLISTACLS", (unsigned char*)service_id.c_str(), service_id.size(), callback);
     }
 
     int UbipalService::GetCertificateForName(const std::string& name, NamespaceCertificate& certificate)
@@ -3472,7 +3568,7 @@ namespace UbiPAL
 
         // create ACL based on new rules
         AccessControlList new_acl;
-        status = CreateAcl(REGISTRATION_ACL, new_rules, new_acl);
+        status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, new_acl);
         if (status != SUCCESS)
         {
             return status;
@@ -3525,7 +3621,7 @@ namespace UbiPAL
         if (new_rules.size() != 0)
         {
             AccessControlList new_acl;
-            status = CreateAcl(REGISTRATION_ACL, new_rules, new_acl);
+            status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, new_acl);
             if (status != SUCCESS)
             {
                 return status;
@@ -3683,6 +3779,48 @@ namespace UbiPAL
 
         // call RecvNamespaceCertificate to handle the rest
         status = us->RecvNamespaceCertificate(&received_cert);
+        return status;
+    }
+
+    int UbipalService::HandleRequestAclReply(UbipalService* us, const Message* original_message, const Message* reply_message)
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+
+        // check arguments
+        if (us == nullptr || reply_message == nullptr)
+        {
+            return NULL_ARG;
+        }
+        if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        {
+            return NOT_FOUND;
+        }
+
+        // decode ACL
+        AccessControlList received_acl;
+        returned_value = received_acl.Decode(reply_message->argument, reply_message->arg_len);
+        if (returned_value < SUCCESS)
+        {
+            return returned_value;
+        }
+
+        // verify signature
+        RSA* pkey = nullptr;
+        status = RsaWrappers::StringToPublicKey(received_acl.id, pkey);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        // call RecvNamespaceCertificate to handle the rest
+        status = us->RecvAcl(&received_acl);
         return status;
     }
 }
