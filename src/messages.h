@@ -37,6 +37,7 @@ Message: BaseMessage, plus the following
 NamespaceCerfiticate: BaseMessage, plus the following
     4 bytes: id_len uint32_t
     id_len bytes: id char*
+    4 bytes: version uint32_t
     4 bytes: desc_len uint32_t
     desc_len bytes: description char*
     4 bytes: addr_len uint32_t
@@ -179,6 +180,9 @@ namespace UbiPAL
     struct NamespaceCertificate : BaseMessage
     {
         std::string id;
+
+        // monitonically increasing version number
+        uint32_t version;
         std::string description;
         std::string address;
         std::string port;

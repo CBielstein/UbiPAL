@@ -587,6 +587,7 @@ namespace UbiPAL
         address = rhs.address;
         port = rhs.port;
         raw_bytes_len = rhs.raw_bytes_len;
+        version = rhs.version;
 
         raw_bytes = (unsigned char*) malloc(raw_bytes_len);
         if (raw_bytes == nullptr)
@@ -605,6 +606,7 @@ namespace UbiPAL
         type = NAMESPACE_CERTIFICATE;
         raw_bytes = nullptr;
         raw_bytes_len = 0;
+        version = 0;
     }
 
     NamespaceCertificate::NamespaceCertificate(const NamespaceCertificate& other)
@@ -683,6 +685,18 @@ namespace UbiPAL
         if (status < 0)
         {
             Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // encode version
+        status = EncodeUint32_t(buf + offset, buf_len - offset, version);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeUint32_t failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -773,6 +787,18 @@ namespace UbiPAL
             offset += status;
         }
 
+        // decode version
+        status = DecodeUint32_t(buf + offset, buf_len - offset, version);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
         // decode description
         status = DecodeString(buf + offset, buf_len - offset, description);
         if (status < 0)
@@ -814,7 +840,7 @@ namespace UbiPAL
 
     int NamespaceCertificate::EncodedLength() const
     {
-        return BaseMessage::EncodedLength() + 4 + id.size() + 4 + description.size() + 4 + address.size() + 4 + port.size();
+        return BaseMessage::EncodedLength() + 4 + id.size() + 4 + 4 + description.size() + 4 + address.size() + 4 + port.size();
     }
 
     int AccessControlList::Encode(unsigned char* const buf, const uint32_t buf_len) const

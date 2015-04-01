@@ -655,6 +655,12 @@ namespace UbiPAL
             // A string description useful for finding a specific service
             std::string description;
 
+            // The most recently sent out namespace certificate. If nothing has changed between SendName calls, simply resend this.
+            NamespaceCertificate* current_cert;
+
+            // Prevents race condition on the above
+            std::mutex current_cert_mutex;
+
             // stores information parsed from received certificates from services we trust
             std::unordered_map<std::string, NamespaceCertificate> trusted_services;
 
@@ -668,7 +674,10 @@ namespace UbiPAL
             // maps the public key string representation to any acls it has sent
             std::unordered_map<std::string, std::vector<AccessControlList>> external_acls;
 
-            // prevents toc-tou race in external_acls
+            // a set of ACLs that have been revoked so the service does not reaccept them
+            std::set<std::string> revoked_external_acls;
+
+            // prevents toc-tou race in external_acls and revoked_external_acls
             std::mutex external_acls_mutex;
 
             // some data structure to hold our rules array of strings or something

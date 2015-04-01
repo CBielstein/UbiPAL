@@ -137,6 +137,7 @@ namespace UbiPAL
         struct sockaddr_in* sa = nullptr;
         char* addr = nullptr;
         size_t end_subnet = 0;
+        current_cert = nullptr;
 
         // Set default thread counts
         num_recv_threads = 5;
@@ -349,6 +350,9 @@ namespace UbiPAL
 
         // free broadcast_info
         freeaddrinfo(broadcast_info);
+
+        // delete the current_cert
+        delete current_cert;
 
         #ifdef EVALUATE
             // last thing before quitting, put out our stats
@@ -968,6 +972,14 @@ namespace UbiPAL
 
         // find all the acls from this service
         external_acls_mutex.lock();
+
+        // ensure this acl wasn't previously revoked
+        if (revoked_external_acls.count(acl->msg_id) != 0)
+        {
+            Log::Line(Log::INFO, "UbipalService::RecvAcl: Attempted to add ACL which was previously revoked.");
+            external_acls_mutex.unlock();
+            return PREVIOUSLY_REVOKED;
+        }
         if (external_acls.count(acl->id) == 0)
         {
             // wasnt found, so add it
@@ -1015,8 +1027,11 @@ namespace UbiPAL
             itr = trusted_services.find(name_cert->id);
             if (itr != trusted_services.end())
             {
-                // it is, so update it
-                itr->second = *name_cert;
+                // it is, so update it if it's newer
+                if (name_cert->version > itr->second.version)
+                {
+                    itr->second = *name_cert;
+                }
             }
             else
             {
@@ -1030,8 +1045,11 @@ namespace UbiPAL
             itr = untrusted_services.find(name_cert->id);
             if (itr != trusted_services.end())
             {
-                // it is, so update it
-                itr->second = *name_cert;
+                // it is, so update it if it's newer
+                if (name_cert->version > itr->second.version)
+                {
+                    itr->second = *name_cert;
+                }
             }
             else
             {
@@ -1151,6 +1169,7 @@ namespace UbiPAL
                 {
                     if (external_acls[message->from][i].msg_id == revoke_id)
                     {
+                        revoked_external_acls.insert(revoke_id);
                         external_acls[message->from].erase(external_acls[message->from].begin() + i);
                         if (external_acls[message->from].size() == 0)
                         {
@@ -1496,13 +1515,58 @@ namespace UbiPAL
 
     int UbipalService::SetAddress(const std::string& addr)
     {
+        current_cert_mutex.lock();
         address = addr;
+
+        // update namespace certificate
+        NamespaceCertificate self_nc;
+        self_nc.from = id;
+        self_nc.id = id;
+        self_nc.description = description;
+        self_nc.address = address;
+        self_nc.port = port;
+
+        if (current_cert != nullptr)
+        {
+            self_nc.version = current_cert->version + 1;
+        }
+        else
+        {
+            self_nc.version = 0;
+        }
+
+        current_cert = new NamespaceCertificate();
+        *current_cert = self_nc;
+        current_cert_mutex.unlock();
         return SUCCESS;
     }
 
     int UbipalService::SetPort(const std::string& prt)
     {
+        current_cert_mutex.lock();
         port = prt;
+
+        // update namespace certificate
+        NamespaceCertificate self_nc;
+        self_nc.from = id;
+        self_nc.id = id;
+        self_nc.description = description;
+        self_nc.address = address;
+        self_nc.port = port;
+
+        if (current_cert != nullptr)
+        {
+            self_nc.version = current_cert->version + 1;
+        }
+        else
+        {
+            self_nc.version = 0;
+        }
+
+
+        current_cert = new NamespaceCertificate();
+        *current_cert = self_nc;
+        current_cert_mutex.unlock();
         return SUCCESS;
     }
 
@@ -1973,6 +2037,26 @@ namespace UbiPAL
         msg->address = address;
         msg->port = port;
 
+        current_cert_mutex.lock();
+        if (current_cert && *msg == *current_cert)
+        {
+            *msg = *current_cert;
+        }
+        else
+        {
+            if (current_cert == nullptr)
+            {
+                current_cert = new NamespaceCertificate();
+                msg->version = 0;
+            }
+            else
+            {
+                msg->version = current_cert->version + 1;
+            }
+            *current_cert = *msg;
+        }
+        current_cert_mutex.unlock();
+
         sm_args = new HandleSendMessageArguments(this);
         if (send_to != nullptr)
         {
@@ -2097,13 +2181,26 @@ namespace UbiPAL
         // add me if flaged
         if ((flags & GetNamesFlags::INCLUDE_SELF) != 0)
         {
-            NamespaceCertificate self_nc;
-            self_nc.from = id;
-            self_nc.id = id;
-            self_nc.description = description;
-            self_nc.address = address;
-            self_nc.port = port;
-            names.push_back(self_nc);
+            current_cert_mutex.lock();
+            if (current_cert != nullptr)
+            {
+                names.push_back(*current_cert);
+            }
+            else
+            {
+                NamespaceCertificate self_nc;
+                self_nc.from = id;
+                self_nc.id = id;
+                self_nc.description = description;
+                self_nc.address = address;
+                self_nc.port = port;
+                self_nc.version = 0;
+                names.push_back(self_nc);
+
+                current_cert = new NamespaceCertificate();
+                *current_cert = self_nc;
+            }
+            current_cert_mutex.unlock();
         }
 
         // add untrusted, if flagged

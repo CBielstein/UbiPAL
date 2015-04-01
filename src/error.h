@@ -38,6 +38,7 @@ namespace UbiPAL
         INVALID_SYNTAX = -23,
         FAILED_EVALUATION = -24,
         NOT_IMPLEMENTED = -25,
+        PREVIOUSLY_REVOKED = -26,
     };
 
     // get_error_description
