@@ -70,10 +70,6 @@ namespace UbiPAL
         char* port = nullptr;
         std::string line;
 
-        condition_timeout_length = 500;
-        broadcast_name_interval = 5000;
-        auto_broadcast_name = true;
-
         fd = fopen(file_path.c_str(), "r");
         if (fd == nullptr)
         {
@@ -138,6 +134,9 @@ namespace UbiPAL
         char* addr = nullptr;
         size_t end_subnet = 0;
         current_cert = nullptr;
+        condition_timeout_length = 500;
+        broadcast_name_interval = 5000;
+        auto_broadcast_name = false;
 
         // Set default thread counts
         num_recv_threads = 5;
@@ -1271,10 +1270,9 @@ namespace UbiPAL
 
         if (message->message == "REQUESTCERTIFICATE")
         {
-            std::string requested_service((char*)message->argument, message->arg_len);
-
             // find if we have the appropriate certificate
             NamespaceCertificate requested_cert;
+            std::string requested_service = (message->arg_len == 0) ? GetId() : std::string((char*)message->argument, message->arg_len);
             status = GetCertificateForName(requested_service, requested_cert);
 
             const unsigned char* reply_bytes = (status == SUCCESS) ? requested_cert.raw_bytes : (const unsigned char*)"NOT_FOUND";
