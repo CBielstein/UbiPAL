@@ -1733,7 +1733,7 @@ namespace UbiPAL
             RETURN_STATUS(status);
         }
 
-        status = EvaluateStatementRecurse(statement_struct, statement_struct.root, acl_trail, conditions, message);
+        status = EvaluateStatementRecurse(statement_struct, statement_struct.root, acl_trail, conditions, message, std::numeric_limits<uint32_t>::max());
         if (status != SUCCESS)
         {
             RETURN_STATUS(status);
@@ -1762,12 +1762,24 @@ namespace UbiPAL
         statement_struct.statement = nullptr;
 
         // parse type of statement
-        if (statement.find(" CAN SAY ") != std::string::npos)
+        if (statement.find(" CAN SAY") != std::string::npos)
         {
             statement_struct.type = Statement::Type::CAN_SAY;
-            size_t connective = statement.find(" CAN SAY ");
-            size_t connective_end = connective + strlen(" CAN SAY ");
-            statement_struct.statement = new Statement; // TODO this is a memory leak
+            size_t connective = statement.find(" CAN SAY");
+            size_t connective_end = statement.find(" ", connective + strlen(" CAN SAY"));
+
+            // if there is a delegation depth limit, handle it here
+            if (statement[connective_end - 1] == ']')
+            {
+                std::string num_string(statement, connective + strlen(" CAN SAY["), (connective_end - 1) - (connective + strlen(" CAN SAY[")));
+                returned_value = std::sscanf(num_string.c_str(), "%u", &statement_struct.num1);
+            }
+            else
+            {
+                statement_struct.num1 = std::numeric_limits<uint32_t>::max();
+            }
+
+            statement_struct.statement = new Statement;
             if (statement_struct.statement == nullptr)
             {
                 RETURN_STATUS(MALLOC_FAILURE);
@@ -1999,7 +2011,8 @@ namespace UbiPAL
             return status;
     }
 
-    int UbipalService::EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<Statement>& conditions, const Message* message)
+    int UbipalService::EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail,
+                                                std::vector<Statement>& conditions, const Message* message, const uint32_t delegation_bound)
     {
         int status = SUCCESS;
         int returned_value = 0;
@@ -2228,6 +2241,11 @@ namespace UbiPAL
                 if (parsed_rule.type == Statement::Type::CAN_SAY)
                 {
                     temp_consider.service_id = parsed_rule.name1;
+                    temp_consider.delegation_bound = std::min(delegation_bound, parsed_rule.num1);
+                    if (temp_consider.delegation_bound == 0)
+                    {
+                        continue;
+                    }
                 }
                 else
                 {
@@ -2271,7 +2289,7 @@ namespace UbiPAL
                     {
                         std::vector<std::string> cond_acl_trail;
                         std::vector<Statement> cond_conds;
-                        status = EvaluateStatementRecurse(all_conditions[j], current_service, cond_acl_trail, cond_conds, NULL);
+                        status = EvaluateStatementRecurse(all_conditions[j], current_service, cond_acl_trail, cond_conds, NULL, std::numeric_limits<uint32_t>::max());
                         if (status == SUCCESS)
                         {
                             all_conditions.erase(all_conditions.begin() + i);
@@ -2317,6 +2335,7 @@ namespace UbiPAL
 
                 // if it's a delegation with a variable service
                 std::vector<std::string> delegators;
+                std::vector<uint32_t> new_delegation_bounds;
                 if (to_consider[i].service_id.size() == 1)
                 {
                     // check if a condition applies, if it does, remove that condition and recurse on anything that meets the condition
@@ -2348,6 +2367,7 @@ namespace UbiPAL
                             for (std::set<std::string>::iterator set_itr = potential_roots[to_consider[i].service_id].begin(); set_itr != potential_roots[to_consider[i].service_id].end(); ++set_itr)
                             {
                                 delegators.push_back(*set_itr);
+                                new_delegation_bounds.push_back(to_consider[i].delegation_bound);
                             }
                         }
                         else
@@ -2364,12 +2384,14 @@ namespace UbiPAL
                         if (GetId() != current_service)
                         {
                             delegators.push_back(GetId());
+                            new_delegation_bounds.push_back(to_consider[i].delegation_bound);
                         }
                         for (acls_itr = external_acls.begin(); acls_itr != external_acls.end(); ++acls_itr)
                         {
                             if (acls_itr->first != current_service)
                             {
                                 delegators.push_back(acls_itr->first);
+                                new_delegation_bounds.push_back(to_consider[i].delegation_bound);
                             }
                         }
                     }
@@ -2377,11 +2399,12 @@ namespace UbiPAL
                 else
                 {
                     delegators.push_back(to_consider[i].service_id);
+                    new_delegation_bounds.push_back(to_consider[i].delegation_bound);
                 }
 
                 for (unsigned int j = 0; j < delegators.size(); ++j)
                 {
-                    status = EvaluateStatementRecurse(statement, delegators[j], new_acl_trail, new_conditions, message);
+                    status = EvaluateStatementRecurse(statement, delegators[j], new_acl_trail, new_conditions, message, new_delegation_bounds[j] - 1);
                     if (status == SUCCESS)
                     {
                         acl_trail = new_acl_trail;
@@ -2897,7 +2920,7 @@ namespace UbiPAL
                     // replacements are done, try to evaluate
                     std::vector<std::string> acl_trail;
                     std::vector<Statement> conditions;
-                    status = EvaluateStatementRecurse(temp_statement, temp_statement.root, acl_trail, conditions, NULL);
+                    status = EvaluateStatementRecurse(temp_statement, temp_statement.root, acl_trail, conditions, NULL, std::numeric_limits<uint32_t>::max());
                     if (status == SUCCESS)
                     {
                         successful_names.insert(*names_itr);

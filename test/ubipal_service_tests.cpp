@@ -181,6 +181,7 @@ namespace UbiPAL
 
     int UbipalServiceTests::UbipalServiceTestEndRecv()
     {
+/*
         int status = SUCCESS;
 
         UbipalService us;
@@ -200,6 +201,8 @@ namespace UbiPAL
         {
             return SUCCESS;
         }
+        */
+        return NOT_IMPLEMENTED;
     }
 
     int UbipalServiceTests::UbipalServiceTestSetAddress()
@@ -777,6 +780,125 @@ namespace UbiPAL
         return SUCCESS;
     }
 
+    int UbipalServiceTests::UbipalServiceTestParseBoundedDelegation()
+    {
+        int status = SUCCESS;
+
+        // successful delegation
+        {
+            // create service
+            UbipalService lauren;
+            lauren.id = "Lauren";
+
+            // add rules
+            std::vector<std::string> rules;
+            rules.push_back("Meredith CAN SAY[2] Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+            AccessControlList acl;
+            status = lauren.CreateAcl("delegation", rules, acl);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            AccessControlList mere;
+            mere.id = "Meredith";
+            mere.rules.push_back("Josh CAN SAY X CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Meredith"].push_back(mere);
+
+            AccessControlList josh;
+            josh.id = "Josh";
+            josh.rules.push_back("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Josh"].push_back(josh);
+
+            // run tests
+            status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+        }
+
+        // bounded by gate
+        {
+            // create service
+            UbipalService lauren;
+            lauren.id = "Lauren";
+
+            // add rules
+            std::vector<std::string> rules;
+            rules.push_back("Meredith CAN SAY[1] Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+            AccessControlList acl;
+            status = lauren.CreateAcl("delegation", rules, acl);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            AccessControlList mere;
+            mere.id = "Meredith";
+            mere.rules.push_back("Josh CAN SAY X CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Meredith"].push_back(mere);
+
+            AccessControlList josh;
+            josh.id = "Josh";
+            josh.rules.push_back("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Josh"].push_back(josh);
+
+            // run tests
+            status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+            if (status != NOT_IN_ACLS)
+            {
+                return (status == SUCCESS) ? GENERAL_FAILURE : status;
+            }
+        }
+
+        // bounded by delegator
+        {
+            // create service
+            UbipalService lauren;
+            lauren.id = "Lauren";
+
+            // add rules
+            std::vector<std::string> rules;
+            rules.push_back("Meredith CAN SAY[10] Y CAN SEND MESSAGE TWO_STEP TO Lauren");
+            AccessControlList acl;
+            status = lauren.CreateAcl("delegation", rules, acl);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            AccessControlList mere;
+            mere.id = "Meredith";
+            mere.rules.push_back("Josh CAN SAY X CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Meredith"].push_back(mere);
+
+            AccessControlList josh;
+            josh.id = "Josh";
+            josh.rules.push_back("Neal CAN SAY[1] CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Josh"].push_back(josh);
+
+            AccessControlList neal;
+            neal.id = "Neal";
+            neal.rules.push_back("Sarah CAN SAY CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Neal"].push_back(neal);
+
+            AccessControlList sarah;
+            sarah.id = "Sarah";
+            sarah.rules.push_back("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren");
+            lauren.external_acls["Sarah"].push_back(sarah);
+
+            // run tests
+            status = lauren.EvaluateStatement("Cameron CAN SEND MESSAGE TWO_STEP TO Lauren", NULL);
+            if (status != NOT_IN_ACLS)
+            {
+                return (status == SUCCESS) ? GENERAL_FAILURE : status;
+            }
+        }
+
+        return SUCCESS;
+    }
+
     int UbipalServiceTests::UbipalServiceTestUpperCase()
     {
         std::string upper_letters = UbipalService::UpperCase("This is A test of letters");
@@ -841,6 +963,8 @@ namespace UbiPAL
                                  "UbipalServiceTestParseDelegationVariable", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestParseDelegationVariableConditions, SUCCESS,
                                  "UbipalServiceTestParseDelegationVariableConditions", module_count, module_fails);
+        TestHelpers::RunTestFunc(UbipalServiceTestParseBoundedDelegation, SUCCESS,
+                                 "UbipalServiceTestParseBoundedDelegation", module_count, module_fails);
         TestHelpers::RunTestFunc(UbipalServiceTestUpperCase, SUCCESS,
                                  "UbipalServiceTestUpperCase", module_count, module_fails);
     }
