@@ -31,6 +31,7 @@ namespace UbiPAL
             static int UbipalServiceTestParseDelegation();
             static int UbipalServiceTestParseDelegationVariable();
             static int UbipalServiceTestParseDelegationVariableConditions();
+            static int UbipalServiceTestParseBoundedDelegation();
             static int UbipalServiceTestUpperCase();
 
             // End Unit tests

@@ -296,9 +296,11 @@ namespace UbiPAL
             //          [IN/OUT] acl_trail: The trail of acls we've gone through to this point to avoid loops
             //          [IN/OUT] conditions: The collections of conditions to this point
             //          [IN] message: Optional, a messag eto deliver if the statement passes condition checks
+            //          [IN] delegation_bound: A bound on the number of services which may delegate in a chain to allow the given statement
             // return
             //          int: SUCCESS means the rule holds, else reutnrs NOT_IN_ACLS, FAILED_CONDITIONS, TIMEOUT_CONDITIONS, FAILED_EVALUATION, or INVALID_SYNTAX, else a negative error code
-            int EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail, std::vector<Statement>& conditions, const Message* message);
+            int EvaluateStatementRecurse(const Statement& statement, const std::string& current_service, std::vector<std::string>& acl_trail,
+                                         std::vector<Statement>& conditions, const Message* message, const uint32_t delegation_bound);
 
             // ParseStatement
             // Parses statement in to a Statement struct for comparison with other parsed rules.
@@ -692,6 +694,7 @@ namespace UbiPAL
                 std::string service_id;
                 std::vector<Statement> conditions;
                 std::string referenced_from_acl;
+                uint32_t delegation_bound;
             };
 
             // GetConditionsFromRule
