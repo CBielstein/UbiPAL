@@ -67,6 +67,7 @@ int main ()
 
     // Create service
     UbiPAL::UbipalService us;
+    us.SetNameBroadcast(true, 10000);
 
     // Start receiving for message replies
     status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);

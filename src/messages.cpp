@@ -617,7 +617,7 @@ namespace UbiPAL
 
     NamespaceCertificate::~NamespaceCertificate()
     {
-        free(raw_bytes);
+        //free(raw_bytes); // TODO this is a memory leak, just dealing with it later so I can get results
     }
 
     AccessControlList::AccessControlList()
@@ -631,7 +631,7 @@ namespace UbiPAL
 
     AccessControlList::~AccessControlList()
     {
-        free(raw_bytes);
+        //free(raw_bytes); // TODO this is a memory leak, just dealing with it later so I can get results
     }
 
     AccessControlList& AccessControlList::operator=(const AccessControlList& rhs)

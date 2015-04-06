@@ -35,6 +35,7 @@ namespace UbiPAL
             static int MessagesTestNamespaceCertificateEqualityTestFail();
             static int MessagesTestAccessControlListEqualityTestPass();
             static int MessagesTestAccessControlListEqualityTestFail();
+            static int MessagesTestNamespaceCertificateAssignment();
 
             // End Unit tests
 

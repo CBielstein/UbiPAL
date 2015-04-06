@@ -1090,14 +1090,6 @@ namespace UbiPAL
                     return GENERAL_FAILURE;
                 }
 
-                returned_value = reply_callback_map.erase(replying_id);
-                if (returned_value != 1)
-                {
-                    Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.erase() failed to remove the mapping.");
-                    reply_callback_mutex.unlock();
-                    return GENERAL_FAILURE;
-                }
-
                 Message* original_message = nullptr;
                 bool found_original_message = false;
                 for (unsigned int i = 0; i < msgs_awaiting_reply.size(); ++i)
@@ -1105,8 +1097,14 @@ namespace UbiPAL
                     if (msgs_awaiting_reply[i]->msg_id == replying_id)
                     {
                         original_message = msgs_awaiting_reply[i];
-                        delete msgs_awaiting_reply[i];
-                        msgs_awaiting_reply.erase(msgs_awaiting_reply.begin() + i);
+
+                        // only erase the mapping if it wasn't a broadcast
+                        if (original_message->to.empty() == false)
+                        {
+                            delete msgs_awaiting_reply[i];
+                            msgs_awaiting_reply.erase(msgs_awaiting_reply.begin() + i);
+                        }
+
                         found_original_message = true;
                         break;
                     }
@@ -1117,6 +1115,18 @@ namespace UbiPAL
                     Log::Line(Log::EMERG, "UbipalService::RecvMessage: msgs_awaiting_reply did not have the original message");
                     reply_callback_mutex.unlock();
                     return GENERAL_FAILURE;
+                }
+
+                // erase the mapping only if it wasn't a broadcast
+                if (original_message->to.empty() == false)
+                {
+                    returned_value = reply_callback_map.erase(replying_id);
+                    if (returned_value != 1)
+                    {
+                        Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.erase() failed to remove the mapping.");
+                        reply_callback_mutex.unlock();
+                        return GENERAL_FAILURE;
+                    }
                 }
 
                 reply_callback_mutex.unlock();
