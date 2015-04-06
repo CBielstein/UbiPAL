@@ -1285,11 +1285,42 @@ namespace UbiPAL
             std::string requested_service = (message->arg_len == 0) ? GetId() : std::string((char*)message->argument, message->arg_len);
             status = GetCertificateForName(requested_service, requested_cert);
 
-            const unsigned char* reply_bytes = (status == SUCCESS) ? requested_cert.raw_bytes : (const unsigned char*)"NOT_FOUND";
-            const uint32_t reply_bytes_len = (status == SUCCESS) ? requested_cert.raw_bytes_len : strlen("NOT_FOUND");
+            uint32_t reply_bytes_len = 0;
+            unsigned char* reply_bytes = nullptr;
+            if (status == SUCCESS)
+            {
+                reply_bytes_len = (uint32_t)requested_cert.EncodedLength();
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                returned_value = requested_cert.Encode(reply_bytes, reply_bytes_len);
+                if (returned_value < 0)
+                {
+                    return returned_value;
+                }
+                else
+                {
+                    reply_bytes_len = (uint32_t)returned_value;
+                }
+            }
+            else
+            {
+                reply_bytes_len = strlen("NOT_FOUND");
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                memcpy(reply_bytes, "NOT_FOUND", strlen("NOT_FOUND"));
+            }
 
             // send it as a message
             status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
+            free(reply_bytes);
             return status;
         }
 
@@ -1335,15 +1366,45 @@ namespace UbiPAL
                 external_acls_mutex.unlock();
             }
 
-            const unsigned char* reply_bytes = was_found ? found_acl.raw_bytes : (const unsigned char*)"NOT_FOUND";
-            const uint32_t reply_bytes_len = was_found ? found_acl.raw_bytes_len : strlen("NOT_FOUND");
+            uint32_t reply_bytes_len = 0;
+            unsigned char* reply_bytes = nullptr;
+            if (status == SUCCESS)
+            {
+                reply_bytes_len = (uint32_t)found_acl.EncodedLength();
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                returned_value = found_acl.Encode(reply_bytes, reply_bytes_len);
+                if (returned_value < 0)
+                {
+                    return returned_value;
+                }
+                else
+                {
+                    reply_bytes_len = (uint32_t)returned_value;
+                }
+            }
+            else
+            {
+                reply_bytes_len = strlen("NOT_FOUND");
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                memcpy(reply_bytes, "NOT_FOUND", strlen("NOT_FOUND"));
+            }
 
             // send it as a message
             status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
             return status;
         }
 
-        if (message->message == "REQUESTLISTACL")
+        if (message->message == "REQUESTLISTACLS")
         {
             std::string requested_service((char*)message->argument, message->arg_len);
             std::vector<AccessControlList> overheard_acls;
@@ -3470,7 +3531,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         std::vector<NamespaceCertificate> all_certificates;
-        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, all_certificates);
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_SELF, all_certificates);
         if (status != SUCCESS)
         {
             return status;
@@ -3855,7 +3916,11 @@ namespace UbiPAL
         {
             return NULL_ARG;
         }
-        if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        else if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        {
+            return NOT_FOUND;
+        }
+        else if (reply_message->arg_len == strlen("NOT_FOUND") && memcmp(reply_message->argument, "NOT_FOUND", strlen("NOT_FOUND")) == 0)
         {
             return NOT_FOUND;
         }
@@ -3868,18 +3933,22 @@ namespace UbiPAL
             return returned_value;
         }
 
-        // verify signature
-        RSA* pkey = nullptr;
-        status = RsaWrappers::StringToPublicKey(received_cert.id, pkey);
-        if (status != SUCCESS)
+        // verify signature if the namespace certificate is not the sender's
+        // (if it is the sender, it was already verified when receiving the message)
+        if (reply_message->from != received_cert.id)
         {
-            return status;
-        }
+            RSA* pkey = nullptr;
+            status = RsaWrappers::StringToPublicKey(received_cert.id, pkey);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
 
-        status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
-        if (status != SUCCESS)
-        {
-            return status;
+            status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
         }
 
         // call RecvNamespaceCertificate to handle the rest
@@ -3897,7 +3966,11 @@ namespace UbiPAL
         {
             return NULL_ARG;
         }
-        if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        else if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        {
+            return NOT_FOUND;
+        }
+        else if (reply_message->arg_len == strlen("NOT_FOUND") && memcmp(reply_message->argument, "NOT_FOUND", strlen("NOT_FOUND")) == 0)
         {
             return NOT_FOUND;
         }
@@ -3910,22 +3983,54 @@ namespace UbiPAL
             return returned_value;
         }
 
-        // verify signature
-        RSA* pkey = nullptr;
-        status = RsaWrappers::StringToPublicKey(received_acl.id, pkey);
-        if (status != SUCCESS)
+        // verify signature if the namespace certificate is not the sender's
+        // (if it is the sender, it was already verified when receiving the message)
+        if (reply_message->from != received_acl.id)
         {
-            return status;
-        }
+            RSA* pkey = nullptr;
+            status = RsaWrappers::StringToPublicKey(received_acl.id, pkey);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
 
-        status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
-        if (status != SUCCESS)
-        {
-            return status;
+            status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
         }
 
         // call RecvNamespaceCertificate to handle the rest
         status = us->RecvAcl(&received_acl);
+        return status;
+    }
+
+    int UbipalService::GetAclsForName(const std::string& name, std::vector<AccessControlList>& acls)
+    {
+        int status = SUCCESS;
+
+        // if asking for our own acls, simply return local_acls
+        if (name == GetId())
+        {
+            local_acls_mutex.lock();
+            acls = local_acls;
+            local_acls_mutex.unlock();
+            return status;
+        }
+
+        // else search external_acls
+        external_acls_mutex.lock();
+        if (external_acls.count(name) == 1)
+        {
+            acls = external_acls[name];
+        }
+        else
+        {
+            status = NOT_FOUND;
+        }
+        external_acls_mutex.unlock();
+
         return status;
     }
 }

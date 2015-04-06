@@ -338,9 +338,19 @@ namespace UbiPAL
             // Returns the certificate for a given name
             // args
             //          [IN] name: The name to match to a certificate
+            //          [OUT] certificate: The certificate, if found
             // return
             //          int SUCCESS if found, NOT_FOUND if not
             int GetCertificateForName(const std::string& name, NamespaceCertificate& certificate);
+
+            // GetAclsForName
+            // Fetches known ACLs for a given service name
+            // args
+            //          [IN] name: The name of the service in question
+            //          [OUT] acls: A vector of the found certificates
+            // return
+            //          int SUCCESS if found, negative error otherwise
+            int GetAclsForName(const std::string& name, std::vector<AccessControlList>& acls);
 
             enum GetNamesFlags
             {

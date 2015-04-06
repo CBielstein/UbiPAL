@@ -668,6 +668,18 @@ namespace UbiPAL
             return INVALID_ARG;
         }
 
+        // if we have the raw bytes and they're enough to hold all of our info, reuse that
+        // this gives us the original signature as well
+        if (raw_bytes != nullptr && (int)raw_bytes_len >= EncodedLength())
+        {
+            if (buf_len < raw_bytes_len)
+            {
+                return BUFFER_TOO_SMALL;
+            }
+            memcpy(buf, raw_bytes, raw_bytes_len);
+            return raw_bytes_len;
+        }
+
         // encode basemessage part of the struct
         status = BaseMessage::Encode(buf, buf_len);
         if (status < 0)
@@ -840,7 +852,15 @@ namespace UbiPAL
 
     int NamespaceCertificate::EncodedLength() const
     {
-        return BaseMessage::EncodedLength() + 4 + id.size() + 4 + 4 + description.size() + 4 + address.size() + 4 + port.size();
+        // reuse raw bytes if we have them
+        if (raw_bytes != nullptr && raw_bytes_len > 0)
+        {
+            return raw_bytes_len;
+        }
+        else
+        {
+            return BaseMessage::EncodedLength() + 4 + id.size() + 4 + 4 + description.size() + 4 + address.size() + 4 + port.size();
+        }
     }
 
     int AccessControlList::Encode(unsigned char* const buf, const uint32_t buf_len) const
@@ -852,6 +872,18 @@ namespace UbiPAL
         {
             Log::Line(Log::WARN, "AccessControlList::Encode: Encode(%p, %u)", buf, buf_len);
             return INVALID_ARG;
+        }
+
+        // if we have the raw bytes and they're enough to hold all of our info, reuse that
+        // this gives us the original signature as well
+        if (raw_bytes != nullptr && (int)raw_bytes_len >= EncodedLength())
+        {
+            if (buf_len < raw_bytes_len)
+            {
+                return BUFFER_TOO_SMALL;
+            }
+            memcpy(buf, raw_bytes, raw_bytes_len);
+            return raw_bytes_len;
         }
 
         // encode basemessage part of the struct
@@ -1024,6 +1056,12 @@ namespace UbiPAL
     int AccessControlList::EncodedLength() const
     {
         int length = 0;
+
+        // if we have the raw bytes, reuse those
+        if (raw_bytes != nullptr && raw_bytes_len > 0)
+        {
+            return raw_bytes_len;
+        }
 
         length = BaseMessage::EncodedLength();
 

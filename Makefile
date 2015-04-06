@@ -118,7 +118,15 @@ test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
 .PHONY: examples
-examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display $(BINDIR)/$(EXDIR)/sinewave/delegator $(BINDIR)/$(EXDIR)/push/producer $(BINDIR)/$(EXDIR)/push/consumer
+examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display $(BINDIR)/$(EXDIR)/sinewave/delegator $(BINDIR)/$(EXDIR)/push/producer $(BINDIR)/$(EXDIR)/push/consumer $(BINDIR)/$(EXDIR)/discover $(BINDIR)/$(EXDIR)/service
+
+$(BINDIR)/$(EXDIR)/service: $(BINDIR)/$(EXDIR)/service.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/service.o -o $(BINDIR)/$(EXDIR)/service $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/discover: $(BINDIR)/$(EXDIR)/discover.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/discover.o -o $(BINDIR)/$(EXDIR)/discover $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/push/consumer: $(BINDIR)/$(EXDIR)/push/consumer.o
 	$(dir_guard)
