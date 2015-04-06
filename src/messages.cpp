@@ -261,7 +261,7 @@ namespace UbiPAL
         status = DecodeString(buf + offset, buf_len - offset, from);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "BaseMessage::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -273,7 +273,7 @@ namespace UbiPAL
         status = DecodeString(buf + offset, buf_len - offset, to);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "BaseMessage::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -285,7 +285,7 @@ namespace UbiPAL
         status = DecodeString(buf + offset, buf_len - offset, msg_id);
         if (status < 0)
         {
-            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            Log::Line(Log::WARN, "BaseMessage::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -569,23 +569,92 @@ namespace UbiPAL
         if (argument == nullptr)
         {
             Log::Line(Log::EMERG, "Message::operator=(const Message&): malloc failed!");
-            return *this;;
+            return *this;
         }
 
         memcpy(argument, rhs.argument, arg_len);
         return *this;
     }
 
+    NamespaceCertificate& NamespaceCertificate::operator=(const NamespaceCertificate& rhs)
+    {
+        id = rhs.id;
+        description = rhs.description;
+        type = rhs.type;
+        to = rhs.to;
+        from = rhs.from;
+        msg_id = rhs.msg_id;
+        address = rhs.address;
+        port = rhs.port;
+        raw_bytes_len = rhs.raw_bytes_len;
+        version = rhs.version;
+
+        raw_bytes = (unsigned char*) malloc(raw_bytes_len);
+        if (raw_bytes == nullptr)
+        {
+            Log::Line(Log::EMERG, "NamespaceCertificate::operator=(const NamespaceCertificate&): malloc failed!");
+            return *this;
+        }
+
+        memcpy(raw_bytes, rhs.raw_bytes, raw_bytes_len);
+        return *this;
+    }
+
     NamespaceCertificate::NamespaceCertificate()
         : BaseMessage()
     {
-       type = NAMESPACE_CERTIFICATE;
+        type = NAMESPACE_CERTIFICATE;
+        raw_bytes = nullptr;
+        raw_bytes_len = 0;
+        version = 0;
+    }
+
+    NamespaceCertificate::NamespaceCertificate(const NamespaceCertificate& other)
+    {
+        type = ACCESS_CONTROL_LIST;
+        *this = other;
+    }
+
+    NamespaceCertificate::~NamespaceCertificate()
+    {
+        //free(raw_bytes); // TODO this is a memory leak, just dealing with it later so I can get results
     }
 
     AccessControlList::AccessControlList()
         : BaseMessage()
     {
         type = ACCESS_CONTROL_LIST;
+        raw_bytes = nullptr;
+        raw_bytes_len = 0;
+        is_private = false;
+    }
+
+    AccessControlList::~AccessControlList()
+    {
+        //free(raw_bytes); // TODO this is a memory leak, just dealing with it later so I can get results
+    }
+
+    AccessControlList& AccessControlList::operator=(const AccessControlList& rhs)
+    {
+        id = rhs.id;
+        description = rhs.description;
+        rules = rhs.rules;
+        type = rhs.type;
+        to = rhs.to;
+        from = rhs.from;
+        is_private = rhs.is_private;
+        msg_id = rhs.msg_id;
+        raw_bytes_len = rhs.raw_bytes_len;
+
+        raw_bytes = (unsigned char*) malloc(raw_bytes_len);
+        if (raw_bytes == nullptr)
+        {
+            Log::Line(Log::EMERG, "AccessControlList::operator=(const AccessControlList&): malloc failed!");
+            return *this;
+        }
+
+        memcpy(raw_bytes, rhs.raw_bytes, raw_bytes_len);
+        return *this;
     }
 
     int NamespaceCertificate::Encode(unsigned char* const buf, const uint32_t buf_len) const
@@ -597,6 +666,18 @@ namespace UbiPAL
         {
             Log::Line(Log::WARN, "NamespaceCertificate::Encode: Encode(%p, %u)", buf, buf_len);
             return INVALID_ARG;
+        }
+
+        // if we have the raw bytes and they're enough to hold all of our info, reuse that
+        // this gives us the original signature as well
+        if (raw_bytes != nullptr && (int)raw_bytes_len >= EncodedLength())
+        {
+            if (buf_len < raw_bytes_len)
+            {
+                return BUFFER_TOO_SMALL;
+            }
+            memcpy(buf, raw_bytes, raw_bytes_len);
+            return raw_bytes_len;
         }
 
         // encode basemessage part of the struct
@@ -616,6 +697,18 @@ namespace UbiPAL
         if (status < 0)
         {
             Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // encode version
+        status = EncodeUint32_t(buf + offset, buf_len - offset, version);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Encode: BaseMessage::EncodeUint32_t failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -673,6 +766,15 @@ namespace UbiPAL
             return INVALID_ARG;
         }
 
+        // save the bytes for later forwarding
+        raw_bytes = (unsigned char*) malloc(buf_len);
+        if (raw_bytes == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+        raw_bytes_len = buf_len;
+        memcpy(raw_bytes, buf, raw_bytes_len);
+
         // decode basemessage part of the struct
         status = BaseMessage::Decode(buf, buf_len);
         if (status < 0)
@@ -690,6 +792,18 @@ namespace UbiPAL
         if (status < 0)
         {
             Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeString failed %s", GetErrorDescription(status));
+            return status;
+        }
+        else
+        {
+            offset += status;
+        }
+
+        // decode version
+        status = DecodeUint32_t(buf + offset, buf_len - offset, version);
+        if (status < 0)
+        {
+            Log::Line(Log::WARN, "NamespaceCertificate::Decode: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
             return status;
         }
         else
@@ -738,7 +852,15 @@ namespace UbiPAL
 
     int NamespaceCertificate::EncodedLength() const
     {
-        return BaseMessage::EncodedLength() + 4 + id.size() + 4 + description.size() + 4 + address.size() + 4 + port.size();
+        // reuse raw bytes if we have them
+        if (raw_bytes != nullptr && raw_bytes_len > 0)
+        {
+            return raw_bytes_len;
+        }
+        else
+        {
+            return BaseMessage::EncodedLength() + 4 + id.size() + 4 + 4 + description.size() + 4 + address.size() + 4 + port.size();
+        }
     }
 
     int AccessControlList::Encode(unsigned char* const buf, const uint32_t buf_len) const
@@ -750,6 +872,18 @@ namespace UbiPAL
         {
             Log::Line(Log::WARN, "AccessControlList::Encode: Encode(%p, %u)", buf, buf_len);
             return INVALID_ARG;
+        }
+
+        // if we have the raw bytes and they're enough to hold all of our info, reuse that
+        // this gives us the original signature as well
+        if (raw_bytes != nullptr && (int)raw_bytes_len >= EncodedLength())
+        {
+            if (buf_len < raw_bytes_len)
+            {
+                return BUFFER_TOO_SMALL;
+            }
+            memcpy(buf, raw_bytes, raw_bytes_len);
+            return raw_bytes_len;
         }
 
         // encode basemessage part of the struct
@@ -775,6 +909,19 @@ namespace UbiPAL
         else
         {
             offset += status;
+            status = SUCCESS;
+        }
+
+        // encode is_private
+        unsigned char is_private_byte = is_private ? 1 : 0;
+        if (offset >= buf_len)
+        {
+            return BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            buf[offset] = is_private_byte;
+            offset += 1;
             status = SUCCESS;
         }
 
@@ -823,6 +970,15 @@ namespace UbiPAL
             return INVALID_ARG;
         }
 
+        // save the bytes for later forwarding
+        raw_bytes = (unsigned char*) malloc(buf_len);
+        if (raw_bytes == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+        raw_bytes_len = buf_len;
+        memcpy(raw_bytes, buf, raw_bytes_len);
+
         // decode basemessage part of the struct
         status = BaseMessage::Decode(buf, buf_len);
         if (status < 0)
@@ -848,6 +1004,21 @@ namespace UbiPAL
             offset += status;
             status = SUCCESS;
         }
+
+        // check is_private
+        if (buf[offset] == 0)
+        {
+            is_private = false;
+        }
+        else if (buf[offset] == 1)
+        {
+            is_private = true;
+        }
+        else
+        {
+            return INVALID_NETWORK_ENCODING;
+        }
+        offset += 1;
 
         // decode number of strings
         status = DecodeUint32_t(buf + offset, buf_len - offset, num_rules);
@@ -886,7 +1057,16 @@ namespace UbiPAL
     {
         int length = 0;
 
+        // if we have the raw bytes, reuse those
+        if (raw_bytes != nullptr && raw_bytes_len > 0)
+        {
+            return raw_bytes_len;
+        }
+
         length = BaseMessage::EncodedLength();
+
+        // is_private
+        length += 1;
 
         // id
         length += 4 + id.size();

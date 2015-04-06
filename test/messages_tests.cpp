@@ -384,7 +384,7 @@ namespace UbiPAL
     int MessagesTests::MessagesTestAccessControlListDefaultConstructor()
     {
         AccessControlList acl;
-        if (acl.type == ACCESS_CONTROL_LIST && !acl.msg_id.empty())
+        if (acl.type == ACCESS_CONTROL_LIST && !acl.msg_id.empty() && acl.raw_bytes == nullptr && acl.raw_bytes_len == 0)
         {
             return SUCCESS;
         }
@@ -524,6 +524,42 @@ namespace UbiPAL
         return (acl1 != acl2) ? SUCCESS : GENERAL_FAILURE;
     }
 
+    int MessagesTests::MessagesTestNamespaceCertificateAssignment()
+    {
+        NamespaceCertificate nc;
+        NamespaceCertificate nc_result;
+
+        nc.id = std::string("elynn");
+        nc.description = std::string("jessica");
+        nc.address = std::string("cameron");
+        nc.port = std::string("#sadgrads");
+        nc.raw_bytes_len = strlen("HELLO");
+        nc.raw_bytes = (unsigned char*)malloc(nc.raw_bytes_len);
+        if (nc.raw_bytes == nullptr)
+        {
+            return MALLOC_FAILURE;
+        }
+        memcpy(nc.raw_bytes, "HELLO", strlen("HELLO"));
+
+        nc_result = nc;
+
+        if (nc_result != nc)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        if (nc.raw_bytes == nc_result.raw_bytes || nc.raw_bytes_len != nc_result.raw_bytes_len)
+        {
+            return GENERAL_FAILURE;
+        }
+        if (memcmp(nc.raw_bytes, nc_result.raw_bytes, nc.raw_bytes_len) != 0)
+        {
+            return GENERAL_FAILURE;
+        }
+
+        return SUCCESS;
+    }
+
     void MessagesTests::RunMessagesTests(unsigned int& module_count, unsigned int& module_fails)
     {
         TestHelpers::RunTestFunc(MessagesTestBaseMessageDefaultConstructor, SUCCESS,
@@ -564,5 +600,7 @@ namespace UbiPAL
                                  "MessagesTestAccessControlListEqualityTestPass", module_count, module_fails);
         TestHelpers::RunTestFunc(MessagesTestAccessControlListEqualityTestFail, SUCCESS,
                                  "MessagesTestAccessControlListEqualityTestFail", module_count, module_fails);
+        TestHelpers::RunTestFunc(MessagesTestNamespaceCertificateAssignment, SUCCESS,
+                                 "MessagesTestNamespaceCertificateAssignment", module_count, module_fails);
     }
 }

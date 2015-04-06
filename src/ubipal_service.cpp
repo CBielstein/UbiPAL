@@ -18,6 +18,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sstream>
+#include <fstream>
 
 // Networking
 #include <sys/types.h>
@@ -68,8 +69,6 @@ namespace UbiPAL
         char buf[FILE_READ_LENGTH];
         char* port = nullptr;
         std::string line;
-
-        condition_timeout_length = 500;
 
         fd = fopen(file_path.c_str(), "r");
         if (fd == nullptr)
@@ -134,6 +133,10 @@ namespace UbiPAL
         struct sockaddr_in* sa = nullptr;
         char* addr = nullptr;
         size_t end_subnet = 0;
+        current_cert = nullptr;
+        condition_timeout_length = 500;
+        broadcast_name_interval = 5000;
+        auto_broadcast_name = false;
 
         // Set default thread counts
         num_recv_threads = 5;
@@ -346,6 +349,9 @@ namespace UbiPAL
 
         // free broadcast_info
         freeaddrinfo(broadcast_info);
+
+        // delete the current_cert
+        delete current_cert;
 
         #ifdef EVALUATE
             // last thing before quitting, put out our stats
@@ -835,7 +841,6 @@ namespace UbiPAL
                     RETURN_STATUS(returned_value);
                 }
 
-                // TODO find what's wrong with signature verification.
                 // authenticate - check signature
                 returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
                                                                  incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
@@ -933,7 +938,7 @@ namespace UbiPAL
                 status = RecvAcl((AccessControlList*)msg);
                 if (status != SUCCESS)
                 {
-                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvNamespaceCertificate failed: %s", GetErrorDescription(status));
+                    Log::Line(Log::WARN, "UbipalService::HandleMessage: RecvAcl failed: %s", GetErrorDescription(status));
                     RETURN_STATUS(status);
                 }
                 break;
@@ -966,6 +971,14 @@ namespace UbiPAL
 
         // find all the acls from this service
         external_acls_mutex.lock();
+
+        // ensure this acl wasn't previously revoked
+        if (revoked_external_acls.count(acl->msg_id) != 0)
+        {
+            Log::Line(Log::INFO, "UbipalService::RecvAcl: Attempted to add ACL which was previously revoked.");
+            external_acls_mutex.unlock();
+            return PREVIOUSLY_REVOKED;
+        }
         if (external_acls.count(acl->id) == 0)
         {
             // wasnt found, so add it
@@ -1013,8 +1026,11 @@ namespace UbiPAL
             itr = trusted_services.find(name_cert->id);
             if (itr != trusted_services.end())
             {
-                // it is, so update it
-                itr->second = *name_cert;
+                // it is, so update it if it's newer
+                if (name_cert->version > itr->second.version)
+                {
+                    itr->second = *name_cert;
+                }
             }
             else
             {
@@ -1028,8 +1044,11 @@ namespace UbiPAL
             itr = untrusted_services.find(name_cert->id);
             if (itr != trusted_services.end())
             {
-                // it is, so update it
-                itr->second = *name_cert;
+                // it is, so update it if it's newer
+                if (name_cert->version > itr->second.version)
+                {
+                    itr->second = *name_cert;
+                }
             }
             else
             {
@@ -1071,14 +1090,6 @@ namespace UbiPAL
                     return GENERAL_FAILURE;
                 }
 
-                returned_value = reply_callback_map.erase(replying_id);
-                if (returned_value != 1)
-                {
-                    Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.erase() failed to remove the mapping.");
-                    reply_callback_mutex.unlock();
-                    return GENERAL_FAILURE;
-                }
-
                 Message* original_message = nullptr;
                 bool found_original_message = false;
                 for (unsigned int i = 0; i < msgs_awaiting_reply.size(); ++i)
@@ -1086,8 +1097,14 @@ namespace UbiPAL
                     if (msgs_awaiting_reply[i]->msg_id == replying_id)
                     {
                         original_message = msgs_awaiting_reply[i];
-                        delete msgs_awaiting_reply[i];
-                        msgs_awaiting_reply.erase(msgs_awaiting_reply.begin() + i);
+
+                        // only erase the mapping if it wasn't a broadcast
+                        if (original_message->to.empty() == false)
+                        {
+                            delete msgs_awaiting_reply[i];
+                            msgs_awaiting_reply.erase(msgs_awaiting_reply.begin() + i);
+                        }
+
                         found_original_message = true;
                         break;
                     }
@@ -1098,6 +1115,18 @@ namespace UbiPAL
                     Log::Line(Log::EMERG, "UbipalService::RecvMessage: msgs_awaiting_reply did not have the original message");
                     reply_callback_mutex.unlock();
                     return GENERAL_FAILURE;
+                }
+
+                // erase the mapping only if it wasn't a broadcast
+                if (original_message->to.empty() == false)
+                {
+                    returned_value = reply_callback_map.erase(replying_id);
+                    if (returned_value != 1)
+                    {
+                        Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.erase() failed to remove the mapping.");
+                        reply_callback_mutex.unlock();
+                        return GENERAL_FAILURE;
+                    }
                 }
 
                 reply_callback_mutex.unlock();
@@ -1149,6 +1178,7 @@ namespace UbiPAL
                 {
                     if (external_acls[message->from][i].msg_id == revoke_id)
                     {
+                        revoked_external_acls.insert(revoke_id);
                         external_acls[message->from].erase(external_acls[message->from].begin() + i);
                         if (external_acls[message->from].size() == 0)
                         {
@@ -1165,52 +1195,7 @@ namespace UbiPAL
             return status;
         }
 
-        if (message->message.compare(0, strlen("CACHECONDITION_"), "CACHECONDITION_") == 0)
-        {
-            cached_conditions_mutex.lock();
-
-            // get condition
-            size_t underscore = message->message.find("_");
-            std::string condition = message->message.substr(underscore + 1);
-
-            // copy the reply
-            unsigned char* reply = (unsigned char*)malloc(message->arg_len);
-            if (reply == nullptr)
-            {
-                cached_conditions_mutex.unlock();
-                return MALLOC_FAILURE;
-            }
-            memcpy(reply, message->argument, message->arg_len);
-
-            // add to cache
-            cached_conditions[message->from][condition] = std::tuple<unsigned char*, uint32_t>(reply, message->arg_len);
-
-            cached_conditions_mutex.unlock();
-            return status;
-        }
-
-        if (message->message.compare(0, strlen("REMOVECACHECONDITION_"), "REMOVECACHECONDITION_") == 0)
-        {
-            cached_conditions_mutex.lock();
-
-            // get condition
-            size_t underscore = message->message.find("_");
-            std::string condition = message->message.substr(underscore + 1);
-
-            // remove from the mapped map
-            cached_conditions[message->from].erase(condition);
-
-            // remove the entry for that service, if there are no more conditions
-            if (cached_conditions[message->from].size() == 0)
-            {
-                cached_conditions.erase(message->from);
-            }
-
-            cached_conditions_mutex.unlock();
-            return status;
-        }
-
-        if (message->message.compare(0, strlen("NEWAESPAIR"), "NEWAESPAIR") == 0)
+        if (message->message == "NEWAESPAIR")
         {
             // use my private key to decrypt the argument (key & iv)
             unsigned char* aes_pair_decrypted = nullptr;
@@ -1288,23 +1273,171 @@ namespace UbiPAL
 
             aes_keys[message->from] = std::tuple<unsigned char*, unsigned char*>(new_key, new_iv);
 
-            fprintf(stderr, "aes_keys.size(): %lu\n", aes_keys.size());
-
             aes_keys_mutex.unlock();
 
             return status;
         }
 
-        if (message->message.compare(0, strlen("REQUESTCERTIFICATE"), "REQUESTCERTIFICATE") == 0)
+        if (message->message == "REQUESTCERTIFICATE")
         {
-            // TODO fill this in
+            // find if we have the appropriate certificate
+            NamespaceCertificate requested_cert;
+            std::string requested_service = (message->arg_len == 0) ? GetId() : std::string((char*)message->argument, message->arg_len);
+            status = GetCertificateForName(requested_service, requested_cert);
+
+            uint32_t reply_bytes_len = 0;
+            unsigned char* reply_bytes = nullptr;
+            if (status == SUCCESS)
+            {
+                reply_bytes_len = (uint32_t)requested_cert.EncodedLength();
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                returned_value = requested_cert.Encode(reply_bytes, reply_bytes_len);
+                if (returned_value < 0)
+                {
+                    return returned_value;
+                }
+                else
+                {
+                    reply_bytes_len = (uint32_t)returned_value;
+                }
+            }
+            else
+            {
+                reply_bytes_len = strlen("NOT_FOUND");
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                memcpy(reply_bytes, "NOT_FOUND", strlen("NOT_FOUND"));
+            }
+
+            // send it as a message
+            status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
+            free(reply_bytes);
+            return status;
         }
 
-        if (message->message.compare(0, strlen("REQUESTACL"), "REQUESTACL") == 0)
+        if (message->message == "REQUESTACL")
         {
-            // TODO fill this in
-            // think about privacy infringement if this is always replied to
-            return NOT_IMPLEMENTED;
+            std::string requested_acl((char*)message->argument, message->arg_len);
+
+            // iterate through all acls to see if this service has heard an acl with the appropriate msg_id
+            AccessControlList found_acl;
+            bool was_found = false;
+            local_acls_mutex.lock();
+            for (std::vector<AccessControlList>::iterator itr = local_acls.begin(); itr != local_acls.end(); ++itr)
+            {
+                if (itr->msg_id == requested_acl)
+                {
+                    found_acl = *itr;
+                    was_found = true;
+                    break;
+                }
+            }
+            local_acls_mutex.unlock();
+
+            if (was_found == false)
+            {
+                external_acls_mutex.lock();
+                for (std::unordered_map<std::string, std::vector<AccessControlList>>::iterator map_itr = external_acls.begin(); map_itr != external_acls.end(); ++map_itr)
+                {
+                    for (std::vector<AccessControlList>::iterator vec_itr = map_itr->second.begin(); vec_itr != map_itr->second.end(); ++vec_itr)
+                    {
+                        if (vec_itr->msg_id == requested_acl)
+                        {
+                            found_acl = *vec_itr;
+                            was_found = true;
+                            break;
+                        }
+                    }
+
+                    if (was_found == true)
+                    {
+                        break;
+                    }
+                }
+                external_acls_mutex.unlock();
+            }
+
+            uint32_t reply_bytes_len = 0;
+            unsigned char* reply_bytes = nullptr;
+            if (status == SUCCESS)
+            {
+                reply_bytes_len = (uint32_t)found_acl.EncodedLength();
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                returned_value = found_acl.Encode(reply_bytes, reply_bytes_len);
+                if (returned_value < 0)
+                {
+                    return returned_value;
+                }
+                else
+                {
+                    reply_bytes_len = (uint32_t)returned_value;
+                }
+            }
+            else
+            {
+                reply_bytes_len = strlen("NOT_FOUND");
+                reply_bytes = (unsigned char*) malloc(reply_bytes_len);
+                if (reply_bytes == nullptr)
+                {
+                    return MALLOC_FAILURE;
+                }
+
+                memcpy(reply_bytes, "NOT_FOUND", strlen("NOT_FOUND"));
+            }
+
+            // send it as a message
+            status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
+            return status;
+        }
+
+        if (message->message == "REQUESTLISTACLS")
+        {
+            std::string requested_service((char*)message->argument, message->arg_len);
+            std::vector<AccessControlList> overheard_acls;
+
+            if (requested_service == GetId())
+            {
+                local_acls_mutex.lock();
+                overheard_acls = local_acls;
+                local_acls_mutex.unlock();
+            }
+            else
+            {
+                external_acls_mutex.lock();
+                if (external_acls.count(requested_service) != 0)
+                {
+                    overheard_acls = external_acls[requested_service];
+                }
+                external_acls_mutex.unlock();
+            }
+
+            std::string reply_ids;
+            for (unsigned int i = 0; i < overheard_acls.size(); ++i)
+            {
+                if (overheard_acls[i].is_private == false)
+                {
+                    reply_ids += overheard_acls[i].msg_id + ",";
+                }
+            }
+
+            const unsigned char* reply_bytes = (overheard_acls.size() > 0) ? (const unsigned char*)reply_ids.c_str() : (const unsigned char*)"NOT_FOUND";
+            const uint32_t reply_bytes_len = (overheard_acls.size() > 0) ? reply_ids.size() : strlen("NOT_FOUND");
+            status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
+            return status;
         }
 
         // check against ACLs
@@ -1451,13 +1584,58 @@ namespace UbiPAL
 
     int UbipalService::SetAddress(const std::string& addr)
     {
+        current_cert_mutex.lock();
         address = addr;
+
+        // update namespace certificate
+        NamespaceCertificate self_nc;
+        self_nc.from = id;
+        self_nc.id = id;
+        self_nc.description = description;
+        self_nc.address = address;
+        self_nc.port = port;
+
+        if (current_cert != nullptr)
+        {
+            self_nc.version = current_cert->version + 1;
+        }
+        else
+        {
+            self_nc.version = 0;
+        }
+
+        current_cert = new NamespaceCertificate();
+        *current_cert = self_nc;
+        current_cert_mutex.unlock();
         return SUCCESS;
     }
 
     int UbipalService::SetPort(const std::string& prt)
     {
+        current_cert_mutex.lock();
         port = prt;
+
+        // update namespace certificate
+        NamespaceCertificate self_nc;
+        self_nc.from = id;
+        self_nc.id = id;
+        self_nc.description = description;
+        self_nc.address = address;
+        self_nc.port = port;
+
+        if (current_cert != nullptr)
+        {
+            self_nc.version = current_cert->version + 1;
+        }
+        else
+        {
+            self_nc.version = 0;
+        }
+
+
+        current_cert = new NamespaceCertificate();
+        *current_cert = self_nc;
+        current_cert_mutex.unlock();
         return SUCCESS;
     }
 
@@ -1571,6 +1749,29 @@ namespace UbiPAL
 
             msgs_awaiting_reply.push_back(msg);
             reply_callback_mutex.unlock();
+        }
+
+        // if we've cached the response, we just simulate a reply
+        // but we can only check this if we're sending to a name
+        if ((to != nullptr) && (to->id.empty() == false))
+        {
+            cached_messages_mutex.lock();
+            if (cached_messages.count(to->id) != 0)
+            {
+                // If we don't have the message (or it's the default place holder, then we can fake it.
+                // Else, we'll have to actually send the message
+                if (cached_messages[to->id].count(message) != 0 && cached_messages[to->id][message].message.size() != 0)
+                {
+                    Message sim_reply = cached_messages[to->id][message];
+                    sim_reply.message = "REPLY_" + msg->msg_id;
+
+                    cached_messages_mutex.unlock();
+
+                    status = RecvMessage(&sim_reply);
+                    return status;
+                }
+            }
+            cached_messages_mutex.unlock();
         }
 
         sm_args = new HandleSendMessageArguments(this);
@@ -1905,6 +2106,26 @@ namespace UbiPAL
         msg->address = address;
         msg->port = port;
 
+        current_cert_mutex.lock();
+        if (current_cert && *msg == *current_cert)
+        {
+            *msg = *current_cert;
+        }
+        else
+        {
+            if (current_cert == nullptr)
+            {
+                current_cert = new NamespaceCertificate();
+                msg->version = 0;
+            }
+            else
+            {
+                msg->version = current_cert->version + 1;
+            }
+            *current_cert = *msg;
+        }
+        current_cert_mutex.unlock();
+
         sm_args = new HandleSendMessageArguments(this);
         if (send_to != nullptr)
         {
@@ -2029,13 +2250,26 @@ namespace UbiPAL
         // add me if flaged
         if ((flags & GetNamesFlags::INCLUDE_SELF) != 0)
         {
-            NamespaceCertificate self_nc;
-            self_nc.from = id;
-            self_nc.id = id;
-            self_nc.description = description;
-            self_nc.address = address;
-            self_nc.port = port;
-            names.push_back(self_nc);
+            current_cert_mutex.lock();
+            if (current_cert != nullptr)
+            {
+                names.push_back(*current_cert);
+            }
+            else
+            {
+                NamespaceCertificate self_nc;
+                self_nc.from = id;
+                self_nc.id = id;
+                self_nc.description = description;
+                self_nc.address = address;
+                self_nc.port = port;
+                self_nc.version = 0;
+                names.push_back(self_nc);
+
+                current_cert = new NamespaceCertificate();
+                *current_cert = self_nc;
+            }
+            current_cert_mutex.unlock();
         }
 
         // add untrusted, if flagged
@@ -2790,67 +3024,26 @@ namespace UbiPAL
             return status;
         }
 
-        std::vector<Statement> remote_conditions;
-
-        // Handle any local conditions first
-        cached_conditions_mutex.lock();
-        for (unsigned int i = 0; i < conditions.size(); ++i)
-        {
-            // if we have an entry for the confirming service AND we have an entry for the condition
-            if (cached_conditions.count(conditions[i].name1) == 1 && cached_conditions[conditions[i].name1].count(conditions[i].name2) == 1)
-            {
-                // get the answer
-                std::tuple<unsigned char*, uint32_t> cond_reply = cached_conditions[conditions[i].name1][conditions[i].name2];
-                if (std::get<0>(cond_reply) != nullptr)
-                {
-                    if (std::get<1>(cond_reply) >= strlen("CONFIRM") && memcmp(std::get<0>(cond_reply), "CONFIRM", strlen("CONFIRM")) == 0)
-                    {
-                        // confirmed, we don't need to send a message about it
-                        cached_conditions_mutex.unlock();
-                        continue;
-                    }
-                    else
-                    {
-                        // something other than confirmed, conditions failed!
-                        cached_conditions_mutex.unlock();
-                        return FAILED_CONDITIONS;
-                    }
-                }
-            }
-            else
-            {
-                // if we haven't cached it, we'll have to check it with the source
-                remote_conditions.push_back(conditions[i]);
-            }
-        }
-        cached_conditions_mutex.unlock();
-
-        // if there are no more conditions, we're done!
-        if (remote_conditions.size() == 0)
-        {
-            return SUCCESS;
-        }
-
         // create conditions object
         awaiting_conditions_mutex.lock();
         ConditionCheck new_cond_check;
         new_cond_check.message = message;
-        new_cond_check.conditions = remote_conditions;
+        new_cond_check.conditions = conditions;
         new_cond_check.time = GetTimeMilliseconds();
         awaiting_conditions.push_back(new_cond_check);
         awaiting_conditions_mutex.unlock();
 
         // check remote conditions
         bool found_service = false;
-        for (unsigned int i = 0; i < remote_conditions.size(); ++i)
+        for (unsigned int i = 0; i < conditions.size(); ++i)
         {
             found_service = false;
             for (unsigned int j = 0; j < services.size(); ++j)
             {
-                if (services[j].id == remote_conditions[i].name1)
+                if (services[j].id == conditions[i].name1)
                 {
                     found_service = true;
-                    status = SendMessage(0, &services[j], remote_conditions[i].name2, NULL, 0, ConditionReplyCallback);
+                    status = SendMessage(0, &services[j], conditions[i].name2, NULL, 0, ConditionReplyCallback);
                     if (status != SUCCESS)
                     {
                         Log::Line(Log::WARN, "UbipalService::ConfirmChecks: SendMessage failed: %s", GetErrorDescription(status));
@@ -2939,6 +3132,100 @@ namespace UbiPAL
     {
         int status = SUCCESS;
         std::unordered_map<std::string, UbipalCallback>::iterator found;
+
+        // if we've passed ACLs & conditions and we're requesting registration or deregistration, do so here
+        if ((message.message.size() >= strlen("REGISTER_") && message.message.compare(0, strlen("REGISTER_"), "REGISTER_") == 0) ||
+            (message.message.size() >= strlen("UNREGISTER_") && message.message.compare(0, strlen("UNREGISTER_"), "UNREGISTER_") == 0))
+        {
+            // register the message here, toss the rest
+            registered_services_mutex.lock();
+
+            size_t underscore = message.message.find("_");
+            if (underscore == std::string::npos)
+            {
+                registered_services_mutex.unlock();
+                return INVALID_SYNTAX;
+            }
+
+            std::string registration_message = message.message.substr(underscore + 1);
+
+            if (message.message.size() >= strlen("REGISTER_") && message.message.compare(0, strlen("REGISTER_"), "REGISTER_") == 0)
+            {
+                registered_services[registration_message].insert(message.from);
+                registered_services_mutex.unlock();
+
+                // send initial update message
+                NamespaceCertificate registered_service;
+                status = GetCertificateForName(message.from, registered_service);
+                if (status != SUCCESS)
+                {
+                    return status;
+                }
+
+                if (automatic_replies.count(message.message) != 0)
+                {
+                    std::tuple<unsigned char*, uint32_t> reply = automatic_replies[message.message];
+                    status = SendMessage(0, &registered_service, "UPDATE_" + registration_message, std::get<0>(reply), std::get<1>(reply));
+                }
+                return status;
+            }
+            else // unregister
+            {
+                registered_services[registration_message].erase(message.from);
+
+                if (registered_services[registration_message].size() == 0)
+                {
+                    registered_services.erase(registration_message);
+                }
+            }
+
+            registered_services_mutex.unlock();
+            return status;
+        }
+
+        // if we're caching this message, update the cache
+        if (message.message.size() >= strlen("UPDATE_") && message.message.compare(0, strlen("UPDATE_"), "UPDATE_") == 0)
+        {
+            size_t underscore = message.message.find("_");
+            if (underscore == std::string::npos)
+            {
+                return INVALID_SYNTAX;
+            }
+            std::string message_name = message.message.substr(underscore + 1);
+
+            cached_messages_mutex.lock();
+            if (cached_messages.count(message.from) != 0)
+            {
+                if (cached_messages[message.from].count(message_name) != 0)
+                {
+                    Message cache_message = message;
+                    cache_message.message = message_name;
+                    cached_messages[message.from][message_name] = cache_message;
+                }
+            }
+
+            // then call the associated function
+            UbipalReplyCallback callback = cached_callbacks[message.from][message_name];
+            cached_messages_mutex.unlock();
+
+            return callback(this, NULL, &message);
+        }
+
+        // if we have an automatic reply, send that back
+        automatic_replies_mutex.lock();
+        if (automatic_replies.count(message.message) != 0)
+        {
+            std::tuple<unsigned char*, uint32_t> reply_args = automatic_replies[message.message];
+            status = ReplyToMessage(0, &message, std::get<0>(reply_args), std::get<1>(reply_args));
+            if (status != SUCCESS)
+            {
+                automatic_replies_mutex.unlock();
+                return status;
+            }
+            automatic_replies_mutex.unlock();
+            return status;
+        }
+        automatic_replies_mutex.unlock();
 
         // find function to call
         found = callback_map.find(message.message);
@@ -3032,13 +3319,23 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)
+    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)
     {
-        local_acls_mutex.lock();
-
         int status = SUCCESS;
 
+        if ((flags & ~(CreateAclFlags::PRIVATE)) != 0)
+        {
+            return INVALID_ARG;
+        }
+
+        local_acls_mutex.lock();
+
         AccessControlList temp_acl;
+
+        if ((flags & CreateAclFlags::PRIVATE) != 0)
+        {
+            temp_acl.is_private = true;
+        }
 
         temp_acl.id = id;
         temp_acl.description = description;
@@ -3048,6 +3345,37 @@ namespace UbiPAL
         result = temp_acl;
 
         local_acls_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList result)
+    {
+        int status = SUCCESS;
+
+        if ((flags & ~(CreateAclFlags::PRIVATE)) != 0)
+        {
+            return INVALID_ARG;
+        }
+
+        // open file
+        std::vector<std::string> rules;
+        std::fstream rules_file;
+        rules_file.open(file);
+        if (rules_file.is_open() == false)
+        {
+            return OPEN_FILE_FAILED;
+        }
+
+        // read rules
+        std::string one_rule;
+        while (std::getline(rules_file, one_rule))
+        {
+            rules.push_back(one_rule);
+        }
+
+        // create file
+        status = CreateAcl(flags, description, rules, result);
+
         return status;
     }
 
@@ -3079,15 +3407,18 @@ namespace UbiPAL
             if (search_desc && (search_term == local_acls[i].description))
             {
                 acl = local_acls[i];
+                local_acls_mutex.unlock();
                 return SUCCESS;
             }
             if (search_id && (search_term == local_acls[i].msg_id))
             {
                 acl = local_acls[i];
+                local_acls_mutex.unlock();
                 return SUCCESS;
             }
         }
 
+        local_acls_mutex.unlock();
         return NOT_FOUND;
     }
 
@@ -3147,12 +3478,26 @@ namespace UbiPAL
         int status = SUCCESS;
         UbipalService* us = (UbipalService*)arg;
         uint32_t time = 0;
+        uint32_t last_sent_name = 0;
 
         while(us->receiving)
         {
             sched_yield();
             usleep(us->condition_timeout_length * 1000);
             time = GetTimeMilliseconds();
+
+            us->broadcast_name_mutex.lock();
+            if (us->auto_broadcast_name == true && time - last_sent_name > us->broadcast_name_interval)
+            {
+                status = us->SendName(SendMessageFlags::NONBLOCKING | SendMessageFlags::NO_ENCRYPTION, NULL);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::INFO, "UbipalService::ConditionTimeout: UbipalService::SendName failed on interval: %s", GetErrorDescription(status));
+                }
+
+                last_sent_name = GetTimeMilliseconds();
+            }
+            us->broadcast_name_mutex.unlock();
 
             us->awaiting_conditions_mutex.lock();
             for (unsigned int i = 0; i < us->awaiting_conditions.size(); ++i)
@@ -3189,28 +3534,19 @@ namespace UbiPAL
         return (time.tv_sec * 1000) + (time.tv_usec / 1000);
     }
 
-
-    int UbipalService::CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
-                                      const unsigned char* const reply, const uint32_t reply_len)
+    int UbipalService::RequestCertificate(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to)
     {
-        return SendMessage(flags, to, "CACHECONDITION_" + condition, reply, reply_len);
+        return SendMessage(flags, to, "REQUESTCERTIFICATE", (unsigned char*)service_id.c_str(), service_id.size(), HandleRequestCertificateReply);
     }
 
-    int UbipalService::InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition)
+    int UbipalService::RequestAcl(const uint32_t flags, const std::string& acl_id, const NamespaceCertificate* to)
     {
-        return SendMessage(flags, to, "REMOVECACHECONDITION_" + condition, NULL, 0);
+        return SendMessage(flags, to, "REQUESTACL", (unsigned char*)acl_id.c_str(), acl_id.size(), HandleRequestAclReply);
     }
 
-    int UbipalService::RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
+    int UbipalService::RequestAclsFromName(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to, const UbipalReplyCallback callback)
     {
-        // TODO add a callback to handle adding the returned certificate
-        return SendMessage(flags, to, "REQUESTCERTIFICATE", (unsigned char*)service_id.c_str(), service_id.size());
-    }
-
-    int UbipalService::RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to)
-    {
-        // TODO add a callback to handle adding the returned ACL
-        return SendMessage(flags, to, "REQUESTACL", (unsigned char*)service_id.c_str(), service_id.size());
+        return SendMessage(flags, to, "REQUESTLISTACLS", (unsigned char*)service_id.c_str(), service_id.size(), callback);
     }
 
     int UbipalService::GetCertificateForName(const std::string& name, NamespaceCertificate& certificate)
@@ -3218,7 +3554,7 @@ namespace UbiPAL
         int status = SUCCESS;
 
         std::vector<NamespaceCertificate> all_certificates;
-        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED, all_certificates);
+        status = GetNames(GetNamesFlags::INCLUDE_TRUSTED | GetNamesFlags::INCLUDE_UNTRUSTED | GetNamesFlags::INCLUDE_SELF, all_certificates);
         if (status != SUCCESS)
         {
             return status;
@@ -3400,5 +3736,324 @@ namespace UbiPAL
         }
 
         return upper;
+    }
+
+    int UbipalService::RegisterForUpdates(const uint32_t flags, const NamespaceCertificate& service, const std::string& message, const UbipalReplyCallback callback)
+    {
+        int status = SUCCESS;
+
+        // Add ACL rules that allow this message through
+        // find the old ACL
+        // (failure doesn't matter here, since they might not exist to begin with)
+        AccessControlList old_acl;
+        status = GetAcl(GetAclFlags::SEARCH_BY_DESC, REGISTRATION_ACL, old_acl);
+
+        // revoke the old ACL
+        status = RevokeAcl(RevokeAclFlags::NO_SENDING, old_acl, NULL);
+
+        // add the appropriate rule
+        std::vector<std::string> new_rules = old_acl.rules;
+        new_rules.push_back(service.id + " CAN SEND MESSAGE UPDATE_" + message + " TO " + GetId());
+
+        // create ACL based on new rules
+        AccessControlList new_acl;
+        status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, new_acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        // register cache & callback
+        cached_messages_mutex.lock();
+        Message blank;
+        cached_messages[service.id][message] = blank;
+        cached_callbacks[service.id][message] = callback;
+        cached_messages_mutex.unlock();
+
+        // send registration message
+        status = SendMessage(flags, &service, "REGISTER_" + message, NULL, 0);
+
+        return status;
+    }
+
+    int UbipalService::UnregisterForUpdates(const uint32_t flags, const NamespaceCertificate& service, const std::string& message)
+    {
+        int status = SUCCESS;
+
+        // First, let's remove the old ACL rules that allow this message through
+        // find the old ACL
+        AccessControlList old_acl;
+        status = GetAcl(GetAclFlags::SEARCH_BY_DESC, REGISTRATION_ACL, old_acl);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        // revoke the old ACL
+        status = RevokeAcl(RevokeAclFlags::NO_SENDING, old_acl, NULL);
+        if (status != SUCCESS)
+        {
+            return status;
+        }
+
+        // copy any rules that were not associated with the unregistered message
+        std::vector<std::string> new_rules;
+        for (unsigned int i = 0; i < old_acl.rules.size(); ++i)
+        {
+            if (old_acl.rules[i].find(service.id) == std::string::npos || old_acl.rules[i].find(message) == std::string::npos)
+            {
+                new_rules.push_back(old_acl.rules[i]);
+            }
+        }
+
+        // create new ACL on those other rules
+        if (new_rules.size() != 0)
+        {
+            AccessControlList new_acl;
+            status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, new_acl);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+        }
+
+        // remove our cache and send unregister to service
+        cached_messages_mutex.lock();
+
+        cached_messages[service.id].erase(message);
+
+        if (cached_messages.count(service.id) == 0)
+        {
+            cached_messages.erase(service.id);
+        }
+
+        cached_callbacks[service.id].erase(message);
+        if (cached_callbacks.count(service.id) == 0)
+        {
+            cached_callbacks.erase(service.id);
+        }
+
+        cached_messages_mutex.unlock();
+
+        status = SendMessage(flags, &service, "UNREGISTER_" + message, NULL, 0);
+
+        return status;
+    }
+
+    int UbipalService::SetMessageReply(const uint32_t flags, const std::string& message, const unsigned char* const arg, const uint32_t arg_len)
+    {
+        int status = SUCCESS;
+        automatic_replies_mutex.lock();
+
+        // check old message
+        if (automatic_replies.count(message) != 0)
+        {
+            if (std::get<1>(automatic_replies[message]) == arg_len && memcmp(std::get<0>(automatic_replies[message]), arg, arg_len) == 0)
+            {
+                // message is the same, no need to do anything further
+                automatic_replies_mutex.unlock();
+                return status;
+            }
+        }
+
+        // if we get here, the message is either new or has a new argument value
+        unsigned char* copy_pointer = nullptr;
+        copy_pointer = (unsigned char*)malloc(arg_len);
+        if (copy_pointer == nullptr)
+        {
+            automatic_replies_mutex.unlock();
+            return MALLOC_FAILURE;
+        }
+
+        memcpy(copy_pointer, arg, arg_len);
+        std::tuple<unsigned char*, uint32_t> tup(copy_pointer, arg_len);
+        automatic_replies[message] = tup;
+
+        // send updates
+        registered_services_mutex.lock();
+        if (registered_services.count(message) != 0)
+        {
+            for (std::set<std::string>::iterator itr = registered_services[message].begin(); itr != registered_services[message].end(); ++itr)
+            {
+                status = EvaluateStatement(*itr + " CAN SEND MESSAGE REGISTER_" + message + " TO " + GetId());
+                if (status != SUCCESS)
+                {
+                    continue;
+                }
+
+                NamespaceCertificate cert;
+                status = GetCertificateForName(*itr, cert);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::INFO, "UbipalService::SetMessageReply: UbipalService::GetCertificateForName failed to find a certificate for %s with error %s",
+                              itr->c_str(), GetErrorDescription(status));
+                    continue;
+                }
+
+                status = SendMessage(flags, &cert, "UPDATE_" + message, arg, arg_len);
+                if (status != SUCCESS)
+                {
+                    Log::Line(Log::INFO, "UbipalService::SetMessageReply: UbipalService::SendMessage failed for %s: %s",
+                              itr->c_str(), GetErrorDescription(status));
+                }
+            }
+        }
+        registered_services_mutex.unlock();
+
+        automatic_replies_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::RemoveMessageReply(const std::string& message)
+    {
+        int status = SUCCESS;
+
+        automatic_replies_mutex.lock();
+
+        automatic_replies.erase(message);
+
+        automatic_replies_mutex.unlock();
+
+        return status;
+    }
+
+    int UbipalService::SetNameBroadcast(const bool on, const uint32_t ms)
+    {
+        int status = SUCCESS;
+        broadcast_name_mutex.lock();
+
+        auto_broadcast_name = on;
+        broadcast_name_interval = ms;
+
+        broadcast_name_mutex.unlock();
+        return status;
+    }
+
+    int UbipalService::HandleRequestCertificateReply(UbipalService* us, const Message* original_message, const Message* reply_message)
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+
+        // check arguments
+        if (us == nullptr || reply_message == nullptr)
+        {
+            return NULL_ARG;
+        }
+        else if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        {
+            return NOT_FOUND;
+        }
+        else if (reply_message->arg_len == strlen("NOT_FOUND") && memcmp(reply_message->argument, "NOT_FOUND", strlen("NOT_FOUND")) == 0)
+        {
+            return NOT_FOUND;
+        }
+
+        // decode NamespaceCertificate
+        NamespaceCertificate received_cert;
+        returned_value = received_cert.Decode(reply_message->argument, reply_message->arg_len);
+        if (returned_value < SUCCESS)
+        {
+            return returned_value;
+        }
+
+        // verify signature if the namespace certificate is not the sender's
+        // (if it is the sender, it was already verified when receiving the message)
+        if (reply_message->from != received_cert.id)
+        {
+            RSA* pkey = nullptr;
+            status = RsaWrappers::StringToPublicKey(received_cert.id, pkey);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+        }
+
+        // call RecvNamespaceCertificate to handle the rest
+        status = us->RecvNamespaceCertificate(&received_cert);
+        return status;
+    }
+
+    int UbipalService::HandleRequestAclReply(UbipalService* us, const Message* original_message, const Message* reply_message)
+    {
+        int status = SUCCESS;
+        int returned_value = 0;
+
+        // check arguments
+        if (us == nullptr || reply_message == nullptr)
+        {
+            return NULL_ARG;
+        }
+        else if (reply_message->argument == nullptr || reply_message->arg_len == 0)
+        {
+            return NOT_FOUND;
+        }
+        else if (reply_message->arg_len == strlen("NOT_FOUND") && memcmp(reply_message->argument, "NOT_FOUND", strlen("NOT_FOUND")) == 0)
+        {
+            return NOT_FOUND;
+        }
+
+        // decode ACL
+        AccessControlList received_acl;
+        returned_value = received_acl.Decode(reply_message->argument, reply_message->arg_len);
+        if (returned_value < SUCCESS)
+        {
+            return returned_value;
+        }
+
+        // verify signature if the namespace certificate is not the sender's
+        // (if it is the sender, it was already verified when receiving the message)
+        if (reply_message->from != received_acl.id)
+        {
+            RSA* pkey = nullptr;
+            status = RsaWrappers::StringToPublicKey(received_acl.id, pkey);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+        }
+
+        // call RecvNamespaceCertificate to handle the rest
+        status = us->RecvAcl(&received_acl);
+        return status;
+    }
+
+    int UbipalService::GetAclsForName(const std::string& name, std::vector<AccessControlList>& acls)
+    {
+        int status = SUCCESS;
+
+        // if asking for our own acls, simply return local_acls
+        if (name == GetId())
+        {
+            local_acls_mutex.lock();
+            acls = local_acls;
+            local_acls_mutex.unlock();
+            return status;
+        }
+
+        // else search external_acls
+        external_acls_mutex.lock();
+        if (external_acls.count(name) == 1)
+        {
+            acls = external_acls[name];
+        }
+        else
+        {
+            status = NOT_FOUND;
+        }
+        external_acls_mutex.unlock();
+
+        return status;
     }
 }

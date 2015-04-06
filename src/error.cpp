@@ -37,6 +37,7 @@ namespace UbiPAL
             case INVALID_SYNTAX: return "INVALID_SYNTAX: The syntax of a given UbiPAL statement is invalid.";
             case FAILED_EVALUATION: return "FAILED_EVALUATION: The given statement failed evaulation.";
             case NOT_IMPLEMENTED: return "NOT_IMPLEMENTED: The attempted functionality is not yet implemented.";
+            case PREVIOUSLY_REVOKED: return "PREVIOUSLY_REVOKED: The given ACL could not be added because it was previously revoked by the issuing service.";
             default: return "Error code does not have description.";
         }
     }

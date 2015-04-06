@@ -29,6 +29,9 @@
 // chosen to be outside of the range of assigned ports
 #define UBIPAL_BROADCAST_PORT "50015"
 
+// the description to give the ACL used by the service for automatic registration rules
+const std::string REGISTRATION_ACL = "UBIPAL_SERVICE_REGISTRATION_ACL";
+
 namespace UbiPAL
 {
     // forward declaration for the callbacks
@@ -225,15 +228,26 @@ namespace UbiPAL
             //          int: SUCCESS on success, negative error on failure
             int SendAcl(const uint32_t flags, const AccessControlList& acl, const NamespaceCertificate* const send_to);
 
+            // CreateAclFlags
+            // Flags for options to the CreateAcl functions
+            enum CreateAclFlags
+            {
+                PRIVATE = 2 << 0,
+            };
+
             // CreateAcl
-            // adds a new Acl to the list of local acls with the given rule-s
+            // adds a new Acl to the list of local acls with the given rules. There is also a version which takes a file path to rules.
             // args
+            //          [IN] flags:
+            //                  PRIVATE: Do not automatically share with other services when requested
             //          [IN] description: a description to put on the ACL, local only does not get published
             //          [IN] rules: a vector of rules to place in the new ACL
+            //          [IN] file: The file where the access control list is listed (one rule per line)
             //          [OUT] result: the resultant ACL
             // return
             //          int: SUCCESS on success, else negative error code
-            int CreateAcl(const std::string& description, const std::vector<std::string>& rules, AccessControlList& result);
+            int CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList& result);
+            int CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList result);
 
             // GetAclFlags
             // Flags for GetAcl, descriptions in comments on that function
@@ -326,9 +340,19 @@ namespace UbiPAL
             // Returns the certificate for a given name
             // args
             //          [IN] name: The name to match to a certificate
+            //          [OUT] certificate: The certificate, if found
             // return
             //          int SUCCESS if found, NOT_FOUND if not
             int GetCertificateForName(const std::string& name, NamespaceCertificate& certificate);
+
+            // GetAclsForName
+            // Fetches known ACLs for a given service name
+            // args
+            //          [IN] name: The name of the service in question
+            //          [OUT] acls: A vector of the found certificates
+            // return
+            //          int SUCCESS if found, negative error otherwise
+            int GetAclsForName(const std::string& name, std::vector<AccessControlList>& acls);
 
             enum GetNamesFlags
             {
@@ -365,35 +389,6 @@ namespace UbiPAL
             //          string: ID of this service
             inline std::string GetId() { return id; }
 
-            // CacheCondition
-            // Sends a message to a given service to be cached on the receiving end. This cache stays until invalidated or updated.
-            // Updates by calling this function again, invalidations by calling InvalidateCachedCondition
-            // args
-            //          [IN] flags: flags, including:
-            //                  NONBLOCKING: returns immediately, uses a different thread to send
-            //                  NO_ENCRYPTION: does not encrypt communication.
-            //          [IN] to: The NamespaceCertificate to which to send
-            //          [IN] condition: The condition for which the reply is cached
-            //          [IN] reply: The cached reply for the condition
-            //          [IN] reply_len: The length of reply
-            // return
-            //          int: SUCCESS on success, else a negative error
-            int CacheCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition,
-                               const unsigned char* const reply, const uint32_t reply_len);
-
-            // InvalidateCachedCondition
-            // Sends a message to the receiving service to invalidate the given condition
-            // args
-            //          [IN] flags: flags, including:
-            //                  NONBLOCKING: returns immediately, uses a different thread to send
-            //                  NO_ENCRYPTION: does not encrypt communication.
-            //          [IN] to: The NamespaceCertificate to which to send
-            //          [IN] condition: The condition which should be removed from the cache
-            // return
-            //          int: SUCCESS on success, else a negative error
-            int InvalidateCachedCondition(const uint32_t flags, const NamespaceCertificate* to, const std::string condition);
-
-            // XXX
             // RequestCertificate
             // Sends a message to to (or broadcasts if null) and requests the certificate for service_id
             // Function should be treated as async and results should be polled from GetNames
@@ -405,11 +400,10 @@ namespace UbiPAL
             //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
             //  return
             //          int: SUCCESS on successful send of message, else a negative error
-            int RequestCertificate(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
+            int RequestCertificate(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to);
 
-            // XXX
-            // RequestCertificate
-            // Sends a message to to (or broadcasts if null) and requests any ACLs from service_id
+            // RequestAcl
+            // Sends a message to to (or broadcasts if null) and requests any Access Control Lists (ACLs) with ACL id equal to acl_id
             // Function should be treated as async.
             // args
             //          [IN] flags:
@@ -419,7 +413,72 @@ namespace UbiPAL
             //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
             //  return
             //          int: SUCCESS on successful send of message, else a negative error
-            int RequestAcl(const uint32_t flags, const std::string service_id, const NamespaceCertificate* to);
+            int RequestAcl(const uint32_t flags, const std::string& acl_id, const NamespaceCertificate* to);
+
+            // RequestAclsFromName
+            // Sends a message to to (or broadcasts if null) and requests a list of Access COntrol Lists (ACLs) that to has heard from service_id. Calls callback on reply.
+            // Reply format is comma separated list of IDs of ACLs, that are not private, that the replying service has heard from service_id
+            // Function should be treated as async.
+            // args
+            //          [IN] flags:
+            //                  NONBLOCKING: returns immediately, uses a different thread to send
+            //                  NO_ENCRYPTION: does not encrypt communication.
+            //          [IN] service_id: The name of the service for which we are requesting ACLs
+            //          [IN] to: The service to which to send the request if non-null. If null, it broadcasts.
+            //          [IN] callback: A function to call on reply
+            //  return
+            //          int: SUCCESS on successful send of message, else a negative error
+            int RequestAclsFromName(const uint32_t flags, const std::string& service_id, const NamespaceCertificate* to, const UbipalReplyCallback callback);
+
+            // RegisterForUpdates
+            // Sends a request to a given service to hear updates on a given message. Caches the updates locally. This avoids network overhead
+            // with often-requested messages with slowly changing replies.
+            // args
+            //          [IN] flags: Flags for sending. Same as SendMessage.
+            //          [IN] service: The service with which we are registering
+            //          [IN] message: The message to which we wish to register
+            //          [IN] callback: The function to call when a message update is delivered
+            // return
+            //          int: SUCCESS on succesful request.
+            int RegisterForUpdates(const uint32_t flags, const NamespaceCertificate& service, const std::string& message, const UbipalReplyCallback callback);
+
+            // UnregisterForUpdates
+            // Sends a request to a given service to no longer hear updates on a given message.
+            // args
+            //          [IN] flags: Flags for sending. Same as SendMessage.
+            //          [IN] service: The service with which we are unregistering
+            //          [IN] message: The message to which we wish to unregister
+            // return
+            //          int: SUCCESS on succesful request and removal from ACLs
+            int UnregisterForUpdates(const uint32_t flags, const NamespaceCertificate& service, const std::string& message);
+
+            // SetMessageReply
+            // Sets or updates a message reply. If it's different than the previously cached reply and services have registered, it sends update messages to those services.
+            // args
+            //          [IN] flags: Flags for sending. Same as SendMessage.
+            //          [IN] message: The message to send.
+            //          [IN] arg: The arguments to that message
+            //          [IN] arg_len: The length of arg
+            // return
+            //          int: SUCCESS on successful send
+            int SetMessageReply(const uint32_t flags, const std::string& message, const unsigned char* const arg, const uint32_t arg_len);
+
+            // RemoveMessageReply
+            // Removes an automatic reply message.
+            // args
+            //          [IN] message: The message to remove.
+            // return
+            //          int: SUCCESS
+            int RemoveMessageReply(const std::string& message);
+
+            // SetNameBroadcast
+            // Enables, disables, or changes the interval on automatic name broadcasts.
+            // args
+            //          [IN] on: If true, turns on. Else turns off.
+            //          [IN] ms: The number of milliseconds between each broadcast.
+            // return
+            //          int: SUCCESS
+            int SetNameBroadcast(const bool on, const uint32_t ms);
 
         private:
 
@@ -590,6 +649,15 @@ namespace UbiPAL
             //          void*: NULL
             static void* HandleSendMessage(void* args);
 
+            // if this is true, the service will send the name every broadcast_name_interval seconds
+            bool auto_broadcast_name;
+
+            // the number of milliseconds between broadcasts of the name
+            uint32_t broadcast_name_interval;
+
+            // prevents race conditions on the above
+            std::mutex broadcast_name_mutex;
+
             // the key for this service, public version also works as a unique identifier
             RSA* private_key;
 
@@ -598,6 +666,12 @@ namespace UbiPAL
 
             // A string description useful for finding a specific service
             std::string description;
+
+            // The most recently sent out namespace certificate. If nothing has changed between SendName calls, simply resend this.
+            NamespaceCertificate* current_cert;
+
+            // Prevents race condition on the above
+            std::mutex current_cert_mutex;
 
             // stores information parsed from received certificates from services we trust
             std::unordered_map<std::string, NamespaceCertificate> trusted_services;
@@ -612,7 +686,10 @@ namespace UbiPAL
             // maps the public key string representation to any acls it has sent
             std::unordered_map<std::string, std::vector<AccessControlList>> external_acls;
 
-            // prevents toc-tou race in external_acls
+            // a set of ACLs that have been revoked so the service does not reaccept them
+            std::set<std::string> revoked_external_acls;
+
+            // prevents toc-tou race in external_acls and revoked_external_acls
             std::mutex external_acls_mutex;
 
             // some data structure to hold our rules array of strings or something
@@ -724,11 +801,26 @@ namespace UbiPAL
             // holds the thread for checking condition timeouts
             pthread_t conditions_timeout_thread;
 
-            // holds cached conditions from other services, map<service name, map<condition, tuple< reply, reply_len>>>
-            std::unordered_map<std::string, std::unordered_map<std::string, std::tuple<unsigned char*, uint32_t>>> cached_conditions;
+            // holds cached conditions from other services, map<service name, map<message, Message>>
+            std::unordered_map<std::string, std::unordered_map<std::string, Message>> cached_messages;
+
+            // holds callbacks for cached messages to be used on updates
+            std::unordered_map<std::string, std::unordered_map<std::string, UbipalReplyCallback>> cached_callbacks;
+
+            // prevents race conditions on the above structures
+            std::mutex cached_messages_mutex;
+
+            // holds automatic reply values. maps message to argument and arg_len.
+            std::unordered_map<std::string, std::tuple<unsigned char*, uint32_t>> automatic_replies;
 
             // prevents race conditions on the above strucutre
-            std::mutex cached_conditions_mutex;
+            std::mutex automatic_replies_mutex;
+
+            // maps a message to services which are registered for that message
+            std::unordered_map<std::string, std::set<std::string>> registered_services;
+
+            // prevents race conditions on the above structure
+            std::mutex registered_services_mutex;
 
             // The length of condition check timeout in milliseconds
             uint32_t condition_timeout_length;
@@ -782,6 +874,26 @@ namespace UbiPAL
             // return
             //          std::string: The upper case version of the string
             static std::string UpperCase(const std::string& str);
+
+            // HandleRequestCertificateReply
+            // Stores the certificate held in the reply
+            // args
+            //          [IN] us: The UbiPAL service which should run this operation
+            //          [IN] original_message: The message which was sent
+            //          [IN] reply_message: The reply that we received with the namespace certificate
+            // return
+            //          int: SUCCESS if the reply contained a legitimate certificate and it was successfully stored
+            static int HandleRequestCertificateReply(UbipalService* us, const Message* original_message, const Message* reply_message);
+
+            // HandleRequestAclReply
+            // Stores the ACL held in the reply
+            // args
+            //          [IN] us: The UbiPAL service which should run this operation
+            //          [IN] original_message: The message which was sent
+            //          [IN] reply_message: The reply that we received with the ACL
+            // return
+            //          int: SUCCESS if the reply contained a legitimate ACL and it was successfully stored
+            static int HandleRequestAclReply(UbipalService* us, const Message* original_message, const Message* reply_message);
     };
 }
 

@@ -37,6 +37,7 @@ Message: BaseMessage, plus the following
 NamespaceCerfiticate: BaseMessage, plus the following
     4 bytes: id_len uint32_t
     id_len bytes: id char*
+    4 bytes: version uint32_t
     4 bytes: desc_len uint32_t
     desc_len bytes: description char*
     4 bytes: addr_len uint32_t
@@ -46,6 +47,9 @@ NamespaceCerfiticate: BaseMessage, plus the following
 
 Note: ACLs will store rule without leading "<name> says" as it is implied by the signer of the ACL
 AccessControlList: BaseMessage, plus the following
+    4 bytes: id_len uint32_t
+    id_len bytes: id char*
+    1 byte: is_private char (1 if true, 0 if no)
     4 bytes: num_rules
     num_rules times the following
         4 bytes: rule_len
@@ -176,11 +180,19 @@ namespace UbiPAL
     struct NamespaceCertificate : BaseMessage
     {
         std::string id;
+
+        // monitonically increasing version number
+        uint32_t version;
         std::string description;
         std::string address;
         std::string port;
+        unsigned char* raw_bytes;
+        uint32_t raw_bytes_len;
 
         NamespaceCertificate();
+        ~NamespaceCertificate();
+        NamespaceCertificate& operator=(const NamespaceCertificate& rhs);
+        NamespaceCertificate(const NamespaceCertificate& other);
 
         virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
         virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
@@ -190,6 +202,11 @@ namespace UbiPAL
     struct AccessControlList : BaseMessage
     {
         std::string id;
+        unsigned char* raw_bytes;
+        uint32_t raw_bytes_len;
+
+        // if true, it is NOT acceptable for this ACL to be shared automatically by UbiPAL
+        bool is_private;
 
         // a local description, not published
         std::string description;
@@ -197,6 +214,8 @@ namespace UbiPAL
         std::vector<std::string> rules;
 
         AccessControlList();
+        ~AccessControlList();
+        AccessControlList& operator=(const AccessControlList& rhs);
 
         virtual int Encode(unsigned char* const buf, const uint32_t buf_len) const override;
         virtual int Decode(const unsigned char* const buf, const uint32_t buf_len) override;
@@ -214,8 +233,9 @@ namespace UbiPAL
     inline bool operator==(const NamespaceCertificate& lhs, const NamespaceCertificate& rhs)
     {
         return ((lhs.type == rhs.type) && (lhs.to.compare(rhs.to) == 0) && (lhs.from.compare(rhs.from) == 0) &&
-                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.id.compare(rhs.id) == 0) && (lhs.description.compare(rhs.description) == 0)&&
-                (lhs.address.compare(rhs.address) == 0) && (lhs.port.compare(rhs.port) == 0));
+                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.id.compare(rhs.id) == 0) && (lhs.description.compare(rhs.description) == 0) &&
+                (lhs.address.compare(rhs.address) == 0) && (lhs.port.compare(rhs.port) == 0) &&
+                (lhs.id.compare(rhs.id) == 0));
     }
     inline bool operator!=(const NamespaceCertificate& lhs, const NamespaceCertificate& rhs) { return !operator==(lhs, rhs); }
 
@@ -230,7 +250,8 @@ namespace UbiPAL
     inline bool operator==(const AccessControlList& lhs, const AccessControlList& rhs)
     {
         if (!((lhs.type == rhs.type) && (lhs.to.compare(rhs.to) == 0) && (lhs.from.compare(rhs.from) == 0) &&
-                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.id.compare(rhs.id) == 0) && (lhs.rules.size() == rhs.rules.size())))
+                (lhs.msg_id.compare(rhs.msg_id) == 0) && (lhs.id.compare(rhs.id) == 0) && (lhs.rules.size() == rhs.rules.size()) &&
+                (lhs.is_private == rhs.is_private)))
         {
             return false;
         }
