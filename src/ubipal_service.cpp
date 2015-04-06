@@ -1285,25 +1285,41 @@ namespace UbiPAL
             std::string requested_service = (message->arg_len == 0) ? GetId() : std::string((char*)message->argument, message->arg_len);
             status = GetCertificateForName(requested_service, requested_cert);
 
+            bool was_local = (requested_service == GetId());
+
             uint32_t reply_bytes_len = 0;
             unsigned char* reply_bytes = nullptr;
             if (status == SUCCESS)
             {
-                reply_bytes_len = (uint32_t)requested_cert.EncodedLength();
+                uint32_t sig_len = 0;
+
+                // if it was local, we aren't storing the raw signed bytes, so let's sign it now
+                if (was_local)
+                {
+                    sig_len = RsaWrappers::SignatureLength(private_key);
+                }
+
+                reply_bytes_len = (uint32_t)requested_cert.EncodedLength() + sig_len;
                 reply_bytes = (unsigned char*) malloc(reply_bytes_len);
                 if (reply_bytes == nullptr)
                 {
                     return MALLOC_FAILURE;
                 }
 
-                returned_value = requested_cert.Encode(reply_bytes, reply_bytes_len);
+                returned_value = requested_cert.Encode(reply_bytes, requested_cert.EncodedLength());
                 if (returned_value < 0)
                 {
                     return returned_value;
                 }
-                else
+
+                if (was_local)
                 {
-                    reply_bytes_len = (uint32_t)returned_value;
+                    unsigned char* sig = reply_bytes + requested_cert.EncodedLength();
+                    status = RsaWrappers::CreateSignedDigest(private_key, reply_bytes, requested_cert.EncodedLength(), sig, sig_len);
+                    if (status != SUCCESS)
+                    {
+                        return status;
+                    }
                 }
             }
             else
@@ -1331,6 +1347,7 @@ namespace UbiPAL
             // iterate through all acls to see if this service has heard an acl with the appropriate msg_id
             AccessControlList found_acl;
             bool was_found = false;
+            bool was_local = false;
             local_acls_mutex.lock();
             for (std::vector<AccessControlList>::iterator itr = local_acls.begin(); itr != local_acls.end(); ++itr)
             {
@@ -1338,6 +1355,7 @@ namespace UbiPAL
                 {
                     found_acl = *itr;
                     was_found = true;
+                    was_local = true;
                     break;
                 }
             }
@@ -1368,23 +1386,37 @@ namespace UbiPAL
 
             uint32_t reply_bytes_len = 0;
             unsigned char* reply_bytes = nullptr;
-            if (status == SUCCESS)
+            if (status == SUCCESS && was_found)
             {
-                reply_bytes_len = (uint32_t)found_acl.EncodedLength();
+                uint32_t sig_len = 0;
+
+                // if it was local, we aren't storing the raw signed bytes, so let's sign it now
+                if (was_local)
+                {
+                    sig_len = RsaWrappers::SignatureLength(private_key);
+                }
+
+                reply_bytes_len = (uint32_t)found_acl.EncodedLength() + sig_len;
                 reply_bytes = (unsigned char*) malloc(reply_bytes_len);
                 if (reply_bytes == nullptr)
                 {
                     return MALLOC_FAILURE;
                 }
 
-                returned_value = found_acl.Encode(reply_bytes, reply_bytes_len);
+                returned_value = found_acl.Encode(reply_bytes, found_acl.EncodedLength());
                 if (returned_value < 0)
                 {
                     return returned_value;
                 }
-                else
+
+                if (was_local)
                 {
-                    reply_bytes_len = (uint32_t)returned_value;
+                    unsigned char* sig = reply_bytes + found_acl.EncodedLength();
+                    status = RsaWrappers::CreateSignedDigest(private_key, reply_bytes, found_acl.EncodedLength(), sig, sig_len);
+                    if (status != SUCCESS)
+                    {
+                        return status;
+                    }
                 }
             }
             else
@@ -3933,22 +3965,17 @@ namespace UbiPAL
             return returned_value;
         }
 
-        // verify signature if the namespace certificate is not the sender's
-        // (if it is the sender, it was already verified when receiving the message)
-        if (reply_message->from != received_cert.id)
+        RSA* pkey = nullptr;
+        status = RsaWrappers::StringToPublicKey(received_cert.id, pkey);
+        if (status != SUCCESS)
         {
-            RSA* pkey = nullptr;
-            status = RsaWrappers::StringToPublicKey(received_cert.id, pkey);
-            if (status != SUCCESS)
-            {
-                return status;
-            }
+            return status;
+        }
 
-            status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
-            if (status != SUCCESS)
-            {
-                return status;
-            }
+        returned_value = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+        if (returned_value != 1)
+        {
+            return (returned_value == SUCCESS) ? GENERAL_FAILURE : returned_value;
         }
 
         // call RecvNamespaceCertificate to handle the rest
@@ -3983,22 +4010,17 @@ namespace UbiPAL
             return returned_value;
         }
 
-        // verify signature if the namespace certificate is not the sender's
-        // (if it is the sender, it was already verified when receiving the message)
-        if (reply_message->from != received_acl.id)
+        RSA* pkey = nullptr;
+        status = RsaWrappers::StringToPublicKey(received_acl.id, pkey);
+        if (status != SUCCESS)
         {
-            RSA* pkey = nullptr;
-            status = RsaWrappers::StringToPublicKey(received_acl.id, pkey);
-            if (status != SUCCESS)
-            {
-                return status;
-            }
+            return status;
+        }
 
-            status = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
-            if (status != SUCCESS)
-            {
-                return status;
-            }
+        returned_value = RsaWrappers::VerifySignedDigest(pkey, reply_message->argument, returned_value, reply_message->argument + returned_value, reply_message->arg_len - returned_value);
+        if (returned_value != 1)
+        {
+            return (returned_value == SUCCESS) ? GENERAL_FAILURE : returned_value;
         }
 
         // call RecvNamespaceCertificate to handle the rest
