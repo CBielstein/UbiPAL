@@ -62,7 +62,7 @@ namespace UbiPAL
                 if (status == SUCCESS)
                 {
                     clock_t end = clock();
-                    TIME_AES_ENCRYPTS += ((double) end - start)/ CLOCKS_PER_SEC;
+                    TIME_AES_GENERATES += ((double) end - start)/ CLOCKS_PER_SEC;
                     ++NUM_AES_GENERATES;
                 }
             #endif

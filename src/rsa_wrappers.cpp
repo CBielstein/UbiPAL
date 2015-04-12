@@ -254,7 +254,7 @@ namespace UbiPAL
 
         exit:
             #ifdef EVALUATE
-                if (status == SUCCESS)
+                if (status == 1 || status == 0)
                 {
                     clock_t end = clock();
                     TIME_RSA_VERIFIES += ((double) end - start)/ CLOCKS_PER_SEC;
