@@ -2687,11 +2687,11 @@ namespace UbiPAL
 
             if (statement.comparison == "<")
             {
-                passed_eval = (tv.tv_sec < statement.num1);
+                passed_eval = ((unsigned int)tv.tv_sec < statement.num1);
             }
             else if (statement.comparison == ">")
             {
-                passed_eval = (tv.tv_sec > statement.num1);
+                passed_eval = ((unsigned int)tv.tv_sec > statement.num1);
             }
             else
             {
