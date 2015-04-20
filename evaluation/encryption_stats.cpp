@@ -47,7 +47,7 @@ int main(int argc, char** argv)
 
     // random characters from randomcharacters.com
     const unsigned char* test_string = (const unsigned char*)"cpmofqgrymeotscpwptvbqkqlbsxhfvvtpmlltkmvtphbwmglpthspmxnfaodsvalbwfmnhcnkmufvburydmtjgngpjrviiagvqm";
-    const int test_string_len = 100;
+    const unsigned int test_string_len = 100;
 
     // Take number of reps as input
     if (argc != 2)
