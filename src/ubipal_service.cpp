@@ -36,6 +36,24 @@
 #ifdef EVALUATE
     uint32_t NUM_MESSAGES_SENT = 0;
     uint32_t NUM_MESSAGES_RECV = 0;
+
+    uint32_t NUM_SEND_MESSAGE = 0;
+    double TIME_SEND_MESSAGE = 0.0;
+    uint32_t NUM_RECV_MESSAGE = 0;
+    double TIME_RECV_MESSAGE = 0.0;
+    uint32_t NUM_RECV_ACL = 0;
+    double TIME_RECV_ACL = 0.0;
+    uint32_t NUM_RECV_NAMESPACE_CERTIFICATE = 0;
+    double TIME_RECV_NAMESPACE_CERTIFICATE = 0.0;
+    uint32_t NUM_BROADCAST_DATA = 0;
+    double TIME_BROADCAST_DATA = 0.0;
+    uint32_t NUM_SEND_DATA = 0;
+    double TIME_SEND_DATA = 0.0;
+    uint32_t NUM_HANDLE_SEND_MESSAGE = 0;
+    double TIME_HANDLE_SEND_MESSAGE = 0.0;
+    uint32_t NUM_HANDLE_MESSAGE = 0;
+    double TIME_HANDLE_MESSAGE = 0.0;
+
     extern uint32_t NUM_RSA_ENCRYPTS;
     extern double TIME_RSA_ENCRYPTS;
     extern uint32_t NUM_RSA_DECRYPTS;
@@ -355,13 +373,30 @@ namespace UbiPAL
 
         #ifdef EVALUATE
             // last thing before quitting, put out our stats
-            Log::Line(Log::INFO, "Quitting. Messages sent: %lu, messages received: %lu\nRSA Encrypts: %lu (%f secs), RSA Decrypts: %lu (%f secs), RSA Signs: %lu (%f secs), RSA Verifies: %lu (%f secs), RSA Generate Key: %lu (%f secs)\nAES Encrypts: %lu (%f secs), AES Decrypts: %lu (%f secs), AES Generate Object: %lu (%f secs)\n",
-                      NUM_MESSAGES_SENT, NUM_MESSAGES_RECV, NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, NUM_RSA_SIGNS, TIME_RSA_SIGNS, NUM_RSA_VERIFIES, TIME_RSA_VERIFIES, NUM_RSA_GENERATES, TIME_RSA_GENERATES, NUM_AES_ENCRYPTS, TIME_AES_ENCRYPTS, NUM_AES_DECRYPTS, TIME_AES_DECRYPTS, NUM_AES_GENERATES, TIME_AES_GENERATES);
+            PrintEval();
         #endif
 
         // Ensure everything hits the log before we die.
         Log::FlushLog();
     }
+
+#ifdef EVALUATE
+    void UbipalService::PrintEval()
+    {
+            // Print send data
+            Log::Line(Log::INFO, "Messages sent: %lu, messages received: %lu\n", NUM_MESSAGES_SENT, NUM_MESSAGES_RECV);           // Print recv data
+            Log::Line(Log::INFO, "Functions (calls, total time, average time): SendMessage: %lu, %f, %f\nRecvMessage: %lu, %f, %f\nRecvAcl: %lu, %f, %f\nRecvNamespaceCertificate: %lu, %f, %f\nBroadcastData: %lu, %f, %f\nSendData: %lu, %f, %f\nHandleSendMessage: %lu, %f, %f\nHandleMessage: %lu, %f, %f\n",
+                                NUM_SEND_MESSAGE, TIME_SEND_MESSAGE, TIME_SEND_MESSAGE/NUM_SEND_MESSAGE, NUM_RECV_MESSAGE, TIME_RECV_MESSAGE, TIME_RECV_MESSAGE/NUM_RECV_MESSAGE,
+                                NUM_RECV_ACL, TIME_RECV_ACL, TIME_RECV_ACL/NUM_RECV_ACL, NUM_RECV_NAMESPACE_CERTIFICATE, TIME_RECV_NAMESPACE_CERTIFICATE,
+                                TIME_RECV_NAMESPACE_CERTIFICATE/NUM_RECV_NAMESPACE_CERTIFICATE, NUM_BROADCAST_DATA, TIME_BROADCAST_DATA, TIME_BROADCAST_DATA/NUM_BROADCAST_DATA,
+                                NUM_SEND_DATA, TIME_SEND_DATA, TIME_SEND_DATA/NUM_SEND_DATA, NUM_HANDLE_SEND_MESSAGE, TIME_HANDLE_SEND_MESSAGE,
+                                TIME_HANDLE_SEND_MESSAGE/NUM_HANDLE_SEND_MESSAGE, NUM_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE/NUM_HANDLE_MESSAGE);
+
+            // Print encryption data
+            Log::Line(Log::INFO, "RSA Encrypts: %lu (%f secs), RSA Decrypts: %lu (%f secs), RSA Signs: %lu (%f secs), RSA Verifies: %lu (%f secs), RSA Generate Key: %lu (%f secs)\nAES Encrypts: %lu (%f secs), AES Decrypts: %lu (%f secs), AES Generate Object: %lu (%f secs)\n",
+                      NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, NUM_RSA_SIGNS, TIME_RSA_SIGNS, NUM_RSA_VERIFIES, TIME_RSA_VERIFIES, NUM_RSA_GENERATES, TIME_RSA_GENERATES, NUM_AES_ENCRYPTS, TIME_AES_ENCRYPTS, NUM_AES_DECRYPTS, TIME_AES_DECRYPTS, NUM_AES_GENERATES, TIME_AES_GENERATES);
+    }
+#endif
 
     int UbipalService::SaveService(const std::string& file_path)
     {
@@ -675,7 +710,7 @@ namespace UbiPAL
         returned_value = recv(incoming_data->conn_fd, buf, MAX_MESSAGE_SIZE, 0);
         if (returned_value < 0)
         {
-            Log::Line(Log::INFO, "UbipalService::HandleConnection: receive failed: %s", strerror(errno));
+            Log::Line(Log::INFO, "UbipalService::HandleIncomingConnection: receive failed: %s", strerror(errno));
             RETURN_STATUS(NETWORKING_FAILURE);
         }
         else
@@ -694,6 +729,10 @@ namespace UbiPAL
 
     int UbipalService::HandleMessage(IncomingData* const incoming_data)
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         FUNCTION_START;
         unsigned char* buf_decrypted = nullptr;
         unsigned int buf_decrypted_len = 0;
@@ -949,10 +988,13 @@ namespace UbiPAL
             #ifdef EVALUATE
                 // count all messages received, since they were received regardless of any failure afterward
                 ++NUM_MESSAGES_RECV;
+                clock_t end = clock();
+                TIME_HANDLE_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_HANDLE_MESSAGE;
             #endif
             if (status != SUCCESS)
             {
-                Log::Line(Log::DEBUG, "UbipalService::HandleConnection: Exiting failure: %s", GetErrorDescription(status));
+                Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Exiting failure: %s", GetErrorDescription(status));
             }
             delete msg;
             return status;
@@ -960,13 +1002,17 @@ namespace UbiPAL
 
     int UbipalService::RecvAcl(const AccessControlList* const acl)
     {
-        int status = SUCCESS;
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
+        FUNCTION_START;
         std::vector<AccessControlList> acl_vector;
 
         if (acl == nullptr)
         {
             Log::Line(Log::DEBUG, "UbipalService::RecvAcl: Null arg");
-            return NULL_ARG;
+            RETURN_STATUS(NULL_ARG);
         }
 
         // find all the acls from this service
@@ -977,7 +1023,7 @@ namespace UbiPAL
         {
             Log::Line(Log::INFO, "UbipalService::RecvAcl: Attempted to add ACL which was previously revoked.");
             external_acls_mutex.unlock();
-            return PREVIOUSLY_REVOKED;
+            RETURN_STATUS(PREVIOUSLY_REVOKED);
         }
         if (external_acls.count(acl->id) == 0)
         {
@@ -994,7 +1040,7 @@ namespace UbiPAL
                 {
                     // we've already heard this one, so we're done.
                     external_acls_mutex.unlock();
-                    return SUCCESS;
+                    RETURN_STATUS(SUCCESS);
                 }
             }
 
@@ -1003,18 +1049,28 @@ namespace UbiPAL
         }
 
         external_acls_mutex.unlock();
-        return status;
+        exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_RECV_ACL += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_RECV_ACL;
+            #endif
+            FUNCTION_END;
     }
 
     int UbipalService::RecvNamespaceCertificate(const NamespaceCertificate* const name_cert)
     {
-        int status = SUCCESS;
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
+        FUNCTION_START;
         std::unordered_map<std::string, NamespaceCertificate>::iterator itr;
 
         if (name_cert == nullptr)
         {
             Log::Line(Log::DEBUG, "UbipalService::RecvNamespaceCertificate: Null arg");
-            return NULL_ARG;
+            RETURN_STATUS(NULL_ARG);
         }
 
         services_mutex.lock();
@@ -1058,19 +1114,30 @@ namespace UbiPAL
         }
 
         services_mutex.unlock();
-        return status;
+        exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_RECV_NAMESPACE_CERTIFICATE += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_RECV_NAMESPACE_CERTIFICATE;
+            #endif
+            FUNCTION_END;
     }
 
     int UbipalService::RecvMessage(const Message* const message)
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         FUNCTION_START;
         std::unordered_map<std::string, UbipalCallback>::iterator found;
         std::pair<std::unordered_map<std::string, std::vector<AccessControlList>>::iterator, bool> emplace_ret;
+        std::string replying_id;
 
         if (message == nullptr)
         {
             Log::Line(Log::INFO, "UbipalServices::RecvMessage: null argument");
-            return NULL_ARG;
+            RETURN_STATUS(NULL_ARG);
         }
 
         // if it's a reply, let's handle it. This avoids the ACLs since we explicitly allowed for the reply
@@ -1079,7 +1146,7 @@ namespace UbiPAL
             reply_callback_mutex.lock();
 
             // if we have a message with the given ID sent to the sender, let's go at it
-            std::string replying_id = message->message.substr(strlen("REPLY_"));
+            replying_id = message->message.substr(strlen("REPLY_"));
             if (reply_callback_map.count(replying_id) == 1)
             {
                 UbipalReplyCallback callback_func = reply_callback_map[replying_id];
@@ -1087,7 +1154,7 @@ namespace UbiPAL
                 {
                     Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.coun() was 1, but fetching element returned null.");
                     reply_callback_mutex.unlock();
-                    return GENERAL_FAILURE;
+                    RETURN_STATUS(GENERAL_FAILURE);
                 }
 
                 Message* original_message = nullptr;
@@ -1114,7 +1181,7 @@ namespace UbiPAL
                 {
                     Log::Line(Log::EMERG, "UbipalService::RecvMessage: msgs_awaiting_reply did not have the original message");
                     reply_callback_mutex.unlock();
-                    return GENERAL_FAILURE;
+                    RETURN_STATUS(GENERAL_FAILURE);
                 }
 
                 // erase the mapping only if it wasn't a broadcast
@@ -1125,21 +1192,29 @@ namespace UbiPAL
                     {
                         Log::Line(Log::EMERG, "UbipalService::RecvMessage: reply_callback_map.erase() failed to remove the mapping.");
                         reply_callback_mutex.unlock();
-                        return GENERAL_FAILURE;
+                        RETURN_STATUS(GENERAL_FAILURE);
                     }
                 }
 
                 reply_callback_mutex.unlock();
                 status = callback_func(this, original_message, message);
-                return status;
+                RETURN_STATUS(status);
             }
             else
             {
                 // else we toss the message
                 Log::Line(Log::INFO, "UbipalService::RecvMessage: Received a reply to a message we were not expecting or did not send.");
                 reply_callback_mutex.unlock();
-                return status;
+                RETURN_STATUS(status);
             }
+
+            exit:
+                #ifdef EVALUATE
+                    clock_t end = clock();
+                    TIME_RECV_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
+                    ++NUM_RECV_MESSAGE;
+                #endif
+                FUNCTION_END;
         }
 
         // note: currently, each service may only revoke its own ACLs
@@ -1514,6 +1589,10 @@ namespace UbiPAL
 
     int UbipalService::BroadcastData(const unsigned char* const data, const uint32_t data_len)
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         int status = SUCCESS;
         int returned_value = 0;
 
@@ -1541,14 +1620,24 @@ namespace UbiPAL
         if (returned_value == -1)
         {
             Log::Line(Log::EMERG, "UbipalService::BroadcastData: sendto failed.");
-            return NETWORKING_FAILURE;
+            RETURN_STATUS(NETWORKING_FAILURE);
         }
 
-        return SUCCESS;
+        exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_BROADCAST_DATA += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_BROADCAST_DATA;
+            #endif
+            FUNCTION_END;
     }
 
     int UbipalService::SendData(const std::string& address, const std::string& port, const unsigned char* const data, const uint32_t data_len) const
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         FUNCTION_START;
         int conn_fd = 0;
         struct addrinfo* dest_info = nullptr;
@@ -1609,6 +1698,12 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_SEND_DATA += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_SEND_DATA;
+            #endif
+            FUNCTION_END;
             close(conn_fd);
             freeaddrinfo(dest_info);
             FUNCTION_END;
@@ -1738,6 +1833,10 @@ namespace UbiPAL
     int UbipalService::SendMessage(const uint32_t flags, const NamespaceCertificate* to, const std::string& message,
                                    const unsigned char* const arg, const uint32_t arg_len, const UbipalReplyCallback reply_callback)
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         FUNCTION_START;
         Message* msg = nullptr;
         HandleSendMessageArguments* sm_args = nullptr;
@@ -1839,6 +1938,11 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_SEND_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_SEND_MESSAGE;
+            #endif
             FUNCTION_END;
     }
 
@@ -1847,6 +1951,10 @@ namespace UbiPAL
 
     void* UbipalService::HandleSendMessage(void* args)
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         FUNCTION_START;
         HandleSendMessageArguments* sm_args = nullptr;
         unsigned char* bytes = nullptr;
@@ -2095,6 +2203,9 @@ namespace UbiPAL
         exit:
             #ifdef EVALUATE
                 // only count successfully sent messages because they only complete sending if successful
+                clock_t end = clock();
+                TIME_HANDLE_SEND_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_HANDLE_SEND_MESSAGE;
                 if (status == SUCCESS)
                 {
                     ++NUM_MESSAGES_SENT;
