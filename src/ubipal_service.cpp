@@ -53,6 +53,8 @@
     double TIME_HANDLE_SEND_MESSAGE = 0.0;
     uint32_t NUM_HANDLE_MESSAGE = 0;
     double TIME_HANDLE_MESSAGE = 0.0;
+    uint32_t NUM_EVALUATE_STATEMENT = 0;
+    double TIME_EVALUATE_STATEMENT = 0.0;
 
     extern uint32_t NUM_RSA_ENCRYPTS;
     extern double TIME_RSA_ENCRYPTS;
@@ -2454,6 +2456,10 @@ namespace UbiPAL
 
     int UbipalService::EvaluateStatement(const std::string& statement, const Message* message)
     {
+        #ifdef EVALUATE
+            clock_t start = clock();
+        #endif
+
         local_acls_mutex.lock();
         external_acls_mutex.lock();
 
@@ -2475,6 +2481,11 @@ namespace UbiPAL
         }
 
         exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_EVALUATE_STATEMENT += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_EVALUATE_STATEMENT;
+            #endif
             external_acls_mutex.unlock();
             local_acls_mutex.unlock();
             return status;
