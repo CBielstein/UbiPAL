@@ -987,6 +987,11 @@ namespace UbiPAL
         }
 
         exit:
+            if (status != SUCCESS)
+            {
+                Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Exiting failure: %s", GetErrorDescription(status));
+            }
+            delete msg;
             #ifdef EVALUATE
                 // count all messages received, since they were received regardless of any failure afterward
                 ++NUM_MESSAGES_RECV;
@@ -994,11 +999,6 @@ namespace UbiPAL
                 TIME_HANDLE_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
                 ++NUM_HANDLE_MESSAGE;
             #endif
-            if (status != SUCCESS)
-            {
-                Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Exiting failure: %s", GetErrorDescription(status));
-            }
-            delete msg;
             return status;
     }
 
@@ -1700,14 +1700,13 @@ namespace UbiPAL
         }
 
         exit:
+            close(conn_fd);
+            freeaddrinfo(dest_info);
             #ifdef EVALUATE
                 clock_t end = clock();
                 TIME_SEND_DATA += ((double) end - start) / CLOCKS_PER_SEC;
                 ++NUM_SEND_DATA;
             #endif
-            FUNCTION_END;
-            close(conn_fd);
-            freeaddrinfo(dest_info);
             FUNCTION_END;
     }
 
@@ -2203,6 +2202,12 @@ namespace UbiPAL
         }
 
         exit:
+            if ((sm_args->flags & SendMessageFlags::MESSAGE_AWAIT_REPLY) == 0)
+            {
+                delete sm_args->msg;
+            }
+            delete sm_args;
+            free(bytes);
             #ifdef EVALUATE
                 // only count successfully sent messages because they only complete sending if successful
                 clock_t end = clock();
@@ -2213,12 +2218,6 @@ namespace UbiPAL
                     ++NUM_MESSAGES_SENT;
                 }
             #endif
-            if ((sm_args->flags & SendMessageFlags::MESSAGE_AWAIT_REPLY) == 0)
-            {
-                delete sm_args->msg;
-            }
-            delete sm_args;
-            free(bytes);
             return nullptr;
     }
 
@@ -2481,13 +2480,13 @@ namespace UbiPAL
         }
 
         exit:
+            external_acls_mutex.unlock();
+            local_acls_mutex.unlock();
             #ifdef EVALUATE
                 clock_t end = clock();
                 TIME_EVALUATE_STATEMENT += ((double) end - start) / CLOCKS_PER_SEC;
                 ++NUM_EVALUATE_STATEMENT;
             #endif
-            external_acls_mutex.unlock();
-            local_acls_mutex.unlock();
             return status;
     }
 

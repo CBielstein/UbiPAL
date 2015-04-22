@@ -480,11 +480,12 @@ namespace UbiPAL
             //          int: SUCCESS
             int SetNameBroadcast(const bool on, const uint32_t ms);
 
-
+        #ifdef EVALUATE
             // PrintEval
             // Prints out the stats that were recorded during operation.
             // Must be compiled with EVAL=1 flag.
             void PrintEval();
+        #endif
 
         private:
 
