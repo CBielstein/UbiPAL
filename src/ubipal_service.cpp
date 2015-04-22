@@ -383,20 +383,35 @@ namespace UbiPAL
     }
 
 #ifdef EVALUATE
+    double total_time = 0;
+    inline double TimePercentage(const double& in_time) { return (in_time / total_time) * 100; }
+
     void UbipalService::PrintEval()
     {
-            // Print send data
-            Log::Line(Log::INFO, "Messages sent: %lu, messages received: %lu\n", NUM_MESSAGES_SENT, NUM_MESSAGES_RECV);           // Print recv data
-            Log::Line(Log::INFO, "Functions (calls, total time, average time): SendMessage: %lu, %f, %f\nRecvMessage: %lu, %f, %f\nRecvAcl: %lu, %f, %f\nRecvNamespaceCertificate: %lu, %f, %f\nBroadcastData: %lu, %f, %f\nSendData: %lu, %f, %f\nHandleSendMessage: %lu, %f, %f\nHandleMessage: %lu, %f, %f\n",
-                                NUM_SEND_MESSAGE, TIME_SEND_MESSAGE, TIME_SEND_MESSAGE/NUM_SEND_MESSAGE, NUM_RECV_MESSAGE, TIME_RECV_MESSAGE, TIME_RECV_MESSAGE/NUM_RECV_MESSAGE,
-                                NUM_RECV_ACL, TIME_RECV_ACL, TIME_RECV_ACL/NUM_RECV_ACL, NUM_RECV_NAMESPACE_CERTIFICATE, TIME_RECV_NAMESPACE_CERTIFICATE,
-                                TIME_RECV_NAMESPACE_CERTIFICATE/NUM_RECV_NAMESPACE_CERTIFICATE, NUM_BROADCAST_DATA, TIME_BROADCAST_DATA, TIME_BROADCAST_DATA/NUM_BROADCAST_DATA,
-                                NUM_SEND_DATA, TIME_SEND_DATA, TIME_SEND_DATA/NUM_SEND_DATA, NUM_HANDLE_SEND_MESSAGE, TIME_HANDLE_SEND_MESSAGE,
-                                TIME_HANDLE_SEND_MESSAGE/NUM_HANDLE_SEND_MESSAGE, NUM_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE/NUM_HANDLE_MESSAGE);
+        // compute total time
+        total_time = TIME_SEND_MESSAGE + TIME_RECV_MESSAGE + TIME_RECV_ACL + TIME_RECV_NAMESPACE_CERTIFICATE + TIME_BROADCAST_DATA + TIME_SEND_DATA + TIME_HANDLE_SEND_MESSAGE
+                     + TIME_HANDLE_MESSAGE + TIME_RSA_ENCRYPTS + TIME_RSA_DECRYPTS + TIME_RSA_SIGNS + TIME_RSA_VERIFIES + TIME_RSA_GENERATES + TIME_AES_ENCRYPTS
+                     + TIME_AES_DECRYPTS + TIME_AES_GENERATES;
 
-            // Print encryption data
-            Log::Line(Log::INFO, "RSA Encrypts: %lu (%f secs), RSA Decrypts: %lu (%f secs), RSA Signs: %lu (%f secs), RSA Verifies: %lu (%f secs), RSA Generate Key: %lu (%f secs)\nAES Encrypts: %lu (%f secs), AES Decrypts: %lu (%f secs), AES Generate Object: %lu (%f secs)\n",
-                      NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, NUM_RSA_SIGNS, TIME_RSA_SIGNS, NUM_RSA_VERIFIES, TIME_RSA_VERIFIES, NUM_RSA_GENERATES, TIME_RSA_GENERATES, NUM_AES_ENCRYPTS, TIME_AES_ENCRYPTS, NUM_AES_DECRYPTS, TIME_AES_DECRYPTS, NUM_AES_GENERATES, TIME_AES_GENERATES);
+        Log::Line(Log::INFO, "Messages sent: %lu, messages received: %lu, total computation time: %f\n", NUM_MESSAGES_SENT, NUM_MESSAGES_RECV, total_time);
+        Log::Line(Log::INFO, "Functions (calls, total time, average time, percentage of total): SendMessage: %lu, %f, %f, %f\nRecvMessage: %lu, %f, %f, %f\nRecvAcl: %lu, %f, %f, %f\nRecvNamespaceCertificate: %lu, %f, %f, %f\nBroadcastData: %lu, %f, %f, %f\nSendData: %lu, %f, %f, %f\nHandleSendMessage: %lu, %f, %f, %f\nHandleMessage: %lu, %f, %f, %f\nRSA Encrypts: %lu, %f, %f, %f\nRSA Decrypts: %lu, %f, %f, %f\nRSA Signs: %lu, %f, %f, %f\nRSA Verifies: %lu, %f, %f, %f\nRSA Generate Key: %lu, %f, %f, %f\nAES Encrypts: %lu, %f, %f, %f\nAES Decrypts: %lu, %f, %f, %f\nAES Generate Object: %lu, %f, %f, %f\n",
+                            NUM_SEND_MESSAGE, TIME_SEND_MESSAGE, TIME_SEND_MESSAGE/NUM_SEND_MESSAGE, TimePercentage(TIME_SEND_MESSAGE),
+                            NUM_RECV_MESSAGE, TIME_RECV_MESSAGE, TIME_RECV_MESSAGE/NUM_RECV_MESSAGE, TimePercentage(TIME_RECV_MESSAGE),
+                            NUM_RECV_ACL, TIME_RECV_ACL, TIME_RECV_ACL/NUM_RECV_ACL, TimePercentage(TIME_RECV_ACL),
+                            NUM_RECV_NAMESPACE_CERTIFICATE, TIME_RECV_NAMESPACE_CERTIFICATE, TIME_RECV_NAMESPACE_CERTIFICATE/NUM_RECV_NAMESPACE_CERTIFICATE,
+                                TimePercentage(TIME_RECV_NAMESPACE_CERTIFICATE),
+                            NUM_BROADCAST_DATA, TIME_BROADCAST_DATA, TIME_BROADCAST_DATA/NUM_BROADCAST_DATA, TimePercentage(TIME_BROADCAST_DATA),
+                            NUM_SEND_DATA, TIME_SEND_DATA, TIME_SEND_DATA/NUM_SEND_DATA, TimePercentage(TIME_SEND_DATA),
+                            NUM_HANDLE_SEND_MESSAGE, TIME_HANDLE_SEND_MESSAGE, TIME_HANDLE_SEND_MESSAGE/NUM_HANDLE_SEND_MESSAGE, TimePercentage(TIME_HANDLE_SEND_MESSAGE),
+                            NUM_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE/NUM_HANDLE_MESSAGE, TimePercentage(TIME_HANDLE_MESSAGE),
+                            NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS/NUM_RSA_ENCRYPTS, TimePercentage(TIME_RSA_ENCRYPTS),
+                            NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, TIME_RSA_DECRYPTS/NUM_RSA_DECRYPTS, TimePercentage(TIME_RSA_DECRYPTS),
+                            NUM_RSA_SIGNS, TIME_RSA_SIGNS, TIME_RSA_SIGNS/NUM_RSA_SIGNS, TimePercentage(TIME_RSA_SIGNS),
+                            NUM_RSA_VERIFIES, TIME_RSA_VERIFIES, TIME_RSA_VERIFIES/NUM_RSA_VERIFIES, TimePercentage(TIME_RSA_VERIFIES),
+                            NUM_RSA_GENERATES, TIME_RSA_GENERATES, TIME_RSA_GENERATES/NUM_RSA_GENERATES, TimePercentage(TIME_RSA_GENERATES),
+                            NUM_AES_ENCRYPTS, TIME_AES_ENCRYPTS, TIME_AES_ENCRYPTS/NUM_AES_ENCRYPTS, TimePercentage(TIME_AES_ENCRYPTS),
+                            NUM_AES_DECRYPTS, TIME_AES_DECRYPTS, TIME_AES_DECRYPTS/NUM_AES_DECRYPTS, TimePercentage(TIME_AES_DECRYPTS),
+                            NUM_AES_GENERATES, TIME_AES_GENERATES, TIME_AES_GENERATES/NUM_AES_GENERATES, TimePercentage(TIME_AES_GENERATES));
     }
 #endif
 
