@@ -390,11 +390,11 @@ namespace UbiPAL
     {
         // compute total time
         total_time = TIME_SEND_MESSAGE + TIME_RECV_MESSAGE + TIME_RECV_ACL + TIME_RECV_NAMESPACE_CERTIFICATE + TIME_BROADCAST_DATA + TIME_SEND_DATA + TIME_HANDLE_SEND_MESSAGE
-                     + TIME_HANDLE_MESSAGE + TIME_RSA_ENCRYPTS + TIME_RSA_DECRYPTS + TIME_RSA_SIGNS + TIME_RSA_VERIFIES + TIME_RSA_GENERATES + TIME_AES_ENCRYPTS
+                     + TIME_HANDLE_MESSAGE + TIME_EVALUATE_STATEMENT + TIME_RSA_ENCRYPTS + TIME_RSA_DECRYPTS + TIME_RSA_SIGNS + TIME_RSA_VERIFIES + TIME_RSA_GENERATES + TIME_AES_ENCRYPTS
                      + TIME_AES_DECRYPTS + TIME_AES_GENERATES;
 
         Log::Line(Log::INFO, "Messages sent: %lu, messages received: %lu, total computation time: %f\n", NUM_MESSAGES_SENT, NUM_MESSAGES_RECV, total_time);
-        Log::Line(Log::INFO, "Functions (calls, total time, average time, percentage of total): SendMessage: %lu, %f, %f, %f\nRecvMessage: %lu, %f, %f, %f\nRecvAcl: %lu, %f, %f, %f\nRecvNamespaceCertificate: %lu, %f, %f, %f\nBroadcastData: %lu, %f, %f, %f\nSendData: %lu, %f, %f, %f\nHandleSendMessage: %lu, %f, %f, %f\nHandleMessage: %lu, %f, %f, %f\nRSA Encrypts: %lu, %f, %f, %f\nRSA Decrypts: %lu, %f, %f, %f\nRSA Signs: %lu, %f, %f, %f\nRSA Verifies: %lu, %f, %f, %f\nRSA Generate Key: %lu, %f, %f, %f\nAES Encrypts: %lu, %f, %f, %f\nAES Decrypts: %lu, %f, %f, %f\nAES Generate Object: %lu, %f, %f, %f\n",
+        Log::Line(Log::INFO, "Functions (calls, total time, average time, percentage of total): SendMessage: %lu, %f, %f, %f\nRecvMessage: %lu, %f, %f, %f\nRecvAcl: %lu, %f, %f, %f\nRecvNamespaceCertificate: %lu, %f, %f, %f\nBroadcastData: %lu, %f, %f, %f\nSendData: %lu, %f, %f, %f\nHandleSendMessage: %lu, %f, %f, %f\nHandleMessage: %lu, %f, %f, %f\nEvaluateStatement: %lu, %f, %f, %f\nRSA Encrypts: %lu, %f, %f, %f\nRSA Decrypts: %lu, %f, %f, %f\nRSA Signs: %lu, %f, %f, %f\nRSA Verifies: %lu, %f, %f, %f\nRSA Generate Key: %lu, %f, %f, %f\nAES Encrypts: %lu, %f, %f, %f\nAES Decrypts: %lu, %f, %f, %f\nAES Generate Object: %lu, %f, %f, %f\n",
                             NUM_SEND_MESSAGE, TIME_SEND_MESSAGE, TIME_SEND_MESSAGE/NUM_SEND_MESSAGE, TimePercentage(TIME_SEND_MESSAGE),
                             NUM_RECV_MESSAGE, TIME_RECV_MESSAGE, TIME_RECV_MESSAGE/NUM_RECV_MESSAGE, TimePercentage(TIME_RECV_MESSAGE),
                             NUM_RECV_ACL, TIME_RECV_ACL, TIME_RECV_ACL/NUM_RECV_ACL, TimePercentage(TIME_RECV_ACL),
@@ -404,6 +404,7 @@ namespace UbiPAL
                             NUM_SEND_DATA, TIME_SEND_DATA, TIME_SEND_DATA/NUM_SEND_DATA, TimePercentage(TIME_SEND_DATA),
                             NUM_HANDLE_SEND_MESSAGE, TIME_HANDLE_SEND_MESSAGE, TIME_HANDLE_SEND_MESSAGE/NUM_HANDLE_SEND_MESSAGE, TimePercentage(TIME_HANDLE_SEND_MESSAGE),
                             NUM_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE, TIME_HANDLE_MESSAGE/NUM_HANDLE_MESSAGE, TimePercentage(TIME_HANDLE_MESSAGE),
+                            NUM_EVALUATE_STATEMENT, TIME_EVALUATE_STATEMENT, TIME_EVALUATE_STATEMENT/NUM_EVALUATE_STATEMENT, TimePercentage(TIME_EVALUATE_STATEMENT),
                             NUM_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS, TIME_RSA_ENCRYPTS/NUM_RSA_ENCRYPTS, TimePercentage(TIME_RSA_ENCRYPTS),
                             NUM_RSA_DECRYPTS, TIME_RSA_DECRYPTS, TIME_RSA_DECRYPTS/NUM_RSA_DECRYPTS, TimePercentage(TIME_RSA_DECRYPTS),
                             NUM_RSA_SIGNS, TIME_RSA_SIGNS, TIME_RSA_SIGNS/NUM_RSA_SIGNS, TimePercentage(TIME_RSA_SIGNS),
@@ -897,21 +898,25 @@ namespace UbiPAL
                     RETURN_STATUS(returned_value);
                 }
 
-                // authenticate - check signature
-                returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
-                                                                 incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
-                if (returned_value < 0)
+                // authenticate - check signature if it isn't from a service with a shared AES key pair
+                aes_keys_mutex.lock();
+                if (aes_keys.count(msg->from) == 0)
                 {
-                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
-                              GetErrorDescription(returned_value));
-                    RETURN_STATUS(returned_value);
-                }
-                else if (returned_value == 0)
-                {
-                    status = SIGNATURE_INVALID;
-                    Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
-                              GetErrorDescription(status));
-                    RETURN_STATUS(status);
+                    returned_value = RsaWrappers::VerifySignedDigest(from_pub_key, incoming_data->buffer, returned_value,
+                                                                     incoming_data->buffer + returned_value, incoming_data->buffer_len - returned_value);
+                    if (returned_value < 0)
+                    {
+                        Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
+                                  GetErrorDescription(returned_value));
+                        RETURN_STATUS(returned_value);
+                    }
+                    else if (returned_value == 0)
+                    {
+                        status = SIGNATURE_INVALID;
+                        Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
+                                  GetErrorDescription(status));
+                        RETURN_STATUS(status);
+                    }
                 }
                 status = RecvMessage((Message*)msg);
                 if (status != SUCCESS)
@@ -1975,8 +1980,6 @@ namespace UbiPAL
         HandleSendMessageArguments* sm_args = nullptr;
         unsigned char* bytes = nullptr;
         int bytes_length = 0;
-        unsigned int sig_len = 0;
-        unsigned char* sig = nullptr;
         RSA* dest_pub_key = nullptr;
         unsigned char* result = nullptr;
         unsigned int result_len = 0;
@@ -1998,19 +2001,10 @@ namespace UbiPAL
             RETURN_STATUS(returned_value);
         }
         bytes_length = returned_value;
+        total_len = bytes_length;
 
-        // calculate signature length
-        returned_value = RsaWrappers::SignatureLength(sm_args->us->private_key);
-        if (returned_value < 0)
-        {
-            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::SignatureLength failed: %s", GetErrorDescription(returned_value));
-            RETURN_STATUS(status);
-        }
-        sig_len = returned_value;
-        total_len = bytes_length + sig_len;
-
-        // allocate enough space for them both
-        bytes = (unsigned char*)malloc(total_len);
+        // allocate enough space
+        bytes = (unsigned char*)malloc(bytes_length);
         if (bytes == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
@@ -2027,15 +2021,6 @@ namespace UbiPAL
         else
         {
             status = SUCCESS;
-        }
-
-        // now sign it
-        sig = (unsigned char*)(bytes + bytes_length);
-        status = RsaWrappers::CreateSignedDigest(sm_args->us->private_key, (unsigned char*)bytes, bytes_length, sig, sig_len);
-        if (status != SUCCESS)
-        {
-            Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: CreateSignedDigest failed: %s", GetErrorDescription(status));
-            RETURN_STATUS(status);
         }
 
         // if we know the public key of the destination (the ID), encrypt it
