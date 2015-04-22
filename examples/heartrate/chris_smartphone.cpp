@@ -36,6 +36,32 @@ int HandleHrmMsg(UbiPAL::UbipalService* us, const UbiPAL::Message* original_mess
                 std::cout << "SendMessage failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
             }
         }
+        else
+        {
+            // try to request the certificate and send again
+            status = us->SendName(0, NULL);
+            if (status != UbiPAL::SUCCESS)
+            {
+                std::cout << "SendName failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            }
+
+            sleep(1);
+
+            status = us->RequestCertificate(0, SMARTWATCH, NULL);
+            if (status != UbiPAL::SUCCESS)
+            {
+                std::cout << "RequestCertificate failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+            }
+
+            if (us->GetCertificateForName(SMARTWATCH, smartwatch) == 0)
+            {
+                status = us->SendMessage(0, &smartwatch, "Alert", (unsigned char*)arg.c_str(), arg.size());
+                if (status != UbiPAL::SUCCESS)
+                {
+                    std::cout << "SendMessage failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+                }
+            }
+        }
     }
 
     return status;
@@ -46,16 +72,16 @@ int main(int argc, char** argv)
     int status = UbiPAL::SUCCESS;
 
     // log configuration
-    UbiPAL::Log::SetFile("bin/examples/heartrate/chris_smartwatch_log.txt");
+    UbiPAL::Log::SetFile("bin/examples/heartrate/chris_smartphone_log.txt");
     UbiPAL::Log::SetPrint(true);
 
     // Restore the service from the file
     UbiPAL::UbipalService us("examples/heartrate/chris_smartphone.txt");
 
     // Read in the ACL from a file
-    us.CreateAcl(0, "chris_smartwatch_rules", "examples/heartrate/chris_smartwatch_rules.txt", NULL);
+    us.CreateAcl(0, "chris_smartphone_rules", "examples/heartrate/chris_smartphone_rules.txt", NULL);
 
-    // Begin receiving and transfer control to UbiPAL
+    // Begin receiving
     status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);
     if (status != UbiPAL::SUCCESS)
     {

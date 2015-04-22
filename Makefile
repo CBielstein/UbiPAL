@@ -85,7 +85,7 @@ install: lib uninstall
 	ln -sf $(LIBRARY_DIR)/libubipal.so.1.0 $(LIBRARY_DIR)/libubipal.so
 
 .PHONY: all
-all: lib examples $(BINDIR)/run_tests
+all: lib examples $(BINDIR)/run_tests eval
 
 .PHONY: help
 help:
@@ -134,7 +134,7 @@ examples: $(BINDIR)/libubipal.so.1.0 $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR
 eval: $(BINDIR)/$(EVALDIR)/encryption_stats
 
 .PHONY: heartrate_example
-heartrate_example: $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone
+heartrate_example: $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch
 
 $(BINDIR)/$(EVALDIR)/encryption_stats: $(BINDIR)/$(EVALDIR)/encryption_stats.o
 	$(dir_guard)
@@ -191,6 +191,10 @@ $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor: $(BINDIR)/$(EXDIR)/heartra
 $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone: $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone.o
 	$(dir_guard)
 	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone.o -o $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch: $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch.o -o $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)
