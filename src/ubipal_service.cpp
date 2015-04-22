@@ -3027,8 +3027,8 @@ namespace UbiPAL
                         status = EvaluateStatementRecurse(all_conditions[j], current_service, cond_acl_trail, cond_conds, NULL, std::numeric_limits<uint32_t>::max());
                         if (status == SUCCESS)
                         {
-                            all_conditions.erase(all_conditions.begin() + i);
-                            --i;
+                            all_conditions.erase(all_conditions.begin() + j);
+                            --j;
                         }
                         else
                         {
@@ -3462,7 +3462,7 @@ namespace UbiPAL
         return status;
     }
 
-    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList& result)
+    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList* result)
     {
         int status = SUCCESS;
 
@@ -3485,13 +3485,17 @@ namespace UbiPAL
         temp_acl.rules = rules;
 
         local_acls.push_back(temp_acl);
-        result = temp_acl;
+
+        if (result != nullptr)
+        {
+            *result = temp_acl;
+        }
 
         local_acls_mutex.unlock();
         return status;
     }
 
-    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList result)
+    int UbipalService::CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList* result)
     {
         int status = SUCCESS;
 
@@ -3899,8 +3903,7 @@ namespace UbiPAL
         new_rules.push_back(service.id + " CAN SEND MESSAGE UPDATE_" + message + " TO " + GetId());
 
         // create ACL based on new rules
-        AccessControlList new_acl;
-        status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, new_acl);
+        status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, NULL);
         if (status != SUCCESS)
         {
             return status;
@@ -3952,8 +3955,7 @@ namespace UbiPAL
         // create new ACL on those other rules
         if (new_rules.size() != 0)
         {
-            AccessControlList new_acl;
-            status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, new_acl);
+            status = CreateAcl(CreateAclFlags::PRIVATE, REGISTRATION_ACL, new_rules, NULL);
             if (status != SUCCESS)
             {
                 return status;

@@ -21,7 +21,7 @@ int main ()
 
     // add rules
     UbiPAL::AccessControlList rules;
-    us.CreateAcl(0, "rules", "examples/push/producer_rules.txt", rules);
+    us.CreateAcl(0, "rules", "examples/push/producer_rules.txt", &rules);
 
     // Start receiving
     status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::NON_BLOCKING);

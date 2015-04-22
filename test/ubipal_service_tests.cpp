@@ -502,7 +502,7 @@ namespace UbiPAL
         rules.push_back("Cameron IS A student");
 
         AccessControlList acl;
-        status = us.CreateAcl(0, "students", rules, acl);
+        status = us.CreateAcl(0, "students", rules, &acl);
         if (status != SUCCESS)
         {
             fprintf(stderr, "UbipalServiceTests::UbipalServiceTestDiscoverService: UbipalService::CreateAcl failed: %s\n", GetErrorDescription(status));
@@ -595,7 +595,7 @@ namespace UbiPAL
         rules.push_back("Josh CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
         rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
         AccessControlList acl;
-        status = lauren.CreateAcl(0, "delegation", rules, acl);
+        status = lauren.CreateAcl(0, "delegation", rules, &acl);
         if (status != SUCCESS)
         {
             return status;
@@ -659,7 +659,7 @@ namespace UbiPAL
         rules.push_back("X CAN SAY Y CAN SEND MESSAGE SWING TO Lauren");
         rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
         AccessControlList acl;
-        status = lauren.CreateAcl(0, "delegation", rules, acl);
+        status = lauren.CreateAcl(0, "delegation", rules, &acl);
         if (status != SUCCESS)
         {
             return status;
@@ -725,7 +725,7 @@ namespace UbiPAL
         rules.push_back("Cameron CAN SEND MESSAGE WALTZ TO Lauren");
         rules.push_back("Meredith IS MERE");
         AccessControlList acl;
-        status = lauren.CreateAcl(0, "delegation", rules, acl);
+        status = lauren.CreateAcl(0, "delegation", rules, &acl);
         if (status != SUCCESS)
         {
             return status;
@@ -794,7 +794,7 @@ namespace UbiPAL
             std::vector<std::string> rules;
             rules.push_back("Meredith CAN SAY[2] Y CAN SEND MESSAGE TWO_STEP TO Lauren");
             AccessControlList acl;
-            status = lauren.CreateAcl(0, "delegation", rules, acl);
+            status = lauren.CreateAcl(0, "delegation", rules, &acl);
             if (status != SUCCESS)
             {
                 return status;
@@ -828,7 +828,7 @@ namespace UbiPAL
             std::vector<std::string> rules;
             rules.push_back("Meredith CAN SAY[1] Y CAN SEND MESSAGE TWO_STEP TO Lauren");
             AccessControlList acl;
-            status = lauren.CreateAcl(0, "delegation", rules, acl);
+            status = lauren.CreateAcl(0, "delegation", rules, &acl);
             if (status != SUCCESS)
             {
                 return status;
@@ -862,7 +862,7 @@ namespace UbiPAL
             std::vector<std::string> rules;
             rules.push_back("Meredith CAN SAY[10] Y CAN SEND MESSAGE TWO_STEP TO Lauren");
             AccessControlList acl;
-            status = lauren.CreateAcl(0, "delegation", rules, acl);
+            status = lauren.CreateAcl(0, "delegation", rules, &acl);
             if (status != SUCCESS)
             {
                 return status;

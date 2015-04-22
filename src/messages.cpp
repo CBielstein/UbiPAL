@@ -507,6 +507,7 @@ namespace UbiPAL
     {
         type = MESSAGE;
         argument = nullptr;
+        arg_len = 0;
     }
 
     Message::Message(const unsigned char* const arg, const uint32_t arg_size)

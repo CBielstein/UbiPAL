@@ -47,7 +47,7 @@ int main(int argc, char** argv)
         {
             case 'a':
                 std::cout << "Authorizing." << std::endl;
-                status = us.CreateAcl(0, "all", rules, acl_all);
+                status = us.CreateAcl(0, "all", rules, &acl_all);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -80,7 +80,7 @@ int main(int argc, char** argv)
                 break;
             case 'c':
                 std::cout << "Requires confirm." << std::endl;
-                status = us.CreateAcl(0, "all", confirm_rules, acl_all);
+                status = us.CreateAcl(0, "all", confirm_rules, &acl_all);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

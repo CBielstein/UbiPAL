@@ -57,7 +57,7 @@ int main ()
 
     // add rules
     UbiPAL::AccessControlList delegate;
-    us.CreateAcl(0, "delegation", ReadRulesFile("examples/sinewave/producer_rules.txt"), delegate);
+    us.CreateAcl(0, "delegation", ReadRulesFile("examples/sinewave/producer_rules.txt"), &delegate);
 
     // Set callback
     status = us.RegisterCallback("SINE", ReplySine);

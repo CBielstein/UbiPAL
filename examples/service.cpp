@@ -14,11 +14,10 @@ int main ()
     UbiPAL::UbipalService us;
     std::cout << "Started service " << us.GetId() << std::endl;
 
-    UbiPAL::AccessControlList acl;
     std::vector<std::string> empty;
-    us.CreateAcl(0, "first", empty, acl);
-    us.CreateAcl(UbiPAL::UbipalService::CreateAclFlags::PRIVATE, "second", empty, acl);
-    us.CreateAcl(0, "second", empty, acl);
+    us.CreateAcl(0, "first", empty, NULL);
+    us.CreateAcl(UbiPAL::UbipalService::CreateAclFlags::PRIVATE, "second", empty, NULL);
+    us.CreateAcl(0, "second", empty, NULL);
 
     // Start receiving for message replies
     status = us.BeginRecv(UbiPAL::UbipalService::BeginRecvFlags::DONT_PUBLISH_NAME);

@@ -85,7 +85,7 @@ int main(int argc, char** argv)
                 rules.clear();
                 rules.push_back(allow_rule);
                 rules.push_back(is_rule);
-                status = us.CreateAcl(0, "all", rules, acl);
+                status = us.CreateAcl(0, "all", rules, &acl);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -113,7 +113,7 @@ int main(int argc, char** argv)
                 std::cout << "Delegating." << std::endl;
                 rules.clear();
                 rules.push_back(delegate_rule);
-                status = us.CreateAcl(0, "all", rules, acl);
+                status = us.CreateAcl(0, "all", rules, &acl);
                 if (status != UbiPAL::SUCCESS)
                 {
                     std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

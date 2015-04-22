@@ -131,7 +131,7 @@ int main ()
                 std::cout << "Failed to revoke old acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
             }
 
-            status = us.CreateAcl(0, "acl", new_rules, acl);
+            status = us.CreateAcl(0, "acl", new_rules, &acl);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
@@ -195,7 +195,7 @@ int main ()
                 std::cout << "Failed to revoke old acl: " << UbiPAL::GetErrorDescription(status) << std::endl;
             }
 
-            status = us.CreateAcl(0, "acl", new_rules, acl);
+            status = us.CreateAcl(0, "acl", new_rules, &acl);
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

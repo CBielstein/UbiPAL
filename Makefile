@@ -32,6 +32,7 @@ EXAMPLE_SOURCES = $(wildcard $(EXDIR)/*.cpp)
 EXAMPLE_SOURCES += $(wildcard $(EXDIR)/telephone/*.cpp)
 EXAMPLE_SOURCES += $(wildcard $(EXDIR)/sinewave/*.cpp)
 EXAMPLE_SOURCES += $(wildcard $(EXDIR)/push/*.cpp)
+EXAMPLE_SOURCES += $(wildcard $(EXDIR)/heartrate/*.cpp)
 EXAMPLE_OBJECTS = $(addprefix $(BINDIR)/, $(EXAMPLE_SOURCES:.cpp=.o))
 EXDEPS = $(EXAMPLE_OBJECTS:.o=.d)
 
@@ -127,10 +128,13 @@ test: $(BINDIR)/run_tests
 	$(TESTFLAGS) $(BINDIR)/run_tests
 
 .PHONY: examples
-examples: $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display $(BINDIR)/$(EXDIR)/sinewave/delegator $(BINDIR)/$(EXDIR)/push/producer $(BINDIR)/$(EXDIR)/push/consumer $(BINDIR)/$(EXDIR)/discover $(BINDIR)/$(EXDIR)/service
+examples: $(BINDIR)/libubipal.so.1.0 $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR)/receiver $(BINDIR)/$(EXDIR)/create_service $(BINDIR)/$(EXDIR)/delegator $(BINDIR)/$(EXDIR)/print_id $(BINDIR)/$(EXDIR)/confirmer $(BINDIR)/$(EXDIR)/telephone/house $(BINDIR)/$(EXDIR)/telephone/bed $(BINDIR)/$(EXDIR)/telephone/phone $(BINDIR)/$(EXDIR)/telephone/caller $(BINDIR)/$(EXDIR)/sinewave/producer $(BINDIR)/$(EXDIR)/sinewave/display $(BINDIR)/$(EXDIR)/sinewave/delegator $(BINDIR)/$(EXDIR)/push/producer $(BINDIR)/$(EXDIR)/push/consumer $(BINDIR)/$(EXDIR)/discover $(BINDIR)/$(EXDIR)/service heartrate_example
 
 .PHONY: eval
 eval: $(BINDIR)/$(EVALDIR)/encryption_stats
+
+.PHONY: heartrate_example
+heartrate_example: $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone
 
 $(BINDIR)/$(EVALDIR)/encryption_stats: $(BINDIR)/$(EVALDIR)/encryption_stats.o
 	$(dir_guard)
@@ -179,6 +183,14 @@ $(BINDIR)/$(EXDIR)/sinewave/producer: $(BINDIR)/$(EXDIR)/sinewave/producer.o
 $(BINDIR)/$(EXDIR)/sinewave/display: $(BINDIR)/$(EXDIR)/sinewave/display.o
 	$(dir_guard)
 	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/sinewave/display.o -o $(BINDIR)/$(EXDIR)/sinewave/display $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor: $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor.o -o $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/heartrate/chris_smartphone: $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone.o -o $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)

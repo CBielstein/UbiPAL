@@ -41,9 +41,8 @@ int main(int argc, char** argv)
     std::vector<std::string> rules;
     std::string rule = "X CAN SEND MESSAGE CALL TO " + us.GetId() + " if " + HOUSE + " CONFIRMS IS_HOME, " + BED + " CONFIRMS IS_ASLEEP";
     rules.push_back(rule);
-    UbiPAL::AccessControlList acl_all;
 
-    status = us.CreateAcl(0, "all", rules, acl_all);
+    status = us.CreateAcl(0, "all", rules, NULL);
     if (status != UbiPAL::SUCCESS)
     {
         std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

@@ -52,7 +52,7 @@ int main(int argc, char** argv)
     rules.push_back(rule);
     UbiPAL::AccessControlList acl_all;
 
-    status = us.CreateAcl(0, "all", rules, acl_all);
+    status = us.CreateAcl(0, "all", rules, &acl_all);
     if (status != UbiPAL::SUCCESS)
     {
         std::cout << "Failed to create acl: " << UbiPAL::GetErrorDescription(status) << std::endl;

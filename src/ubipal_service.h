@@ -246,8 +246,8 @@ namespace UbiPAL
             //          [OUT] result: the resultant ACL
             // return
             //          int: SUCCESS on success, else negative error code
-            int CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList& result);
-            int CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList result);
+            int CreateAcl(const uint32_t flags, const std::string& description, const std::vector<std::string>& rules, AccessControlList* result);
+            int CreateAcl(const uint32_t flags, const std::string& description, const std::string file, AccessControlList* result);
 
             // GetAclFlags
             // Flags for GetAcl, descriptions in comments on that function
