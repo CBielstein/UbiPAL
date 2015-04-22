@@ -4,6 +4,8 @@ AE249A9708AC78CCEA83ECFDD9CB9172506E25566715F3836FC59E266253308E3BC29ED337B87E96
 X CAN SEND MESSAGE RequestHeartRate TO Y if X IS smartwatch, Y IS hrm
 X CAN SEND MESSAGE AlertDoctor TO Y, X IS hrm, Y IS smartwatch
 X CAN SEND MESSAGE REGISTER_AlertDoctor TO Y, X IS hrm, Y IS smartwatch
-X CAN SAY[1] M CAN SEND MESSAGE RequestHeartRate TO Y if X SAYS D IS A doctor, X IS DrAlice, Y IS hrm
-X CAN SAY[1] M CAN SEND MESSAGE REGISTER_RequestHeartRate TO Y if X SAYS D IS A doctor, X IS DrAlice, Y IS hrm
+X CAN SEND MESSAGE RequestHeartRate TO Y if X IS A doctor, Y IS hrm
+X CAN SEND MESSAGE REGISTER_RequestHeartRate TO Y if X IS A doctor, Y IS hrm
+X IS A doctor if X IS DrAlice
+X CAN SAY[1] Y IS A doctor if X IS DrAlice
 X CAN SEND MESSAGE Alert TO Y if X IS hrm, Y IS smartwatch

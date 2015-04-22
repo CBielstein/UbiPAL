@@ -33,7 +33,13 @@ int main(int argc, char** argv)
     UbiPAL::UbipalService us("examples/heartrate/chris_smartwatch.txt");
 
     // Read in the ACL from a file
-    us.CreateAcl(0, "chris_smartwatch_rules", "examples/heartrate/chris_smartwatch_rules.txt", NULL);
+    UbiPAL::AccessControlList acl;
+    status = us.CreateAcl(0, "chris_smartwatch_rules", "examples/heartrate/chris_smartwatch_rules.txt", &acl);
+    if (status != UbiPAL::SUCCESS)
+    {
+        std::cout << "CreateAcl failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
+        return status;
+    }
 
     // Register callback
     status = us.RegisterCallback("Alert", HandleAlert);
@@ -76,6 +82,12 @@ int main(int argc, char** argv)
             {
                 std::cout << "SendName failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
                 continue;
+            }
+
+            status = us.SendAcl(0, acl, NULL);
+            if (status != UbiPAL::SUCCESS)
+            {
+                std::cout << "SendAcl failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
             }
         }
     }
