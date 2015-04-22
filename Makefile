@@ -134,7 +134,7 @@ examples: $(BINDIR)/libubipal.so.1.0 $(BINDIR)/$(EXDIR)/sender $(BINDIR)/$(EXDIR
 eval: $(BINDIR)/$(EVALDIR)/encryption_stats
 
 .PHONY: heartrate_example
-heartrate_example: $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch $(BINDIR)/$(EXDIR)/heartrate/dr_alice
+heartrate_example: $(BINDIR)/$(EXDIR)/heartrate/chris_heartrate_monitor $(BINDIR)/$(EXDIR)/heartrate/chris_smartphone $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch $(BINDIR)/$(EXDIR)/heartrate/dr_alice $(BINDIR)/$(EXDIR)/heartrate/dr_bob
 
 $(BINDIR)/$(EVALDIR)/encryption_stats: $(BINDIR)/$(EVALDIR)/encryption_stats.o
 	$(dir_guard)
@@ -199,6 +199,10 @@ $(BINDIR)/$(EXDIR)/heartrate/chris_smartwatch: $(BINDIR)/$(EXDIR)/heartrate/chri
 $(BINDIR)/$(EXDIR)/heartrate/dr_alice: $(BINDIR)/$(EXDIR)/heartrate/dr_alice.o
 	$(dir_guard)
 	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/heartrate/dr_alice.o -o $(BINDIR)/$(EXDIR)/heartrate/dr_alice $(LIBS) -lubipal
+
+$(BINDIR)/$(EXDIR)/heartrate/dr_bob: $(BINDIR)/$(EXDIR)/heartrate/dr_bob.o
+	$(dir_guard)
+	$(CXX) $(LDFLAGS) $(BINDIR)/$(EXDIR)/heartrate/dr_bob.o -o $(BINDIR)/$(EXDIR)/heartrate/dr_bob $(LIBS) -lubipal
 
 $(BINDIR)/$(EXDIR)/sender: $(BINDIR)/$(EXDIR)/sender.o
 	$(dir_guard)
