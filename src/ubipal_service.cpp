@@ -19,6 +19,7 @@
 #include <sys/wait.h>
 #include <sstream>
 #include <fstream>
+#include <algorithm>
 
 // Networking
 #include <sys/types.h>
@@ -31,6 +32,7 @@
 #include <openssl/err.h>
 
 #define FILE_READ_LENGTH 4096
+const unsigned int DETECT_ENCRYPTION_LENGTH = 5;
 
 // variables for evaluation
 #ifdef EVALUATE
@@ -758,6 +760,7 @@ namespace UbiPAL
         uint32_t from_len = 0;
         RSA* from_pub_key = nullptr;
         BaseMessage* msg = nullptr;
+        bool did_aes_decrypt = false;
 
         if (incoming_data == nullptr)
         {
@@ -769,8 +772,6 @@ namespace UbiPAL
             Log::Line(Log::INFO, "UbipalStatus::HandleMessage: Passed incoming_data with null buffer.");
             RETURN_STATUS(INVALID_ARG);
         }
-
-        /// decryption
 
         // The first byte is the type, the next 4 are the size of the from field, but we want the to field to check for encryption
         returned_value = BaseMessage::DecodeUint32_t(incoming_data->buffer + 1, incoming_data->buffer_len, from_len);
@@ -801,7 +802,7 @@ namespace UbiPAL
         {
             // If the to length is nonzero, compare the next bytes against the service's id.
             // If they are the same, this is not encrypted. If they do not match, try to derypt and try again
-            if (to_len != id.size() || memcmp(incoming_data->buffer + 1 + 4 + from_len + 4, id.c_str(), id.size()) != 0)
+            if ((to_len != id.size() && to_len != DETECT_ENCRYPTION_LENGTH) || memcmp(incoming_data->buffer + 1 + 4 + from_len + 4, id.c_str(), DETECT_ENCRYPTION_LENGTH) != 0)
             {
                 std::string from = std::string((char*)incoming_data->buffer + 1 + 4, from_len);
 
@@ -826,7 +827,7 @@ namespace UbiPAL
                 }
 
                 // If they still don't match, toss the message because it isn't to us
-                if (memcmp(buf_decrypted + 4, id.c_str(), id.size()) != 0)
+                if (memcmp(buf_decrypted + 4, id.c_str(), DETECT_ENCRYPTION_LENGTH) != 0)
                 {
                     Log::Line(Log::WARN, "UbipalService::HandleMessage: Message couldn't be interpreted, so it's tossed.");
                     RETURN_STATUS(INVALID_NETWORK_ENCODING);
@@ -843,6 +844,8 @@ namespace UbiPAL
                 memcpy(final_message, incoming_data->buffer, 5 + from_len);
                 memcpy(final_message + 5 + from_len, buf_decrypted, buf_decrypted_len);
 
+                did_aes_decrypt = true;
+
                 // so we decrypted and it matched, put buf_decrypted in buf
                 free(incoming_data->buffer);
                 free(buf_decrypted);
@@ -855,13 +858,14 @@ namespace UbiPAL
 
         // interpret message
         msg = new BaseMessage();
-        status = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
-        if (status < 0)
+        returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
+        if (returned_value < 0)
         {
-            Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::Decode failed: %s", GetErrorDescription(status));
-            RETURN_STATUS(status)
+            Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::Decode failed: %s", GetErrorDescription(returned_value));
+            RETURN_STATUS(returned_value);
         }
 
+        // toss any messages received on broadcast from this service
         if (msg->from == id)
         {
             Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Dropped message from this service.");
@@ -870,7 +874,8 @@ namespace UbiPAL
 
         // ensure this isn't directed to somebody else
         // it's to us or it's broadcast (to nobody)
-        if (msg->to != id && !msg->to.empty())
+        if ((msg->to != id) && (msg->to.empty() == false)
+            && (((msg->to.size() == DETECT_ENCRYPTION_LENGTH) && (id.compare(0, DETECT_ENCRYPTION_LENGTH, msg->to) == 0) && did_aes_decrypt) == false))
         {
             status = MESSAGE_WRONG_DESTINATION;
             Log::Line(Log::DEBUG, "UbipalService::HandleMessage: Received a message not to this service: %s", GetErrorDescription(status));
@@ -1990,6 +1995,8 @@ namespace UbiPAL
         unsigned int result_len = 0;
         unsigned int total_len = 0;
         bool add_signature = false;
+        bool has_aes_key = false;
+        std::string full_to;
 
         if (args == nullptr)
         {
@@ -1999,24 +2006,36 @@ namespace UbiPAL
 
         sm_args = static_cast<HandleSendMessageArguments*>(args);
 
+        sm_args->us->aes_keys_mutex.lock();
+        has_aes_key = (sm_args->us->aes_keys.count(sm_args->msg->to) == 1);
+
+        full_to = sm_args->msg->to;
+        if (sm_args->msg->type == MessageType::MESSAGE && has_aes_key == true)
+        {
+            // if it's a normal message and we have an AES key, just send the first DETECT_ENCRYPTION_LENGTH characters of the to address to use for encryption detection
+            sm_args->msg->to = full_to.substr(0, DETECT_ENCRYPTION_LENGTH);
+        }
+
         // calculate encoded message length
         returned_value = sm_args->msg->EncodedLength();
         if (returned_value < 0)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: EncodedLength had error: %s", GetErrorDescription(returned_value));
+            sm_args->us->aes_keys_mutex.unlock();
             RETURN_STATUS(returned_value);
         }
         bytes_length = returned_value;
         total_len = bytes_length;
 
         // if it's not a standard message or we don't have an existing AES key, sign it
-        if (sm_args->msg->type != MessageType::MESSAGE || sm_args->us->aes_keys.count(sm_args->msg->to) == 0)
+        if (sm_args->msg->type != MessageType::MESSAGE || has_aes_key == false)
         {
             add_signature = true;
             returned_value = RsaWrappers::SignatureLength(sm_args->us->private_key);
             if (returned_value < 0)
             {
                 Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::SignatureLength failed: %s", GetErrorDescription(status));
+                sm_args->us->aes_keys_mutex.unlock();
                 RETURN_STATUS(status);
             }
 
@@ -2029,6 +2048,7 @@ namespace UbiPAL
         if (bytes == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
+            sm_args->us->aes_keys_mutex.unlock();
             RETURN_STATUS(MALLOC_FAILURE);
         }
 
@@ -2037,6 +2057,7 @@ namespace UbiPAL
         if (status < 0)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Encode failed: %s", GetErrorDescription(status));
+            sm_args->us->aes_keys_mutex.unlock();
             RETURN_STATUS(status);
         }
         else
@@ -2051,6 +2072,7 @@ namespace UbiPAL
             if (status != SUCCESS)
             {
                 Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: CreateSignedDigest failed: %s", GetErrorDescription(status));
+                sm_args->us->aes_keys_mutex.unlock();
                 RETURN_STATUS(status);
             }
         }
@@ -2058,14 +2080,13 @@ namespace UbiPAL
         // if we know the public key of the destination (the ID), encrypt it
         // reasons we wouldn't know the ID: first contact, or multicast
         // but don't encrypt if NO_ENCRYPTION
-        if (!sm_args->msg->to.empty() && ((sm_args->flags & SendMessageFlags::NO_ENCRYPTION) == 0))
+        if (!full_to.empty() && ((sm_args->flags & SendMessageFlags::NO_ENCRYPTION) == 0))
         {
             // if we have an AES key, use that, else make one and send it
-            sm_args->us->aes_keys_mutex.lock();
             // we have no AES key, so make one and send it
-            if (sm_args->us->aes_keys.count(sm_args->msg->to) == 0)
+            if (has_aes_key == false)
             {
-                status = RsaWrappers::StringToPublicKey(sm_args->msg->to, dest_pub_key);
+                status = RsaWrappers::StringToPublicKey(full_to, dest_pub_key);
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
@@ -2097,7 +2118,7 @@ namespace UbiPAL
                 }
 
                 //  put it in our structure
-                sm_args->us->aes_keys[sm_args->msg->to] = std::tuple<unsigned char*, unsigned char*>(key, iv);
+                sm_args->us->aes_keys[full_to] = std::tuple<unsigned char*, unsigned char*>(key, iv);
 
                 // send it to receiving message
                 uint32_t encoded_aes_length = 4 + key_length + 4 + iv_length;
@@ -2133,7 +2154,7 @@ namespace UbiPAL
 
                 // Send as a message
                 Message aes_msg(encrypted_aes_pair, encrypted_aes_len);
-                aes_msg.to = sm_args->msg->to;
+                aes_msg.to = full_to;
                 aes_msg.from = sm_args->msg->from;
                 aes_msg.message = "NEWAESPAIR";
 
@@ -2178,9 +2199,9 @@ namespace UbiPAL
                 sleep(1);
             }
 
-            if (sm_args->us->aes_keys.count(sm_args->msg->to) == 1)
+            if (sm_args->us->aes_keys.count(full_to) == 1)
             {
-                std::tuple<unsigned char*, unsigned char*> keyIv = sm_args->us->aes_keys[sm_args->msg->to];
+                std::tuple<unsigned char*, unsigned char*> keyIv = sm_args->us->aes_keys[full_to];
                 unsigned char* aes_encrypted = nullptr;
                 unsigned int aes_encrypted_len = 0;
 
@@ -2207,8 +2228,6 @@ namespace UbiPAL
                 RETURN_STATUS(GENERAL_FAILURE);
             }
 
-            sm_args->us->aes_keys_mutex.unlock();
-
             // make the below code work regardless of encryption or not
             free(bytes);
             bytes = result;
@@ -2216,8 +2235,10 @@ namespace UbiPAL
             total_len = result_len;
         }
 
+        sm_args->us->aes_keys_mutex.unlock();
+
         // if there's not a single destination, broadcast!
-        if (sm_args->msg->to.empty())
+        if (full_to.empty())
         {
             status = sm_args->us->BroadcastData(bytes, total_len);
             if (status < 0)

@@ -14,6 +14,7 @@ int main(int argc, char** argv)
     // log configuration
     UbiPAL::Log::SetFile("bin/examples/heartrate/chris_heartrate_monitor_log.txt");
     UbiPAL::Log::SetPrint(true);
+    UbiPAL::Log::SetLevel(UbiPAL::Log::Level::DEBUG);
 
     // Restore the service from the file
     UbiPAL::UbipalService us("examples/heartrate/chris_heartrate_monitor.txt");
