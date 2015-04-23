@@ -892,7 +892,7 @@ namespace UbiPAL
                 delete msg;
                 msg = new Message();
                 returned_value = msg->Decode(incoming_data->buffer, incoming_data->buffer_len);
-                if (status < 0)
+                if (returned_value < 0)
                 {
                     Log::Line(Log::WARN, "UbipalService::HandleMessage: Message::Decode failed: %s", GetErrorDescription(returned_value));
                     RETURN_STATUS(returned_value);
@@ -908,6 +908,7 @@ namespace UbiPAL
                     {
                         Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest error: %s",
                                   GetErrorDescription(returned_value));
+                        aes_keys_mutex.unlock();
                         RETURN_STATUS(returned_value);
                     }
                     else if (returned_value == 0)
@@ -915,9 +916,11 @@ namespace UbiPAL
                         status = SIGNATURE_INVALID;
                         Log::Line(Log::INFO, "UbipalService::HandleMessage: RsaWrappers::VerifySignedDigest did not verify signature: %s",
                                   GetErrorDescription(status));
+                        aes_keys_mutex.unlock();
                         RETURN_STATUS(status);
                     }
                 }
+                aes_keys_mutex.unlock();
                 status = RecvMessage((Message*)msg);
                 if (status != SUCCESS)
                 {
@@ -1980,10 +1983,13 @@ namespace UbiPAL
         HandleSendMessageArguments* sm_args = nullptr;
         unsigned char* bytes = nullptr;
         int bytes_length = 0;
+        unsigned int sig_len = 0;
+        unsigned char* sig = nullptr;
         RSA* dest_pub_key = nullptr;
         unsigned char* result = nullptr;
         unsigned int result_len = 0;
         unsigned int total_len = 0;
+        bool add_signature = false;
 
         if (args == nullptr)
         {
@@ -2003,8 +2009,23 @@ namespace UbiPAL
         bytes_length = returned_value;
         total_len = bytes_length;
 
+        // if it's not a standard message or we don't have an existing AES key, sign it
+        if (sm_args->msg->type != MessageType::MESSAGE || sm_args->us->aes_keys.count(sm_args->msg->to) == 0)
+        {
+            add_signature = true;
+            returned_value = RsaWrappers::SignatureLength(sm_args->us->private_key);
+            if (returned_value < 0)
+            {
+                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::SignatureLength failed: %s", GetErrorDescription(status));
+                RETURN_STATUS(status);
+            }
+
+            sig_len = returned_value;
+            total_len += sig_len;
+        }
+
         // allocate enough space
-        bytes = (unsigned char*)malloc(bytes_length);
+        bytes = (unsigned char*)malloc(total_len);
         if (bytes == nullptr)
         {
             Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed");
@@ -2023,6 +2044,17 @@ namespace UbiPAL
             status = SUCCESS;
         }
 
+        if (add_signature == true)
+        {
+            sig = (unsigned char*)(bytes + bytes_length);
+            status = RsaWrappers::CreateSignedDigest(sm_args->us->private_key, (unsigned char*)bytes, bytes_length, sig, sig_len);
+            if (status != SUCCESS)
+            {
+                Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: CreateSignedDigest failed: %s", GetErrorDescription(status));
+                RETURN_STATUS(status);
+            }
+        }
+
         // if we know the public key of the destination (the ID), encrypt it
         // reasons we wouldn't know the ID: first contact, or multicast
         // but don't encrypt if NO_ENCRYPTION
@@ -2037,6 +2069,7 @@ namespace UbiPAL
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: RsaWrappers::StringToPublicKey failed: %s", GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2050,6 +2083,7 @@ namespace UbiPAL
                 {
                     Log::Line(Log::EMERG, "UbipalServide::HandleSendMessage: AesWrappers::GenerateAesObject failed creating key: %s",
                               GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2058,6 +2092,7 @@ namespace UbiPAL
                 {
                     Log::Line(Log::EMERG, "UbipalServide::HandleSendMessage: AesWrappers::GenerateAesObject failed creating iv: %s",
                               GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2070,6 +2105,7 @@ namespace UbiPAL
                 if (encoded_aes_pair == nullptr)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: malloc failed on encoded_aes_pair");
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(MALLOC_FAILURE);
                 }
 
@@ -2078,6 +2114,7 @@ namespace UbiPAL
                 if (returned_value < 0)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: BaseMessage::EncodeBytes failed: %d", GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
                 returned_value = BaseMessage::EncodeBytes(encoded_aes_pair + returned_value, encoded_aes_length - returned_value, iv, iv_length);
@@ -2090,6 +2127,7 @@ namespace UbiPAL
                 {
                     Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: RsaWrappers::Encrypt failed on encrypted_ase_pair: %s",
                               GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2105,6 +2143,7 @@ namespace UbiPAL
                 if (signed_msg == nullptr)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage malloc failure on signed_msg");
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(MALLOC_FAILURE);
                 }
 
@@ -2112,6 +2151,7 @@ namespace UbiPAL
                 if (status < 0)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage aes_msg.Encode: %s", GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2122,6 +2162,7 @@ namespace UbiPAL
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: CreateSignedDigest failed: %s", GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2129,6 +2170,7 @@ namespace UbiPAL
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: SendData failed for encrypted_aes_msg: %s", GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2149,6 +2191,7 @@ namespace UbiPAL
                 if (status != SUCCESS)
                 {
                     Log::Line(Log::EMERG, "UbipalSerivce::HandleSendMessage: AesWrappers::Encrypt failed: %s", GetErrorDescription(status));
+                    sm_args->us->aes_keys_mutex.unlock();
                     RETURN_STATUS(status);
                 }
 
@@ -2160,6 +2203,7 @@ namespace UbiPAL
             else
             {
                 Log::Line(Log::EMERG, "UbipalService::HandleSendMessage: Failed to create a new aes key & iv pair and send to dest.");
+                sm_args->us->aes_keys_mutex.unlock();
                 RETURN_STATUS(GENERAL_FAILURE);
             }
 
