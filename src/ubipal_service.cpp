@@ -156,7 +156,7 @@ namespace UbiPAL
         char* addr = nullptr;
         size_t end_subnet = 0;
         current_cert = nullptr;
-        condition_timeout_length = 500;
+        condition_timeout_length = 2000;
         broadcast_name_interval = 5000;
         auto_broadcast_name = false;
 
@@ -1163,6 +1163,7 @@ namespace UbiPAL
         std::unordered_map<std::string, UbipalCallback>::iterator found;
         std::pair<std::unordered_map<std::string, std::vector<AccessControlList>>::iterator, bool> emplace_ret;
         std::string replying_id;
+        std::string eval_message;
 
         if (message == nullptr)
         {
@@ -1234,17 +1235,11 @@ namespace UbiPAL
             {
                 // else we toss the message
                 Log::Line(Log::INFO, "UbipalService::RecvMessage: Received a reply to a message we were not expecting or did not send.");
+                std::string args((char*)message->argument, message->arg_len);
+                Log::Line(Log::DEBUG, "UbipalService::RecvMessage: Unexpected message was: %s with args: %s", message->message.c_str(), args.c_str());
                 reply_callback_mutex.unlock();
                 RETURN_STATUS(status);
             }
-
-            exit:
-                #ifdef EVALUATE
-                    clock_t end = clock();
-                    TIME_RECV_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
-                    ++NUM_RECV_MESSAGE;
-                #endif
-                FUNCTION_END;
         }
 
         // note: currently, each service may only revoke its own ACLs
@@ -1260,7 +1255,7 @@ namespace UbiPAL
                 {
                     trusted_services.erase(message->from);
                     services_mutex.unlock();
-                    return status;
+                    RETURN_STATUS(status);
                 }
             }
 
@@ -1270,7 +1265,7 @@ namespace UbiPAL
                 {
                     untrusted_services.erase(message->from);
                     services_mutex.unlock();
-                    return status;
+                    RETURN_STATUS(status);
                 }
             }
 
@@ -1290,14 +1285,14 @@ namespace UbiPAL
                             external_acls.erase(message->from);
                         }
                         external_acls_mutex.unlock();
-                        return status;
+                        RETURN_STATUS(status);
                     }
                 }
             }
 
             external_acls_mutex.unlock();
 
-            return status;
+            RETURN_STATUS(status);
         }
 
         if (message->message == "NEWAESPAIR")
@@ -1308,7 +1303,7 @@ namespace UbiPAL
             status = RsaWrappers::Decrypt(private_key, message->argument, message->arg_len, aes_pair_decrypted, &aes_pair_decrypted_len);
             if (status != SUCCESS)
             {
-                return status;
+                RETURN_STATUS(status);
             }
 
             // decode key & iv
@@ -1320,11 +1315,11 @@ namespace UbiPAL
             if (status < 0)
             {
                 Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
-                return status;
+                RETURN_STATUS(status);
             }
             else if (length < 0)
             {
-                return INVALID_NETWORK_ENCODING;
+                RETURN_STATUS(INVALID_NETWORK_ENCODING);
             }
             else
             {
@@ -1337,7 +1332,7 @@ namespace UbiPAL
             {
                 Log::Line(Log::WARN, "UbipalService::HandleMessage: Given a buf too short: buf_len %u < offset %u + length %u",
                           aes_pair_decrypted_len, offset, length);
-                return BUFFER_TOO_SMALL;
+                RETURN_STATUS(BUFFER_TOO_SMALL);
             }
             str_bits = aes_pair_decrypted + offset;
             unsigned char* new_key = (unsigned char*)malloc(length);
@@ -1349,11 +1344,11 @@ namespace UbiPAL
             if (status < 0)
             {
                 Log::Line(Log::WARN, "UbipalService::HandleMessage: BaseMessage::DecodeUint32_t failed %s", GetErrorDescription(status));
-                return status;
+                RETURN_STATUS(status);
             }
             else if (length < 0)
             {
-                return INVALID_NETWORK_ENCODING;
+                RETURN_STATUS(INVALID_NETWORK_ENCODING);
             }
             else
             {
@@ -1366,7 +1361,7 @@ namespace UbiPAL
             {
                 Log::Line(Log::WARN, "UbipalService::HandleMessage: Given a buf too short: buf_len %u < offset %u + length %u",
                           aes_pair_decrypted_len, offset, length);
-                return BUFFER_TOO_SMALL;
+                RETURN_STATUS(BUFFER_TOO_SMALL);
             }
             str_bits = aes_pair_decrypted + offset;
             unsigned char* new_iv = (unsigned char*)malloc(length);
@@ -1380,7 +1375,7 @@ namespace UbiPAL
 
             aes_keys_mutex.unlock();
 
-            return status;
+            RETURN_STATUS(status);
         }
 
         if (message->message == "REQUESTCERTIFICATE")
@@ -1408,13 +1403,13 @@ namespace UbiPAL
                 reply_bytes = (unsigned char*) malloc(reply_bytes_len);
                 if (reply_bytes == nullptr)
                 {
-                    return MALLOC_FAILURE;
+                    RETURN_STATUS(MALLOC_FAILURE);
                 }
 
                 returned_value = requested_cert.Encode(reply_bytes, requested_cert.EncodedLength());
                 if (returned_value < 0)
                 {
-                    return returned_value;
+                    RETURN_STATUS(returned_value);
                 }
 
                 if (was_local)
@@ -1423,7 +1418,7 @@ namespace UbiPAL
                     status = RsaWrappers::CreateSignedDigest(private_key, reply_bytes, requested_cert.EncodedLength(), sig, sig_len);
                     if (status != SUCCESS)
                     {
-                        return status;
+                        RETURN_STATUS(status);
                     }
                 }
             }
@@ -1433,7 +1428,7 @@ namespace UbiPAL
                 reply_bytes = (unsigned char*) malloc(reply_bytes_len);
                 if (reply_bytes == nullptr)
                 {
-                    return MALLOC_FAILURE;
+                    RETURN_STATUS(MALLOC_FAILURE);
                 }
 
                 memcpy(reply_bytes, "NOT_FOUND", strlen("NOT_FOUND"));
@@ -1442,7 +1437,7 @@ namespace UbiPAL
             // send it as a message
             status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
             free(reply_bytes);
-            return status;
+            RETURN_STATUS(status);
         }
 
         if (message->message == "REQUESTACL")
@@ -1505,13 +1500,13 @@ namespace UbiPAL
                 reply_bytes = (unsigned char*) malloc(reply_bytes_len);
                 if (reply_bytes == nullptr)
                 {
-                    return MALLOC_FAILURE;
+                    RETURN_STATUS(MALLOC_FAILURE);
                 }
 
                 returned_value = found_acl.Encode(reply_bytes, found_acl.EncodedLength());
                 if (returned_value < 0)
                 {
-                    return returned_value;
+                    RETURN_STATUS(returned_value);
                 }
 
                 if (was_local)
@@ -1520,7 +1515,7 @@ namespace UbiPAL
                     status = RsaWrappers::CreateSignedDigest(private_key, reply_bytes, found_acl.EncodedLength(), sig, sig_len);
                     if (status != SUCCESS)
                     {
-                        return status;
+                        RETURN_STATUS(status);
                     }
                 }
             }
@@ -1530,7 +1525,7 @@ namespace UbiPAL
                 reply_bytes = (unsigned char*) malloc(reply_bytes_len);
                 if (reply_bytes == nullptr)
                 {
-                    return MALLOC_FAILURE;
+                    RETURN_STATUS(MALLOC_FAILURE);
                 }
 
                 memcpy(reply_bytes, "NOT_FOUND", strlen("NOT_FOUND"));
@@ -1538,7 +1533,7 @@ namespace UbiPAL
 
             // send it as a message
             status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
-            return status;
+            RETURN_STATUS(status);
         }
 
         if (message->message == "REQUESTLISTACLS")
@@ -1574,47 +1569,68 @@ namespace UbiPAL
             const unsigned char* reply_bytes = (overheard_acls.size() > 0) ? (const unsigned char*)reply_ids.c_str() : (const unsigned char*)"NOT_FOUND";
             const uint32_t reply_bytes_len = (overheard_acls.size() > 0) ? reply_ids.size() : strlen("NOT_FOUND");
             status = ReplyToMessage(0, message, reply_bytes, reply_bytes_len);
-            return status;
+            RETURN_STATUS(status);
         }
 
         // check against ACLs
-        status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + message->message + " TO " + id, message);
+        // if this is a register or unregister message, just evaluate based on the message statement itself
+        if (message->message.compare(0, strlen("REGISTER_"), "REGISTER_") == 0)
+        {
+            eval_message = message->message.substr(strlen("REGISTER_"));
+        }
+        else if (message->message.compare(0, strlen("UNREGISTER_"), "UNREGISTER_") == 0)
+        {
+            eval_message = message->message.substr(strlen("UNREGISTER_"));
+        }
+        else
+        {
+            eval_message = message->message;
+        }
+
+        // evaluate the statement and take the appropriate action based on the result
+        status = EvaluateStatement(message->from + " CAN SEND MESSAGE " + eval_message + " TO " + id, message);
         if (status == NOT_IN_ACLS)
         {
             // TODO only encrypt if replying to an encrypted message?
             ReplyToMessage(0, message, (const unsigned char*)"NOT_IN_ACLS", strlen("NOT_IN_ACLS") + 1);
-            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
+            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::EvaluateStatement returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
-            return status;
+            RETURN_STATUS(status);
         }
         else if (status == FAILED_CONDITIONS)
         {
             // TODO only encrypt if replying to an encrypted message?
             ReplyToMessage(0, message, (const unsigned char*)"FAILED_CONDITIONS", strlen("FAILED_CONDITIONS") + 1);
-            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
+            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::EvaluateStatement returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
-            return status;
+            RETURN_STATUS(status);
         }
         else if (status == WAIT_ON_CONDITIONS)
         {
             Log::Line(Log::DEBUG, "UbipalService::RecvMessage: Waiting on conditions.");
-            return status;
+            RETURN_STATUS(status);
         }
         else if (status != SUCCESS)
         {
-            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::CheckAcls returned %s for message %s from %s",
+            Log::Line(Log::INFO, "UbipalService::RecvMessage: UbipalService::EvaluateStatement returned %s for message %s from %s",
                       GetErrorDescription(status), message->message.c_str(), message->from.c_str());
-            return status;
+            RETURN_STATUS(status);
         }
 
         status = MessageConditionPassed(*message);
         if (status != SUCCESS)
         {
             Log::Line(Log::WARN, "UbipalService::REcvMessage: MessageConditionPassed failed: %s", GetErrorDescription(status));
-            return status;
+            RETURN_STATUS(status);
         }
 
-        return status;
+        exit:
+            #ifdef EVALUATE
+                clock_t end = clock();
+                TIME_RECV_MESSAGE += ((double) end - start) / CLOCKS_PER_SEC;
+                ++NUM_RECV_MESSAGE;
+            #endif
+            FUNCTION_END;
     }
 
     int UbipalService::BroadcastData(const unsigned char* const data, const uint32_t data_len)
@@ -3167,7 +3183,6 @@ namespace UbiPAL
                     all_conditions.insert(all_conditions.end(), conditions.begin(), conditions.end());
                     all_conditions.insert(all_conditions.end(), to_consider[i].conditions.begin(), to_consider[i].conditions.end());
 
-
                     if (root_conds.size() != 0)
                     {
                         std::map<std::string, std::set<std::string>> potential_roots;
@@ -3302,12 +3317,14 @@ namespace UbiPAL
                     {
                         if (reply_message->arg_len >= strlen("CONFIRM") && memcmp(reply_message->argument, "CONFIRM", strlen("CONFIRM")) == 0)
                         {
+                            Log::Line(Log::DEBUG, "UbipalService::ConditionReplyCallback: %s confirmed", original_message->message.c_str());
                             us->awaiting_conditions[i].conditions.erase(us->awaiting_conditions[i].conditions.begin() + j);
                             --j;
                             continue;
                         }
                         else
                         {
+                            Log::Line(Log::DEBUG, "UbipalService::ConditionReplyCallback: %s denied", original_message->message.c_str());
                             denied = true;
                             break;
                         }
@@ -3350,6 +3367,20 @@ namespace UbiPAL
     {
         int status = SUCCESS;
         std::unordered_map<std::string, UbipalCallback>::iterator found;
+
+        // if it is from this service, it was waiting on a send check
+        if (message.from == GetId())
+        {
+            NamespaceCertificate to;
+            status = GetCertificateForName(message.to, to);
+            if (status != SUCCESS)
+            {
+                return status;
+            }
+
+            status = SendMessage(0, &to, message.message, message.argument, message.arg_len);
+            return status;
+        }
 
         // if we've passed ACLs & conditions and we're requesting registration or deregistration, do so here
         if ((message.message.size() >= strlen("REGISTER_") && message.message.compare(0, strlen("REGISTER_"), "REGISTER_") == 0) ||
@@ -3433,13 +3464,9 @@ namespace UbiPAL
         automatic_replies_mutex.lock();
         if (automatic_replies.count(message.message) != 0)
         {
+            Log::Line(Log::DEBUG, "UbipalService::MessageCOnditionPassed: Automatic reply sending!");
             std::tuple<unsigned char*, uint32_t> reply_args = automatic_replies[message.message];
             status = ReplyToMessage(0, &message, std::get<0>(reply_args), std::get<1>(reply_args));
-            if (status != SUCCESS)
-            {
-                automatic_replies_mutex.unlock();
-                return status;
-            }
             automatic_replies_mutex.unlock();
             return status;
         }
@@ -3521,7 +3548,7 @@ namespace UbiPAL
         while (begin < cond_string.size())
         {
             end = cond_string.find(",", begin);
-            temp_string = cond_string.substr(begin, end);
+            temp_string = cond_string.substr(begin, end - begin);
             status = ParseStatement(temp_string, temp_statement);
             if (status == SUCCESS)
             {
@@ -4088,6 +4115,9 @@ namespace UbiPAL
         memcpy(copy_pointer, arg, arg_len);
         std::tuple<unsigned char*, uint32_t> tup(copy_pointer, arg_len);
         automatic_replies[message] = tup;
+        Message msg(copy_pointer, arg_len);
+        msg.from = GetId();
+        msg.message = "UPDATE_" + message;
 
         // send updates
         registered_services_mutex.lock();
@@ -4095,7 +4125,9 @@ namespace UbiPAL
         {
             for (std::set<std::string>::iterator itr = registered_services[message].begin(); itr != registered_services[message].end(); ++itr)
             {
-                status = EvaluateStatement(*itr + " CAN SEND MESSAGE REGISTER_" + message + " TO " + GetId());
+                msg.to = *itr;
+
+                status = EvaluateStatement(*itr + " CAN SEND MESSAGE " + message + " TO " + GetId(), &msg);
                 if (status != SUCCESS)
                 {
                     continue;

@@ -28,6 +28,7 @@ int main(int argc, char** argv)
     // log configuration
     UbiPAL::Log::SetFile("bin/examples/heartrate/chris_smartwatch_log.txt");
     UbiPAL::Log::SetPrint(true);
+    UbiPAL::Log::SetLevel(UbiPAL::Log::Level::DEBUG);
 
     // Restore the service from the file
     UbiPAL::UbipalService us("examples/heartrate/chris_smartwatch.txt");
@@ -64,7 +65,7 @@ int main(int argc, char** argv)
         if (command == "yes" || command == "no")
         {
             std::string message_arg = (command == "yes") ? "CONFIRM" : "DENY";
-            status = us.SetMessageReply(0, "RequestHeartRate", (const unsigned char*)message_arg.c_str(), message_arg.size());
+            status = us.SetMessageReply(0, "ShareHeartRate", (const unsigned char*)message_arg.c_str(), message_arg.size());
             if (status != UbiPAL::SUCCESS)
             {
                 std::cout << "SetMessageReply failed: " << UbiPAL::GetErrorDescription(status) << std::endl;
